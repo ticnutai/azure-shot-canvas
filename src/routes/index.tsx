@@ -1,24 +1,47 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { StudioSidebar } from "@/components/studio/StudioSidebar";
+import { TopBar } from "@/components/studio/TopBar";
+import { CaptureStage } from "@/components/studio/CaptureStage";
+import { SettingsPanel } from "@/components/studio/SettingsPanel";
+import { LibraryStrip } from "@/components/studio/LibraryStrip";
+import { QuickPanel } from "@/components/studio/QuickPanel";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "אורום סטודיו — סטודיו הקלטת מסך ווידאו" },
+      {
+        name: "description",
+        content:
+          "סטודיו מקצועי להקלטת מסך, מצלמה וצילומי מסך: 4K, 60fps, אודיו חכם, קיצורי מקלדת וספריית קליפים.",
+      },
+      { property: "og:title", content: "אורום סטודיו — סטודיו הקלטת מסך ווידאו" },
+      {
+        property: "og:description",
+        content: "הקלטת מסך ווידאו באיכות 4K עם שליטה מלאה על אודיו, מצלמה וצילומי מסך.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: Studio,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Studio() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="flex min-h-screen">
+      <StudioSidebar />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar />
+        <main className="grid flex-1 gap-5 p-5 md:p-8 xl:grid-cols-[1fr_360px]">
+          <div className="flex min-w-0 flex-col gap-5">
+            <CaptureStage />
+            <LibraryStrip />
+            <QuickPanel />
+          </div>
+          <SettingsPanel />
+        </main>
+      </div>
     </div>
   );
 }
