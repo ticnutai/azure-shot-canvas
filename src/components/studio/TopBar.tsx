@@ -1,6 +1,7 @@
 import { Bell, Search, ChevronDown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function TopBar() {
   return (
@@ -32,6 +33,7 @@ export function TopBar() {
         <Badge className="gold-fill hidden border-0 px-3 py-1 text-[11px] font-bold sm:inline-flex">
           <Sparkles className="me-1 size-3" /> PRO
         </Badge>
+        <ThemeSwitcher />
         <Button variant="ghost" size="icon" className="rounded-xl">
           <Bell className="size-4" />
         </Button>
