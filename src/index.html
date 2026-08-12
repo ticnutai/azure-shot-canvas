@@ -63,6 +63,8 @@
             <label class="range-field"><span><b>ביטרייט</b><output id="bitrate-output">24 Mbps</output></span><input id="bitrate-range" type="range" min="6" max="50" value="24"></label>
             <label class="switch-row"><span><b>מצלמה מרחפת</b><small>בועה עגולה מעל גבי המסך</small></span><input type="checkbox" id="camera"><i></i></label>
             <label class="field-row"><span><b>צורת המצלמה</b></span><select id="camera-shape"><option value="rounded">מלבן מעוגל</option><option value="circle">עיגול</option><option value="square">ריבוע</option></select></label>
+            <label class="field-row"><span><b>מיקום המצלמה</b></span><select id="camera-position"><option value="bottom-right">ימין למטה</option><option value="bottom-left">שמאל למטה</option><option value="top-right">ימין למעלה</option><option value="top-left">שמאל למעלה</option></select></label>
+            <label class="range-field"><span><b>גודל המצלמה</b><output id="camera-size-output">20%</output></span><input id="camera-size" type="range" min="12" max="35" value="20"></label>
             <label class="switch-row"><span><b>הדגשת סמן</b><small>הילה ברורה סביב העכבר בהקלטה</small></span><input type="checkbox" id="cursor-highlight" checked><i></i></label>
             <label class="switch-row unavailable" title="מתוכנן לשלב הבא"><span><b>זום אוטומטי לקליקים</b><small>בקרוב — לא מופעל עדיין</small></span><input type="checkbox" disabled><i></i></label>
           </section>
@@ -72,6 +74,7 @@
             <label class="switch-row"><span><b>מיקרופון</b><small>המיקרופון המובנה או החיצוני</small></span><input type="checkbox" id="microphone"><i></i></label>
             <div class="device-selects" id="device-selects"></div>
             <label class="range-field"><span><b>עוצמת מיקרופון</b><output id="mic-volume-output">100%</output></span><input id="mic-volume" type="range" min="0" max="150" value="100"></label>
+            <label class="range-field"><span><b>עוצמת קול המחשב</b><output id="system-volume-output">90%</output></span><input id="system-volume" type="range" min="0" max="150" value="90"></label>
             <label class="switch-row"><span><b>סינון רעשים</b><small>הפחתת רעשי רקע בזמן ההקלטה</small></span><input type="checkbox" id="noise-suppression" checked><i></i></label>
             <label class="switch-row unavailable"><span><b>הסרת שתיקות</b><small>בקרוב — בעריכה אוטומטית</small></span><input type="checkbox" disabled><i></i></label>
           </section>
@@ -79,6 +82,7 @@
           <section class="settings-section" data-settings-section="image">
             <fieldset class="choice-group"><legend>אזור צילום</legend><label><input type="radio" name="screenshot-mode" value="region" checked><span>אזור נבחר</span></label><label><input type="radio" name="screenshot-mode" value="full"><span>מסך מלא</span></label><label class="unavailable"><input type="radio" disabled><span>עמוד גלילה — בקרוב</span></label><label class="unavailable"><input type="radio" disabled><span>אלמנט — בקרוב</span></label></fieldset>
             <label class="field-row"><span><b>פורמט תמונה</b></span><select id="image-format"><option>PNG</option><option disabled>JPG — בקרוב</option><option disabled>WEBP — בקרוב</option><option disabled>PDF — בקרוב</option></select></label>
+            <label class="field-row"><span><b>השהיה לפני צילום</b><small>ספירה לאחור בלי להקפיא את התצוגה</small></span><select id="capture-delay"><option value="0">ללא</option><option value="3">3 שניות</option><option value="5">5 שניות</option><option value="10">10 שניות</option></select></label>
             <label class="switch-row unavailable"><span><b>רקע מעוצב</b><small>בקרוב — צל ורקע מותג</small></span><input type="checkbox" disabled><i></i></label>
             <label class="switch-row unavailable"><span><b>טשטוש מידע רגיש</b><small>בקרוב — זיהוי אוטומטי</small></span><input type="checkbox" disabled><i></i></label>
           </section>
@@ -102,12 +106,14 @@
                 <button class="source-type unavailable" disabled>◉ <span>לשונית</span></button>
                 <button class="source-type" id="camera-source-shortcut">▣ <span>מצלמה</span></button>
                 <button class="refresh-button" id="refresh-sources">↻ רענון</button>
-                <span class="countdown-note">◷ ספירה לאחר 3 שניות</span>
+                <span class="countdown-note" id="countdown-note">◷ צילום מיידי</span>
               </div>
               <div class="source-drawer" id="source-drawer"><div class="source-grid" id="source-grid"><div class="loading">טוען מסכים וחלונות…</div></div></div>
               <div class="capture-preview">
                 <video id="display-video" class="live-preview-video" autoplay muted playsinline></video>
                 <div class="preview-shade" id="preview-shade"></div>
+                <div class="preview-safe-area" id="preview-safe-area" aria-hidden="true"></div>
+                <div class="preview-display-controls" aria-label="בקרי תצוגה מקדימה"><button class="active" data-preview-fit="contain" title="התאמה מלאה">▣</button><button data-preview-fit="cover" title="מילוי השטח">▰</button><label title="זום תצוגה"><span>⌕</span><input id="preview-zoom" type="range" min="100" max="200" value="100"><output id="preview-zoom-output">100%</output></label><button id="toggle-safe-area" aria-pressed="false" title="קווי שטח בטוח">⌗</button></div>
                 <div class="preview-status"><span id="quality-status">4K · 60fps</span><span id="stage-time">00:00</span></div>
                 <button class="expand-button" id="expand-preview" aria-label="הגדלת התצוגה המקדימה">↗</button>
                 <div class="empty-preview"><span>▰</span><b id="selected-source-label">תצוגה מקדימה — מסך מלא</b><p>בחר מקור למעלה, כוון את ההגדרות ולחץ על הקלטה כדי להתחיל</p></div>
@@ -145,7 +151,7 @@
 
             <div class="dashboard-grid">
               <section class="quick-panel panel"><h2>⌨ קיצורי מקלדת</h2><div class="shortcut-grid"><div><span>התחל / עצור הקלטה</span><kbd data-shortcut-summary="record">Ctrl Shift 2</kbd></div><div><span>צילום מסך</span><kbd data-shortcut-summary="screenshot">Ctrl Shift 1</kbd></div><div><span>השהיה</span><kbd data-shortcut-summary="pause">Ctrl Shift P</kbd></div><div><span>השתקת מיקרופון</span><kbd data-shortcut-summary="microphone">Ctrl Shift M</kbd></div></div></section>
-              <section class="system-panel panel"><h2>מצב המערכת</h2><div><span>⚡ האצת חומרה</span><b>פעילה</b></div><div><span>▱ מקום פנוי</span><b id="storage-status">בודק…</b></div><div><span>↺ שחזור הקלטות</span><b id="recovery-status">בודק…</b></div><div><span>◔ שיתוף ענן</span><b>כבוי — פרטי</b></div></section>
+              <section class="system-panel panel"><h2>מצב המערכת</h2><div><span>⚡ מקודד וידאו</span><b id="encoder-status">בודק…</b></div><div><span>▱ מקום פנוי</span><b id="storage-status">בודק…</b></div><div><span>↺ שחזור הקלטות</span><b id="recovery-status">בודק…</b></div><div><span>◔ שיתוף ענן</span><b>כבוי — פרטי</b></div></section>
             </div>
           </section>
 
@@ -271,7 +277,7 @@
   <div class="recording-bar hidden" id="recording-bar"><span class="record-dot"></span><strong id="recording-time">00:00</strong><small id="recording-size">0 MB</small><button class="recording-tool" id="recording-mic" title="השתקת מיקרופון">🎙</button><button class="recording-tool" id="recording-camera" title="מצלמה">▣</button><button class="recording-tool" id="recording-pause" title="השהיה">Ⅱ</button><button id="stop-recording">■ עצירה</button></div>
 
   <div class="modal hidden" id="video-editor-modal">
-    <div class="video-editor-dialog"><div class="modal-title"><div><h2>עריכת וידאו מהירה</h2><p id="video-editor-name"></p></div><button id="close-video-editor">×</button></div><video id="video-editor-preview" controls></video><div class="video-edit-fields"><label>התחלה בשניות<input id="video-trim-start" type="number" min="0" step="0.1" value="0"></label><label>סיום בשניות<input id="video-trim-end" type="number" min="0" step="0.1" placeholder="עד הסוף"></label><label class="check-line"><input id="video-mute" type="checkbox"> הסרת קול מהעותק</label></div><div class="modal-actions"><button class="gold-button" id="save-video-edit">שמירת עותק ערוך</button><button class="ghost" id="cancel-video-edit">ביטול</button></div></div>
+    <div class="video-editor-dialog"><div class="modal-title"><div><h2>עריכת וידאו מהירה</h2><p id="video-editor-name"></p></div><button id="close-video-editor">×</button></div><video id="video-editor-preview" controls></video><div class="video-edit-fields"><label>התחלה בשניות<input id="video-trim-start" type="number" min="0" step="0.1" value="0"></label><label>סיום בשניות<input id="video-trim-end" type="number" min="0" step="0.1" placeholder="עד הסוף"></label><label>מהירות<select id="video-speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>רגילה</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label>עוצמת שמע<input id="video-volume" type="range" min="0" max="200" value="100"><output id="video-volume-output">100%</output></label><label>כניסת Fade<input id="video-fade-in" type="number" min="0" max="3" step="0.1" value="0"> שניות</label><label class="check-line"><input id="video-mute" type="checkbox"> הסרת קול מהעותק</label></div><div class="modal-actions"><button class="gold-button" id="save-video-edit">שמירת עותק ערוך</button><button class="ghost" id="cancel-video-edit">ביטול</button></div></div>
   </div>
   <div class="modal hidden" id="region-modal"><div class="region-dialog"><div class="modal-title"><div><h2>בחירת אזור</h2><p>גרור מלבן על התצוגה, או בחר את כל המקור.</p></div><button id="cancel-region">×</button></div><div class="preview-wrap" id="preview-wrap"><canvas id="preview-canvas"></canvas><div id="selection-box"></div></div><div class="modal-actions"><button class="ghost" id="full-region">כל המקור</button><button class="primary" id="confirm-region" disabled>אישור האזור</button></div></div></div>
   <div class="toast hidden" id="toast"></div>

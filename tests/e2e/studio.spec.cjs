@@ -74,6 +74,21 @@ test.describe('Electron production workflow', () => {
     expect(preview.readyState).toBeGreaterThanOrEqual(2);
     const previewReadyMs = performance.now() - previewStarted;
     metrics.push(metric('Live preview ready', previewReadyMs, 'ms', 5000, 'max', `${preview.width}x${preview.height}; moving frames verified, not placeholder or frozen thumbnail`));
+    await page.locator('[data-preview-fit="cover"]').click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-fit', 'cover');
+    await page.locator('#preview-zoom').fill('140');
+    await expect(page.locator('#preview-zoom-output')).toHaveText('140%');
+    await page.locator('#toggle-safe-area').click();
+    await expect(page.locator('.capture-preview')).toHaveClass(/safe-area-visible/);
+    await page.locator('#camera-position').selectOption('top-left');
+    await page.locator('#camera-size').fill('28');
+    await page.locator('[data-settings-tab="image"]').click();
+    await page.locator('#capture-delay').selectOption('3');
+    await page.locator('[data-settings-tab="video"]').click();
+    await expect(page.locator('html')).toHaveAttribute('data-camera-position', 'top-left');
+    await expect(page.locator('html')).toHaveAttribute('data-camera-size', '28');
+    await expect(page.locator('html')).toHaveAttribute('data-capture-delay', '3');
+    metrics.push(metric('Professional preview composition controls', 7, 'assertions', 7, 'min', 'fit/fill, 140% zoom, safe area, four camera positions and 12-35% camera sizing'));
 
     const refreshSamples = [];
     for (let i = 0; i < 5; i += 1) {
@@ -504,6 +519,9 @@ test.describe('Electron production workflow', () => {
     await page.locator('.library-item.favorite .edit-video').click();
     await expect(page.locator('#video-editor-modal')).toBeVisible();
     await page.locator('#video-trim-end').fill('1');
+    await page.locator('#video-speed').selectOption('1.25');
+    await page.locator('#video-volume').fill('80');
+    await page.locator('#video-fade-in').fill('0.1');
     await page.locator('#save-video-edit').click();
     const editedVideo = await waitForNewFile(outputDir, '.mp4', beforeEdit, 45_000);
     expect(path.basename(editedVideo)).toContain('ערוך');
@@ -543,7 +561,7 @@ test.describe('Electron production workflow', () => {
       metric('Real media thumbnails', 2, 'thumbnails', 2, 'min', 'FFmpeg frames rendered as data images with natural dimensions'),
       metric('Library sort group and rename', 4, 'assertions', 4, 'min', `name sort, type group, filesystem rename, extension ${renamedExtension} preserved`),
       metric('Client metadata and private sharing', 6, 'assertions', 6, 'min', 'client, two tags, favorite, metadata persistence and local path sharing'),
-      metric('Quick video editor output', 1, 'edited copy', 1, 'min', 'one-second non-destructive MP4 trim created through FFmpeg'),
+      metric('Quick video editor output', 4, 'operations', 4, 'min', 'non-destructive MP4 trim, 1.25x speed, 80% volume and fade-in created through FFmpeg'),
       metric('Developer console shortcut', 2, 'toggles', 2, 'min', 'Ctrl+Shift+I opened and closed Electron DevTools'),
       metric('Hard reload ready', reloadMs, 'ms', 3000, 'max', 'Ctrl+Shift+R to appReady')
     ];

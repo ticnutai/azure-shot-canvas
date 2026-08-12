@@ -37,6 +37,12 @@ const state = {
   recentFilter: 'all',
   recentSort: 'date-desc',
   recentView: 'cards',
+  previewFit: 'contain',
+  previewZoom: 100,
+  safeArea: false,
+  cameraPosition: 'bottom-right',
+  cameraSize: 20,
+  captureDelay: 0,
   shortcuts: {},
   afterScreenshotAction: 'save',
   region: { x: 0, y: 0, width: 1, height: 1 }
@@ -230,8 +236,60 @@ function applyRecentPreferences(filter = state.recentFilter, sort = state.recent
 function restoreUserPreferences() {
   applyCapturePreferences(localStorage.getItem('aurum-default-capture-kind') || 'record', localStorage.getItem('aurum-default-capture-scope') || 'full', false);
   applyAfterScreenshotAction(localStorage.getItem('aurum-after-screenshot-action') || 'save', false);
+  applyCaptureDelay(localStorage.getItem('aurum-capture-delay') || '0', false);
   applyLibraryPreferences(localStorage.getItem('aurum-library-view') || 'grid', localStorage.getItem('aurum-library-size') || 'medium', false);
   applyRecentPreferences(localStorage.getItem('aurum-recent-filter') || 'all', localStorage.getItem('aurum-recent-sort') || 'date-desc', localStorage.getItem('aurum-recent-view') || 'cards', false);
+  applyVisualCapturePreferences({
+    previewFit: localStorage.getItem('aurum-preview-fit') || 'contain',
+    previewZoom: Number(localStorage.getItem('aurum-preview-zoom') || 100),
+    safeArea: localStorage.getItem('aurum-safe-area') === 'true',
+    cameraPosition: localStorage.getItem('aurum-camera-position') || 'bottom-right',
+    cameraSize: Number(localStorage.getItem('aurum-camera-size') || 20)
+  }, false);
+}
+
+function applyCaptureDelay(value, persist = true) {
+  state.captureDelay = [0, 3, 5, 10].includes(Number(value)) ? Number(value) : 0;
+  if ($('#capture-delay')) $('#capture-delay').value = String(state.captureDelay);
+  if ($('#countdown-note')) $('#countdown-note').textContent = state.captureDelay ? `◷ השהיה ${state.captureDelay} שניות` : '◷ צילום מיידי';
+  document.documentElement.dataset.captureDelay = String(state.captureDelay);
+  if (persist) localStorage.setItem('aurum-capture-delay', String(state.captureDelay));
+}
+
+async function runCaptureCountdown(seconds) {
+  for (let remaining = seconds; remaining > 0; remaining -= 1) {
+    setStatus(`צילום בעוד ${remaining}…`, 'busy');
+    if ($('#countdown-note')) $('#countdown-note').textContent = `◷ ${remaining}`;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  applyCaptureDelay(state.captureDelay, false);
+}
+
+function applyVisualCapturePreferences(candidate = {}, persist = true) {
+  state.previewFit = ['contain', 'cover'].includes(candidate.previewFit) ? candidate.previewFit : state.previewFit;
+  state.previewZoom = Math.max(100, Math.min(200, Number(candidate.previewZoom) || state.previewZoom));
+  state.safeArea = candidate.safeArea === undefined ? state.safeArea : Boolean(candidate.safeArea);
+  state.cameraPosition = ['bottom-right', 'bottom-left', 'top-right', 'top-left'].includes(candidate.cameraPosition) ? candidate.cameraPosition : state.cameraPosition;
+  state.cameraSize = Math.max(12, Math.min(35, Number(candidate.cameraSize) || state.cameraSize));
+  document.documentElement.dataset.previewFit = state.previewFit;
+  $('#display-video').style.transform = `scale(${state.previewZoom / 100})`;
+  $('.capture-preview')?.classList.toggle('safe-area-visible', state.safeArea);
+  $$('[data-preview-fit]').forEach((button) => button.classList.toggle('active', button.dataset.previewFit === state.previewFit));
+  if ($('#preview-zoom')) $('#preview-zoom').value = String(state.previewZoom);
+  if ($('#preview-zoom-output')) $('#preview-zoom-output').textContent = `${state.previewZoom}%`;
+  if ($('#toggle-safe-area')) $('#toggle-safe-area').setAttribute('aria-pressed', String(state.safeArea));
+  if ($('#camera-position')) $('#camera-position').value = state.cameraPosition;
+  if ($('#camera-size')) $('#camera-size').value = String(state.cameraSize);
+  if ($('#camera-size-output')) $('#camera-size-output').textContent = `${state.cameraSize}%`;
+  document.documentElement.dataset.cameraPosition = state.cameraPosition;
+  document.documentElement.dataset.cameraSize = String(state.cameraSize);
+  if (persist) {
+    localStorage.setItem('aurum-preview-fit', state.previewFit);
+    localStorage.setItem('aurum-preview-zoom', String(state.previewZoom));
+    localStorage.setItem('aurum-safe-area', String(state.safeArea));
+    localStorage.setItem('aurum-camera-position', state.cameraPosition);
+    localStorage.setItem('aurum-camera-size', String(state.cameraSize));
+  }
 }
 
 function formatBytes(bytes) {
@@ -767,11 +825,13 @@ function drawFrame() {
     }
   }
   if (state.cameraStream && cameraVideo.videoWidth) {
-    const targetWidth = Math.round(recordingCanvas.width * 0.2);
+    const targetWidth = Math.round(recordingCanvas.width * state.cameraSize / 100);
     const targetHeight = Math.round(targetWidth * cameraVideo.videoHeight / cameraVideo.videoWidth);
     const margin = Math.max(16, Math.round(recordingCanvas.width * 0.018));
-    const x = recordingCanvas.width - targetWidth - margin;
-    const y = recordingCanvas.height - targetHeight - margin;
+    const left = state.cameraPosition.endsWith('left');
+    const top = state.cameraPosition.startsWith('top');
+    const x = left ? margin : recordingCanvas.width - targetWidth - margin;
+    const y = top ? margin : recordingCanvas.height - targetHeight - margin;
     recordingContext.save();
     const cameraShape = $('#camera-shape')?.value || 'rounded';
     const radius = cameraShape === 'circle' ? Math.min(targetWidth, targetHeight) / 2 : cameraShape === 'square' ? 0 : Math.max(12, targetWidth * 0.05);
@@ -870,6 +930,7 @@ async function beginCapture(kind, forcedScope = null) {
       return;
     }
     state.region = region;
+    if (kind === 'screenshot' && state.captureDelay) await runCaptureCountdown(state.captureDelay);
     drawFrame();
     if (kind === 'screenshot') await saveScreenshot();
     else await startRecording();
@@ -905,7 +966,7 @@ async function createMixedAudioTrack() {
   for (const stream of audioStreams) {
     const source = state.audioContext.createMediaStreamSource(stream);
     const gain = state.audioContext.createGain();
-    gain.gain.value = stream === state.microphoneStream ? Number($('#mic-volume')?.value || 100) / 100 : 0.9;
+    gain.gain.value = stream === state.microphoneStream ? Number($('#mic-volume')?.value || 100) / 100 : Number($('#system-volume')?.value || 90) / 100;
     source.connect(gain).connect(destination);
   }
   return destination.stream.getAudioTracks()[0] || null;
@@ -992,6 +1053,15 @@ async function refreshStorageStatus() {
   document.documentElement.dataset.storageLevel = status.level;
   document.documentElement.dataset.recoveredRecordings = String(status.recovered || 0);
   return status;
+}
+
+async function refreshCaptureCapabilities() {
+  const capabilities = await api.getCaptureCapabilities();
+  const status = $('#encoder-status');
+  if (status) status.textContent = capabilities.hardware ? `${capabilities.preferredLabel} · חומרה` : capabilities.preferredLabel;
+  document.documentElement.dataset.encoder = capabilities.preferred || 'unknown';
+  document.documentElement.dataset.hardwareEncoder = String(Boolean(capabilities.hardware));
+  return capabilities;
 }
 
 function stopRecording() {
@@ -1119,6 +1189,10 @@ function openVideoEditor(item) {
   $('#video-trim-start').value = '0';
   $('#video-trim-end').value = '';
   $('#video-mute').checked = false;
+  $('#video-speed').value = '1';
+  $('#video-volume').value = '100';
+  $('#video-volume-output').textContent = '100%';
+  $('#video-fade-in').value = '0';
   $('#video-editor-preview').src = `file:///${item.path.replaceAll('\\', '/')}`;
   $('#video-editor-modal').classList.remove('hidden');
 }
@@ -1273,6 +1347,11 @@ async function initialize() {
     if (document.fullscreenElement) document.exitFullscreen();
     else stage.requestFullscreen().catch((error) => showToast(`לא ניתן להגדיל: ${error.message}`));
   });
+  $$('[data-preview-fit]').forEach((button) => button.addEventListener('click', () => applyVisualCapturePreferences({ previewFit: button.dataset.previewFit })));
+  $('#preview-zoom').addEventListener('input', (event) => applyVisualCapturePreferences({ previewZoom: event.target.value }));
+  $('#toggle-safe-area').addEventListener('click', () => applyVisualCapturePreferences({ safeArea: !state.safeArea }));
+  $('#camera-position').addEventListener('change', (event) => applyVisualCapturePreferences({ cameraPosition: event.target.value }));
+  $('#camera-size').addEventListener('input', (event) => applyVisualCapturePreferences({ cameraSize: event.target.value }));
   $('#screenshot-button').addEventListener('click', () => beginCapture('screenshot'));
   $('#record-button').addEventListener('click', () => state.recorder ? stopRecording() : beginCapture(state.captureKind));
   $('#stop-recording').addEventListener('click', stopRecording);
@@ -1290,13 +1369,14 @@ async function initialize() {
   });
   $('#close-video-editor').addEventListener('click', closeVideoEditor);
   $('#cancel-video-edit').addEventListener('click', closeVideoEditor);
+  $('#video-volume').addEventListener('input', (event) => { $('#video-volume-output').textContent = `${event.target.value}%`; });
   $('#save-video-edit').addEventListener('click', async () => {
     if (!editingVideoItem) return;
     const button = $('#save-video-edit');
     button.disabled = true;
     button.textContent = 'מעבד…';
     try {
-      const result = await api.editVideo(editingVideoItem.path, { start: Number($('#video-trim-start').value) || 0, end: Number($('#video-trim-end').value) || null, mute: $('#video-mute').checked });
+      const result = await api.editVideo(editingVideoItem.path, { start: Number($('#video-trim-start').value) || 0, end: Number($('#video-trim-end').value) || null, mute: $('#video-mute').checked, speed: Number($('#video-speed').value), volume: Number($('#video-volume').value), fadeIn: Number($('#video-fade-in').value) });
       closeVideoEditor();
       showToast(`העותק הערוך נשמר: ${result.path}`);
       await loadLibrary();
@@ -1350,6 +1430,7 @@ async function initialize() {
     $('#bitrate-output').textContent = `${event.target.value} Mbps`;
   });
   $('#mic-volume').addEventListener('input', (event) => { $('#mic-volume-output').textContent = `${event.target.value}%`; });
+  $('#system-volume').addEventListener('input', (event) => { $('#system-volume-output').textContent = `${event.target.value}%`; });
   $('#format-select').addEventListener('change', (event) => { $('#convert-mp4').checked = event.target.value === 'mp4'; });
   $('#theme-button').addEventListener('click', () => $('#theme-menu').classList.toggle('hidden'));
   $$('[data-theme-choice]').forEach((button) => button.addEventListener('click', () => {
@@ -1438,6 +1519,7 @@ async function initialize() {
   $('#default-capture-kind').addEventListener('change', (event) => applyCapturePreferences(event.target.value, state.captureScope));
   $('#default-capture-scope').addEventListener('change', (event) => applyCapturePreferences(state.captureKind, event.target.value));
   $('#after-screenshot-action').addEventListener('change', (event) => applyAfterScreenshotAction(event.target.value));
+  $('#capture-delay').addEventListener('change', (event) => applyCaptureDelay(event.target.value));
   $$('input[name="screenshot-mode"]').forEach((radio) => radio.addEventListener('change', (event) => {
     if (event.target.checked) applyCapturePreferences(state.captureKind, event.target.value);
   }));
@@ -1477,9 +1559,17 @@ async function initialize() {
     if (action === 'microphone') $('#mic-chip').click();
     if (action === 'camera') $('#camera-chip').click();
   });
-  $('#output-path').textContent = await api.getOutput();
-  await Promise.all([refreshSources(), loadLibrary(), refreshStorageStatus()]);
   document.documentElement.dataset.appReady = 'true';
+  setTimeout(() => Promise.all([
+    api.getOutput().then((value) => { $('#output-path').textContent = value; }),
+    refreshSources(), loadLibrary(), refreshStorageStatus()
+  ]).catch((error) => {
+    console.warn('Deferred library/status refresh failed', error);
+  }), 0);
+  setTimeout(() => refreshCaptureCapabilities().catch((error) => {
+    if ($('#encoder-status')) $('#encoder-status').textContent = 'בדיקה נכשלה';
+    console.warn('Video encoder capability probe failed', error);
+  }), 250);
 }
 
 initialize().catch((error) => showToast(`אתחול האפליקציה נכשל: ${error.message}`, 10000));

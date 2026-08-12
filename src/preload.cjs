@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   browserMode: false,
   qaEnabled: process.env.SCREEN_STUDIO_QA === '1',
   listSources: () => ipcRenderer.invoke('sources:list'),
+  getCaptureCapabilities: () => ipcRenderer.invoke('capture:capabilities'),
   prepareCapture: (options) => ipcRenderer.invoke('capture:prepare', options),
   saveScreenshot: (bytes) => ipcRenderer.invoke('file:save-screenshot', bytes),
   saveRecording: (bytes, convertToMp4) => ipcRenderer.invoke('file:save-recording', bytes, convertToMp4),

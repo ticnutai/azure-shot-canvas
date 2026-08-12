@@ -24,6 +24,8 @@ async function main() {
     page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
     page.on('pageerror', (error) => errors.push(error.message));
     await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true', null, { timeout: 20_000 });
+    await page.waitForFunction(() => document.documentElement.dataset.sourcesLoading === 'false' && document.querySelectorAll('.source-card').length > 0, null, { timeout: 20_000 });
+    await page.waitForFunction(() => Boolean(document.documentElement.dataset.storageLevel), null, { timeout: 20_000 });
     const result = {
       filters: await page.locator('button[data-recent-filter]').count(),
       sorts: await page.locator('#recent-sort option').count(),
@@ -32,6 +34,8 @@ async function main() {
     };
     result.shortcuts = await page.locator('[data-shortcut-action]').count();
     result.videoEditor = await page.locator('#video-editor-modal').count();
+    result.previewControls = await page.locator('.preview-display-controls button, .preview-display-controls input').count();
+    result.captureDelayChoices = await page.locator('#capture-delay option').count();
     result.storageLevel = await page.locator('html').getAttribute('data-storage-level');
     await page.locator('.source-card').first().click();
     await page.waitForFunction(() => document.documentElement.dataset.previewState === 'ready' && Number(document.documentElement.dataset.previewFrames) > 2, null, { timeout: 15_000 });
@@ -48,7 +52,7 @@ async function main() {
     }));
     result.errors = errors;
     const passed = result.filters === 3 && result.sorts === 5 && result.views === 3 && result.quickActions === 3
-      && result.shortcuts === 6 && result.videoEditor === 1 && ['healthy', 'warning', 'unknown'].includes(result.storageLevel)
+      && result.shortcuts === 6 && result.videoEditor === 1 && result.previewControls >= 4 && result.captureDelayChoices === 4 && ['healthy', 'warning', 'unknown'].includes(result.storageLevel)
       && result.livePreview.width >= 320 && result.livePreview.height >= 200 && !result.livePreview.paused && result.livePreview.frames > 2
       && result.persisted.filter === 'image' && result.persisted.sort === 'size-desc' && result.persisted.view === 'list'
       && result.errors.length === 0;

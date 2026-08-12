@@ -9,6 +9,7 @@ const { renamedLibraryPath } = require('./library-utils.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, projectPathFor } = require('./editor-utils.cjs');
 const { DEFAULT_SHORTCUTS, acceleratorForBinding, actionForInput, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingPaths, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
+const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 
 let mainWindow;
 let pendingCapture = null;
@@ -22,6 +23,7 @@ const lastShortcutDispatch = new Map();
 const recordingSessions = new Map();
 let recoveredRecordings = [];
 const thumbnailJobs = new Map();
+let encoderCapabilities = null;
 
 const projectDirectory = path.resolve(__dirname, '..');
 const qaDirectory = process.env.SCREEN_STUDIO_QA_REPORT_DIR || path.join(projectDirectory, 'artifacts', 'qa');
@@ -170,7 +172,7 @@ async function convertRecording(webmPath, convertToMp4) {
   const conversion = await runFfmpeg(webmPath, temporaryMp4Path);
   if (conversion.ok) {
     await fs.rename(temporaryMp4Path, mp4Path);
-    return { path: mp4Path, webmPath, converted: true };
+    return { path: mp4Path, webmPath, converted: true, encoder: conversion.encoder, hardwareEncoder: conversion.hardware };
   }
   await fs.rm(temporaryMp4Path, { force: true }).catch(() => {});
   return { path: webmPath, webmPath, converted: false, conversionError: conversion.error };
@@ -195,29 +197,81 @@ async function getSources() {
   return publicSources;
 }
 
-function runFfmpeg(inputPath, outputPath) {
+function runProcess(command, args) {
   return new Promise((resolve) => {
-    const child = spawn('ffmpeg', [
-      '-y', '-hide_banner', '-loglevel', 'error', '-i', inputPath,
-      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
-      '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
-      '-movflags', '+faststart', '-f', 'mp4', outputPath
-    ], { windowsHide: true });
+    const child = spawn(command, args, { windowsHide: true });
+    let outputText = '';
     let errorText = '';
+    child.stdout?.on('data', (data) => { outputText += data.toString(); });
     child.stderr.on('data', (data) => { errorText += data.toString(); });
     child.on('error', (error) => resolve({ ok: false, error: error.message }));
-    child.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false, error: errorText || `FFmpeg exited with ${code}` }));
+    child.on('close', (code) => resolve(code === 0 ? { ok: true, stdout: outputText, stderr: errorText } : { ok: false, stdout: outputText, error: errorText || `${command} exited with ${code}` }));
   });
+}
+
+async function getEncoderCapabilities(force = false) {
+  if (encoderCapabilities && !force) return encoderCapabilities;
+  const result = await runProcess('ffmpeg', ['-hide_banner', '-encoders']);
+  const detected = result.ok ? parseVideoEncoders(`${result.stdout}\n${result.stderr}`) : parseVideoEncoders('');
+  const encoders = [];
+  for (const encoder of detected) {
+    if (!encoder.available) { encoders.push({ ...encoder, usable: false }); continue; }
+    const probe = await runProcess('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'color=size=64x64:rate=1', ...encoder.args, '-frames:v', '1', '-f', 'null', '-']);
+    encoders.push({ ...encoder, available: probe.ok, usable: probe.ok });
+  }
+  const candidates = encoderCandidates(encoders);
+  encoderCapabilities = {
+    ffmpeg: result.ok,
+    encoders: encoders.map(({ id, label, hardware, available, usable }) => ({ id, label, hardware, available, usable })),
+    preferred: candidates[0]?.id || 'libx264',
+    preferredLabel: candidates[0]?.label || 'H.264 תוכנה',
+    hardware: Boolean(candidates[0]?.hardware),
+    error: result.ok ? null : result.error
+  };
+  return encoderCapabilities;
+}
+
+async function runFfmpeg(inputPath, outputPath) {
+  const capabilities = await getEncoderCapabilities();
+  const candidates = encoderCandidates(capabilities.encoders);
+  let lastError = '';
+  for (const encoder of candidates) {
+    await fs.rm(outputPath, { force: true }).catch(() => {});
+    const result = await runProcess('ffmpeg', [
+      '-y', '-hide_banner', '-loglevel', 'error', '-i', inputPath,
+      ...encoder.args, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
+      '-movflags', '+faststart', '-f', 'mp4', outputPath
+    ]);
+    if (result.ok) return { ok: true, encoder: encoder.id, hardware: encoder.hardware };
+    lastError = result.error;
+  }
+  return { ok: false, error: lastError || 'לא נמצא מקודד H.264 תקין' };
 }
 
 function runVideoEdit(inputPath, outputPath, options = {}) {
   return new Promise((resolve) => {
     const start = Math.max(0, Number(options.start) || 0);
     const end = Number(options.end) > start ? Number(options.end) : null;
+    const speed = Math.max(0.5, Math.min(2, Number(options.speed) || 1));
+    const requestedVolume = options.volume === undefined ? 100 : Number(options.volume);
+    const volume = Math.max(0, Math.min(2, Number.isFinite(requestedVolume) ? requestedVolume / 100 : 1));
+    const fadeIn = Math.max(0, Math.min(3, Number(options.fadeIn) || 0));
     const args = ['-y', '-hide_banner', '-loglevel', 'error', '-ss', String(start), '-i', inputPath];
     if (end) args.push('-t', String(end - start));
+    const videoFilters = [];
+    if (speed !== 1) videoFilters.push(`setpts=PTS/${speed}`);
+    if (fadeIn) videoFilters.push(`fade=t=in:st=0:d=${fadeIn}`);
+    if (videoFilters.length) args.push('-vf', videoFilters.join(','));
     args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p');
-    if (options.mute) args.push('-an'); else args.push('-c:a', 'aac', '-b:a', '192k');
+    if (options.mute) args.push('-an');
+    else {
+      const audioFilters = [];
+      if (speed !== 1) audioFilters.push(`atempo=${speed}`);
+      if (volume !== 1) audioFilters.push(`volume=${volume}`);
+      if (fadeIn) audioFilters.push(`afade=t=in:st=0:d=${fadeIn}`);
+      if (audioFilters.length) args.push('-af', audioFilters.join(','));
+      args.push('-c:a', 'aac', '-b:a', '192k');
+    }
     args.push('-movflags', '+faststart', outputPath);
     const child = spawn('ffmpeg', args, { windowsHide: true });
     let errorText = '';
@@ -282,6 +336,7 @@ async function listLibrary() {
 
 function registerIpc() {
   ipcMain.handle('sources:list', getSources);
+  ipcMain.handle('capture:capabilities', () => getEncoderCapabilities());
   ipcMain.handle('capture:prepare', (_event, options) => {
     pendingCapture = { sourceId: options.sourceId, includeSystemAudio: Boolean(options.includeSystemAudio) };
     return true;

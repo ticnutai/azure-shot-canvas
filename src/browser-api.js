@@ -13,6 +13,7 @@
   window.screenStudio = {
     browserMode: true, qaEnabled: false,
     listSources: async () => [{ id: 'browser-picker', name: 'בחירה באמצעות הדפדפן', type: 'screen', thumbnail: demoThumbnail }],
+    getCaptureCapabilities: async () => ({ ffmpeg: false, preferred: 'browser', preferredLabel: 'מקודד הדפדפן', hardware: false, encoders: [] }),
     prepareCapture: async () => true,
     saveScreenshot: async (bytes) => download(bytes, 'image/png', 'png'),
     saveRecording: async (bytes) => download(bytes, 'video/webm', 'webm'),

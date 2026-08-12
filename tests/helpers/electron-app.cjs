@@ -33,6 +33,7 @@ async function launchStudio(testName, options = {}) {
   });
   page.on('pageerror', (error) => runtimeErrors.push({ type: 'pageerror', text: error.message }));
   await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true', null, { timeout: 20_000 });
+  await page.waitForFunction(() => document.documentElement.dataset.sourcesLoading === 'false' && document.querySelectorAll('.source-card').length > 0, null, { timeout: 20_000 });
   return { app, page, outputDir, runtimeErrors };
 }
 
