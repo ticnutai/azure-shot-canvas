@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="capture-preferences.css">
   <link rel="stylesheet" href="recent-library.css">
   <link rel="stylesheet" href="shortcut-settings.css">
+  <link rel="stylesheet" href="live-preview.css">
   <link rel="stylesheet" href="image-editor.css">
 </head>
 <body>
@@ -105,8 +106,10 @@
               </div>
               <div class="source-drawer" id="source-drawer"><div class="source-grid" id="source-grid"><div class="loading">טוען מסכים וחלונות…</div></div></div>
               <div class="capture-preview">
+                <video id="display-video" class="live-preview-video" autoplay muted playsinline></video>
+                <div class="preview-shade" id="preview-shade"></div>
                 <div class="preview-status"><span id="quality-status">4K · 60fps</span><span id="stage-time">00:00</span></div>
-                <button class="expand-button" aria-label="הגדלה">↗</button>
+                <button class="expand-button" id="expand-preview" aria-label="הגדלת התצוגה המקדימה">↗</button>
                 <div class="empty-preview"><span>▰</span><b id="selected-source-label">תצוגה מקדימה — מסך מלא</b><p>בחר מקור למעלה, כוון את ההגדרות ולחץ על הקלטה כדי להתחיל</p></div>
                 <button class="snapshot-fab" id="screenshot-button" title="צילום תמונה">▣</button>
                 <div class="audio-meter" aria-label="מד עוצמת קול"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -272,7 +275,7 @@
   </div>
   <div class="modal hidden" id="region-modal"><div class="region-dialog"><div class="modal-title"><div><h2>בחירת אזור</h2><p>גרור מלבן על התצוגה, או בחר את כל המקור.</p></div><button id="cancel-region">×</button></div><div class="preview-wrap" id="preview-wrap"><canvas id="preview-canvas"></canvas><div id="selection-box"></div></div><div class="modal-actions"><button class="ghost" id="full-region">כל המקור</button><button class="primary" id="confirm-region" disabled>אישור האזור</button></div></div></div>
   <div class="toast hidden" id="toast"></div>
-  <video id="display-video" autoplay muted playsinline></video><video id="camera-video" autoplay muted playsinline></video><canvas id="recording-canvas"></canvas>
+  <video id="camera-video" autoplay muted playsinline></video><canvas id="recording-canvas"></canvas>
   <script src="browser-api.js"></script>
   <script src="dev-client.js"></script>
   <script src="editor-engine.js"></script>

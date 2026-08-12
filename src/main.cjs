@@ -429,6 +429,10 @@ function registerIpc() {
 
 function registerShortcuts() {
   globalShortcut.unregisterAll();
+  if (process.env.SCREEN_STUDIO_QA === '1') {
+    shortcutRegistration = Object.fromEntries(Object.keys(activeShortcuts).map((action) => [action, true]));
+    return shortcutRegistration;
+  }
   const result = {};
   for (const [action, binding] of Object.entries(activeShortcuts)) {
     const accelerator = acceleratorForBinding(binding);

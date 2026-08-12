@@ -33,6 +33,9 @@ async function main() {
     result.shortcuts = await page.locator('[data-shortcut-action]').count();
     result.videoEditor = await page.locator('#video-editor-modal').count();
     result.storageLevel = await page.locator('html').getAttribute('data-storage-level');
+    await page.locator('.source-card').first().click();
+    await page.waitForFunction(() => document.documentElement.dataset.previewState === 'ready' && Number(document.documentElement.dataset.previewFrames) > 2, null, { timeout: 15_000 });
+    result.livePreview = await page.locator('#display-video').evaluate((video) => ({ width: video.videoWidth, height: video.videoHeight, paused: video.paused, frames: Number(document.documentElement.dataset.previewFrames) }));
     await page.locator('button[data-recent-filter="image"]').click();
     await page.locator('#recent-sort').selectOption('size-desc');
     await page.locator('button[data-recent-view="list"]').click();
@@ -46,6 +49,7 @@ async function main() {
     result.errors = errors;
     const passed = result.filters === 3 && result.sorts === 5 && result.views === 3 && result.quickActions === 3
       && result.shortcuts === 6 && result.videoEditor === 1 && ['healthy', 'warning', 'unknown'].includes(result.storageLevel)
+      && result.livePreview.width >= 320 && result.livePreview.height >= 200 && !result.livePreview.paused && result.livePreview.frames > 2
       && result.persisted.filter === 'image' && result.persisted.sort === 'size-desc' && result.persisted.view === 'list'
       && result.errors.length === 0;
     console.log(JSON.stringify({ passed, executablePath, ...result }, null, 2));

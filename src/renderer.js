@@ -6,6 +6,9 @@ const state = {
   quality: 'balanced',
   recorder: null,
   displayStream: null,
+  previewStream: null,
+  previewRequestId: 0,
+  previewFrameCount: 0,
   microphoneStream: null,
   cameraStream: null,
   outputStream: null,
@@ -481,6 +484,7 @@ async function refreshSources() {
     if (!state.selectedSource && state.sources.length) state.selectedSource = state.sources[0];
     if (state.selectedSource) state.selectedSource = state.sources.find((item) => item.id === state.selectedSource.id) || state.sources[0];
     renderSources();
+    if (state.selectedSource && !state.previewStream && !state.recorder && !api.browserMode) startLivePreview(state.selectedSource).catch(() => {});
     if (!state.sources.length) grid.innerHTML = '<div class="loading">לא נמצאו מסכים או חלונות לצילום.</div>';
   } catch (error) {
     grid.innerHTML = `<div class="loading">טעינת המקורות נכשלה: ${escapeHtml(error.message)}</div>`;
@@ -504,10 +508,97 @@ function renderSources() {
         button.classList.add('selected');
         const label = $('#selected-source-label');
         if (label) label.textContent = `תצוגה מקדימה — ${source.name}`;
+        startLivePreview(source).catch(() => {});
       });
       grid.append(button);
   }
   if (!visibleSources.length) grid.innerHTML = `<div class="loading">לא נמצאו מקורות מסוג ${state.sourceFilter === 'screen' ? 'מסך' : 'חלון'}.</div>`;
+}
+
+function setPreviewState(mode, message = '') {
+  const stage = $('.capture-preview');
+  if (!stage) return;
+  stage.classList.remove('preview-loading', 'preview-ready', 'preview-error');
+  if (mode) stage.classList.add(`preview-${mode}`);
+  document.documentElement.dataset.previewState = mode || 'idle';
+  const help = stage.querySelector('.empty-preview p');
+  if (help && message) help.textContent = message;
+}
+
+function stopLivePreview({ preserveDisplay = false } = {}) {
+  state.previewRequestId += 1;
+  state.previewStream?.getTracks().forEach((track) => track.stop());
+  if (displayVideo.srcObject === state.previewStream && !preserveDisplay) displayVideo.srcObject = null;
+  state.previewStream = null;
+  state.previewFrameCount = 0;
+  document.documentElement.dataset.previewFrames = '0';
+  if (!preserveDisplay) setPreviewState('', 'בחר מקור למעלה כדי להציג אותו כאן בזמן אמת');
+}
+
+function monitorPreviewFrames(requestId) {
+  if (!displayVideo.requestVideoFrameCallback) {
+    const startedAt = displayVideo.currentTime;
+    setTimeout(() => {
+      if (requestId !== state.previewRequestId || !state.previewStream) return;
+      if (displayVideo.currentTime > startedAt) state.previewFrameCount += 1;
+      document.documentElement.dataset.previewFrames = String(state.previewFrameCount);
+      monitorPreviewFrames(requestId);
+    }, 180);
+    return;
+  }
+  displayVideo.requestVideoFrameCallback(() => {
+    if (requestId !== state.previewRequestId || !state.previewStream) return;
+    state.previewFrameCount += 1;
+    document.documentElement.dataset.previewFrames = String(state.previewFrameCount);
+    monitorPreviewFrames(requestId);
+  });
+}
+
+async function startLivePreview(source = state.selectedSource) {
+  if (!source || state.recorder || state.busy) return false;
+  const sameSource = state.previewStream?.active && document.documentElement.dataset.previewSourceId === source.id;
+  if (sameSource) return true;
+  stopLivePreview();
+  const requestId = ++state.previewRequestId;
+  setPreviewState('loading', `פותח תצוגה חיה של ${source.name}…`);
+  $('#selected-source-label').textContent = `מתחבר — ${source.name}`;
+  try {
+    await api.prepareCapture({ sourceId: source.id, includeSystemAudio: false });
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+    if (requestId !== state.previewRequestId) {
+      stream.getTracks().forEach((track) => track.stop());
+      return false;
+    }
+    state.previewStream = stream;
+    displayVideo.srcObject = stream;
+    await waitForVideo(displayVideo);
+    if (requestId !== state.previewRequestId) return false;
+    state.previewFrameCount = 0;
+    document.documentElement.dataset.previewFrames = '0';
+    document.documentElement.dataset.previewSourceId = source.id;
+    document.documentElement.dataset.previewWidth = String(displayVideo.videoWidth);
+    document.documentElement.dataset.previewHeight = String(displayVideo.videoHeight);
+    $('#selected-source-label').textContent = `תצוגה חיה — ${source.name}`;
+    setPreviewState('ready');
+    monitorPreviewFrames(requestId);
+    stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+      if (state.previewStream !== stream) return;
+      state.previewStream = null;
+      displayVideo.srcObject = null;
+      setPreviewState('error', 'שיתוף המקור הופסק. לחץ על המקור כדי להתחבר מחדש.');
+    }, { once: true });
+    return true;
+  } catch (error) {
+    if (requestId !== state.previewRequestId) return false;
+    setPreviewState('error', `התצוגה החיה נכשלה: ${error.message}`);
+    $('#selected-source-label').textContent = `לא ניתן להציג — ${source.name}`;
+    return false;
+  }
+}
+
+function restoreLivePreview() {
+  if (!state.selectedSource || state.recorder || !$('#capture-page')?.classList.contains('active')) return;
+  setTimeout(() => startLivePreview(state.selectedSource).catch(() => {}), 120);
 }
 
 function escapeHtml(text) {
@@ -569,6 +660,8 @@ async function acquireInputs(includeRecordingInputs) {
   });
   displayVideo.srcObject = state.displayStream;
   await waitForVideo(displayVideo);
+  setPreviewState('ready');
+  $('#selected-source-label').textContent = `${includeRecordingInputs ? 'מקליט' : 'מצלם'} — ${state.selectedSource.name}`;
   if (includeRecordingInputs && $('#cursor-highlight')?.checked) {
     state.cursorTimer = setInterval(() => api.getCursorPosition().then((info) => { state.cursorInfo = info; }).catch(() => {}), 40);
   }
@@ -635,6 +728,7 @@ function stopInputStreams() {
   state.cursorInfo = null;
   displayVideo.srcObject = null;
   cameraVideo.srcObject = null;
+  setPreviewState('', 'מחזיר את התצוגה המקדימה…');
 }
 
 function drawFrame() {
@@ -765,12 +859,14 @@ async function beginCapture(kind, forcedScope = null) {
   state.busy = true;
   setStatus('מכין מקורות…', 'busy');
   try {
+    stopLivePreview({ preserveDisplay: true });
     await acquireInputs(kind === 'record');
     const scope = forcedScope || state.captureScope;
     const region = scope === 'full' ? { x: 0, y: 0, width: 1, height: 1 } : await chooseRegion();
     if (!region) {
       stopInputStreams();
       setStatus('מוכן');
+      restoreLivePreview();
       return;
     }
     state.region = region;
@@ -781,6 +877,7 @@ async function beginCapture(kind, forcedScope = null) {
     stopInputStreams();
     setStatus('שגיאה', 'error');
     showToast(`לא ניתן להתחיל צילום: ${error.message}`, 7000);
+    restoreLivePreview();
   } finally {
     state.busy = false;
   }
@@ -795,6 +892,7 @@ async function saveScreenshot() {
   setStatus('התמונה נשמרה');
   showToast(`התמונה נשמרה: ${result.path}`);
   await loadLibrary().catch(() => {});
+  restoreLivePreview();
   if (state.afterScreenshotAction !== 'save' && window.aurumEditor) await window.aurumEditor.open(result.path, state.afterScreenshotAction);
 }
 
@@ -877,10 +975,12 @@ async function finalizeRecording() {
     else showToast(`ההקלטה נשמרה: ${result.path}`, 7000);
     setStatus('ההקלטה נשמרה');
     loadLibrary().catch(() => {});
+    restoreLivePreview();
   } catch (error) {
     stopInputStreams();
     setStatus('שגיאת שמירה', 'error');
     showToast(`שמירת ההקלטה נכשלה: ${error.message}`, 9000);
+    restoreLivePreview();
   }
 }
 
@@ -1106,6 +1206,8 @@ function showPage(page) {
   if ($('#page-title')) $('#page-title').textContent = titles[page][0];
   if ($('#page-subtitle')) $('#page-subtitle').textContent = titles[page][1];
   $('#capture-settings').classList.toggle('hidden', page !== 'capture');
+  if (page === 'capture') restoreLivePreview();
+  else if (!state.recorder) stopLivePreview();
   if (page === 'library') loadLibrary();
 }
 
@@ -1166,6 +1268,11 @@ async function initialize() {
     state.quality = button.dataset.quality;
   }));
   $('#refresh-sources').addEventListener('click', refreshSources);
+  $('#expand-preview').addEventListener('click', () => {
+    const stage = $('.capture-preview');
+    if (document.fullscreenElement) document.exitFullscreen();
+    else stage.requestFullscreen().catch((error) => showToast(`לא ניתן להגדיל: ${error.message}`));
+  });
   $('#screenshot-button').addEventListener('click', () => beginCapture('screenshot'));
   $('#record-button').addEventListener('click', () => state.recorder ? stopRecording() : beginCapture(state.captureKind));
   $('#stop-recording').addEventListener('click', stopRecording);

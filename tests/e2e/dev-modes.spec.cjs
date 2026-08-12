@@ -46,7 +46,7 @@ test.describe('Development launch modes', () => {
       const page = await app.firstWindow();
       await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
       expect(page.url()).toBe(`${server.url}/`);
-      expect(await page.evaluate(() => window.screenStudio.browserMode)).toBeUndefined();
+      expect(await page.evaluate(() => window.screenStudio.browserMode)).toBe(false);
       await expect(page.locator('html')).toHaveAttribute('data-live-reload', 'connected');
       await testInfo.attach('metrics', { body: Buffer.from(JSON.stringify([
         metric('Electron localhost preload bridge', 1, 'mode', 1, 'min', `${server.url}, Electron IPC API retained`)

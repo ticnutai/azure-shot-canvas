@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('screenStudio', {
+  browserMode: false,
   qaEnabled: process.env.SCREEN_STUDIO_QA === '1',
   listSources: () => ipcRenderer.invoke('sources:list'),
   prepareCapture: (options) => ipcRenderer.invoke('capture:prepare', options),

@@ -62,6 +62,19 @@ test.describe('Electron production workflow', () => {
     expect(sourceCount).toBeGreaterThan(0);
     metrics.push(metric('Capture sources discovered', sourceCount, 'sources', 1, 'min', 'desktopCapturer source cards'));
 
+    const previewStarted = performance.now();
+    await page.locator('.source-card').first().click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'ready', { timeout: 15_000 });
+    await expect(page.locator('#display-video')).toBeVisible();
+    await expect.poll(async () => Number(await page.locator('html').getAttribute('data-preview-frames')), { timeout: 5000 }).toBeGreaterThan(3);
+    const preview = await page.locator('#display-video').evaluate((video) => ({ width: video.videoWidth, height: video.videoHeight, paused: video.paused, readyState: video.readyState }));
+    expect(preview.width).toBeGreaterThanOrEqual(320);
+    expect(preview.height).toBeGreaterThanOrEqual(200);
+    expect(preview.paused).toBeFalsy();
+    expect(preview.readyState).toBeGreaterThanOrEqual(2);
+    const previewReadyMs = performance.now() - previewStarted;
+    metrics.push(metric('Live preview ready', previewReadyMs, 'ms', 5000, 'max', `${preview.width}x${preview.height}; moving frames verified, not placeholder or frozen thumbnail`));
+
     const refreshSamples = [];
     for (let i = 0; i < 5; i += 1) {
       const revision = await page.locator('html').getAttribute('data-sources-revision');
