@@ -30,6 +30,9 @@ async function main() {
       views: await page.locator('button[data-recent-view]').count(),
       quickActions: await page.locator('.capture-quick-actions > button').count()
     };
+    result.shortcuts = await page.locator('[data-shortcut-action]').count();
+    result.videoEditor = await page.locator('#video-editor-modal').count();
+    result.storageLevel = await page.locator('html').getAttribute('data-storage-level');
     await page.locator('button[data-recent-filter="image"]').click();
     await page.locator('#recent-sort').selectOption('size-desc');
     await page.locator('button[data-recent-view="list"]').click();
@@ -42,6 +45,7 @@ async function main() {
     }));
     result.errors = errors;
     const passed = result.filters === 3 && result.sorts === 5 && result.views === 3 && result.quickActions === 3
+      && result.shortcuts === 6 && result.videoEditor === 1 && ['healthy', 'warning', 'unknown'].includes(result.storageLevel)
       && result.persisted.filter === 'image' && result.persisted.sort === 'size-desc' && result.persisted.view === 'list'
       && result.errors.length === 0;
     console.log(JSON.stringify({ passed, executablePath, ...result }, null, 2));

@@ -137,6 +137,19 @@ test.describe('Electron production workflow', () => {
     await page.locator('[data-page="settings"]').click();
     await expect(page.locator('#settings-page')).toHaveClass(/active/);
     await expect(page.locator('#output-path')).toContainText(outputDir);
+    await page.locator('[data-preference-tab="shortcuts"]').click();
+    await expect(page.locator('[data-shortcut-action]')).toHaveCount(6);
+    await expect(page.locator('#shortcut-status-banner')).toContainText('כל הקיצורים רשומים ופעילים');
+    await expect(page.locator('[data-shortcut-action="record"]')).toHaveText('Ctrl + Shift + 2');
+    await page.locator('[data-shortcut-action="camera"]').click();
+    await page.locator('body').dispatchEvent('keydown', { key: 'ב', code: 'KeyC', ctrlKey: true, altKey: true });
+    await expect(page.locator('[data-shortcut-action="camera"]')).toHaveText('Ctrl + Alt + C');
+    await page.locator('[data-shortcut-test="camera"]').click();
+    await expect(page.locator('[data-shortcut-row="camera"]')).toHaveClass(/tested/);
+    await page.locator('#reset-shortcuts').click();
+    await expect(page.locator('[data-shortcut-action="camera"]')).toHaveText('Ctrl + Shift + C');
+    metrics.push(metric('Bilingual configurable shortcut center', 10, 'assertions', 10, 'min', '6 editable physical-code shortcuts, registration status, Hebrew key event, IPC test and reset'));
+    await page.locator('[data-preference-tab="general"]').click();
     await expect(page.locator('#default-capture-kind')).toHaveValue('record');
     await expect(page.locator('#default-capture-scope')).toHaveValue('full');
     await page.locator('#default-capture-kind').selectOption('screenshot');
@@ -217,7 +230,7 @@ test.describe('Electron production workflow', () => {
     await setCaptureDefaults(page, 'screenshot', 'full');
     let before = new Set(await fs.readdir(outputDir));
     let started = performance.now();
-    await page.locator('#record-button').dispatchEvent('click');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: '1', modifiers: ['control', 'shift'] }));
     await expect(page.locator('#region-modal')).toBeHidden();
     let filePath = await waitForNewFile(outputDir, '.png', before);
     samples.push(performance.now() - started);
@@ -384,6 +397,18 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#recording-bar')).toBeVisible();
     const readyMs = performance.now() - started;
     await page.waitForTimeout(1600);
+    await expect.poll(async () => Number(await page.locator('html').getAttribute('data-recording-bytes')), { timeout: 5000 }).toBeGreaterThan(10_000);
+    const streamedChunks = Number(await page.locator('html').getAttribute('data-recording-chunks'));
+    const streamedBytes = Number(await page.locator('html').getAttribute('data-recording-bytes'));
+    expect(streamedChunks).toBeGreaterThan(0);
+    expect(streamedBytes).toBeGreaterThan(10_000);
+    expect((await fs.readdir(outputDir)).some((name) => name.endsWith('.partial.webm'))).toBeTruthy();
+    await page.locator('#recording-mic').click();
+    await expect(page.locator('#recording-mic')).toHaveClass(/off/);
+    await page.locator('#recording-mic').click();
+    await page.locator('#recording-pause').click();
+    await expect(page.locator('#pause-recording')).toHaveText('המשך');
+    await page.locator('#recording-pause').click();
     await page.locator('#pause-recording').dispatchEvent('click');
     await expect(page.locator('#pause-recording')).toHaveText('המשך');
     await page.waitForTimeout(500);
@@ -411,6 +436,7 @@ test.describe('Electron production workflow', () => {
       metric('Detected audio peak', levels.maxDb ?? -120, 'dBFS', -90, 'min', 'FFmpeg volumedetect on deterministic test microphone'),
       metric('Audio input choices', audioDevices - 1, 'devices', 1, 'min', 'enumerateDevices'),
       metric('Camera input choices', videoDevices - 1, 'devices', 1, 'min', 'enumerateDevices')
+      ,metric('Crash-safe incremental recording', streamedChunks, 'chunks', 1, 'min', `${streamedBytes} bytes persisted before stop; floating mic and pause controls verified`)
     ];
     expect(metrics.every((item) => item.pass)).toBeTruthy();
     await attachMetrics(testInfo, metrics);
@@ -449,6 +475,25 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('.library-item .file-details strong').filter({ hasText: `וידאו לקוח אלף${renamedExtension}` })).toHaveCount(1);
     const diskNames = await fs.readdir(outputDir);
     expect(diskNames).toContain(`וידאו לקוח אלף${renamedExtension}`);
+    const renamedRow = page.locator('.library-item', { hasText: `וידאו לקוח אלף${renamedExtension}` });
+    await renamedRow.locator('.metadata').click();
+    await renamedRow.locator('.meta-client').fill('לקוח אלף');
+    await renamedRow.locator('.meta-tags').fill('הדרכה, דחוף');
+    await renamedRow.locator('.meta-favorite').check();
+    await renamedRow.locator('.save-metadata').click();
+    await expect(page.locator('.library-item.favorite')).toHaveCount(1);
+    await expect(page.locator('.library-item.favorite .library-meta')).toContainText('לקוח: לקוח אלף');
+    await expect(page.locator('.library-item.favorite .library-meta')).toContainText('#הדרכה');
+    await expect(page.locator('.library-item.favorite .library-meta')).toContainText('#דחוף');
+    await page.locator('.library-item.favorite .share').click();
+    await expect(page.locator('#toast')).toContainText('שיתוף פרטי');
+    const beforeEdit = new Set(await fs.readdir(outputDir));
+    await page.locator('.library-item.favorite .edit-video').click();
+    await expect(page.locator('#video-editor-modal')).toBeVisible();
+    await page.locator('#video-trim-end').fill('1');
+    await page.locator('#save-video-edit').click();
+    const editedVideo = await waitForNewFile(outputDir, '.mp4', beforeEdit, 45_000);
+    expect(path.basename(editedVideo)).toContain('ערוך');
     const libraryStarted = performance.now();
     await page.locator('.nav-item[data-page="capture"]:not([data-action])').dispatchEvent('click');
     await expect(page.locator('#capture-page')).toHaveClass(/active/);
@@ -484,6 +529,8 @@ test.describe('Electron production workflow', () => {
       metric('Library navigation response', navigationMs, 'ms', 500, 'max', 'Playwright click to active page'),
       metric('Real media thumbnails', 2, 'thumbnails', 2, 'min', 'FFmpeg frames rendered as data images with natural dimensions'),
       metric('Library sort group and rename', 4, 'assertions', 4, 'min', `name sort, type group, filesystem rename, extension ${renamedExtension} preserved`),
+      metric('Client metadata and private sharing', 6, 'assertions', 6, 'min', 'client, two tags, favorite, metadata persistence and local path sharing'),
+      metric('Quick video editor output', 1, 'edited copy', 1, 'min', 'one-second non-destructive MP4 trim created through FFmpeg'),
       metric('Developer console shortcut', 2, 'toggles', 2, 'min', 'Ctrl+Shift+I opened and closed Electron DevTools'),
       metric('Hard reload ready', reloadMs, 'ms', 3000, 'max', 'Ctrl+Shift+R to appReady')
     ];

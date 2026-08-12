@@ -8,6 +8,19 @@
 .file-icon { width: 92px; height: 58px; overflow: hidden; }
 .file-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .library-actions { display: flex; gap: 6px; }
+.library-item.favorite { border-color: var(--gold); }
+.library-meta { display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+.library-meta span { padding:2px 6px; border-radius:7px; background:color-mix(in srgb,var(--gold) 10%,transparent); color:var(--gold); font-size:8px; }
+.metadata-editor { grid-column:1/-1; display:grid; grid-template-columns:1fr 1fr auto auto; gap:7px; margin-top:8px; }
+.metadata-editor input { min-width:0; border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--text); padding:7px; }
+.video-editor-dialog { width:min(760px,92vw); padding:20px; border:1px solid var(--line); border-radius:20px; background:var(--panel); }
+.video-editor-dialog video { width:100%; max-height:420px; margin-top:12px; border-radius:12px; background:#000; }
+.video-edit-fields { display:grid; grid-template-columns:1fr 1fr 1.2fr; gap:10px; align-items:end; margin-top:12px; }
+.video-edit-fields label { color:var(--muted); font-size:9px; }
+.video-edit-fields input[type="number"] { width:100%; margin-top:5px; padding:9px; border:1px solid var(--line); border-radius:10px; background:var(--panel-2); color:var(--text); }
+.recording-bar small { color:var(--muted); min-width:58px; direction:ltr; }
+.recording-bar .recording-tool { background:var(--panel-2); color:var(--text); border:1px solid var(--line); min-width:36px; padding:8px; }
+.recording-bar .recording-tool.off { opacity:.45; text-decoration:line-through; }
 .rename-editor { display: flex; gap: 6px; margin-top: 7px; }
 .rename-editor input { min-width: 220px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 9px; padding: 7px 9px; }
 .rename-editor button { padding: 6px 9px; }

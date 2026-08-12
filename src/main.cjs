@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, session, shell } = require('electron');
+const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, screen, session, shell } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -7,6 +7,8 @@ const { captureFilePath, developerShortcut } = require('./main-utils.cjs');
 const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, projectPathFor } = require('./editor-utils.cjs');
+const { DEFAULT_SHORTCUTS, acceleratorForBinding, actionForInput, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
+const { recordingPaths, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 
 let mainWindow;
 let pendingCapture = null;
@@ -14,6 +16,11 @@ let outputDirectory;
 let sourceCache = { at: 0, native: [], public: [] };
 let qaProcess = null;
 let qaConsole = '';
+let activeShortcuts = { ...DEFAULT_SHORTCUTS };
+let shortcutRegistration = {};
+const lastShortcutDispatch = new Map();
+const recordingSessions = new Map();
+let recoveredRecordings = [];
 const thumbnailJobs = new Map();
 
 const projectDirectory = path.resolve(__dirname, '..');
@@ -103,10 +110,17 @@ function createWindow() {
   mainWindow.setMenuBarVisibility(false);
   mainWindow.webContents.on('before-input-event', (event, input) => {
     const action = developerShortcut(input);
-    if (!action) return;
-    event.preventDefault();
-    if (action === 'hard-reload') mainWindow.webContents.reloadIgnoringCache();
-    if (action === 'toggle-devtools') mainWindow.webContents.toggleDevTools();
+    if (action) {
+      event.preventDefault();
+      if (action === 'hard-reload') mainWindow.webContents.reloadIgnoringCache();
+      if (action === 'toggle-devtools') mainWindow.webContents.toggleDevTools();
+      return;
+    }
+    const captureAction = actionForInput(input, activeShortcuts);
+    if (captureAction) {
+      event.preventDefault();
+      dispatchShortcut(captureAction, 'focused-physical-key');
+    }
   });
   const devUrl = process.env.SCREEN_STUDIO_DEV_URL;
   if (devUrl && /^http:\/\/127\.0\.0\.1:\d+$/.test(devUrl)) mainWindow.loadURL(devUrl);
@@ -117,6 +131,49 @@ async function ensureOutputDirectory() {
   outputDirectory ||= process.env.SCREEN_STUDIO_OUTPUT_DIR || path.join(app.getPath('videos'), 'אולפן צילום מסך');
   await fs.mkdir(outputDirectory, { recursive: true });
   return outputDirectory;
+}
+
+async function storageStatus() {
+  const directory = await ensureOutputDirectory();
+  try {
+    const stats = await fs.statfs(directory);
+    const freeBytes = Number(stats.bavail) * Number(stats.bsize);
+    const totalBytes = Number(stats.blocks) * Number(stats.bsize);
+    return { directory, freeBytes, totalBytes, level: storageLevel(freeBytes), recovered: recoveredRecordings.length };
+  } catch {
+    return { directory, freeBytes: null, totalBytes: null, level: 'unknown', recovered: recoveredRecordings.length };
+  }
+}
+
+async function recoverInterruptedRecordings() {
+  const directory = await ensureOutputDirectory();
+  const names = await fs.readdir(directory).catch(() => []);
+  const recovered = [];
+  for (const name of names.filter((item) => /\.partial\.webm$/i.test(item))) {
+    const partialPath = path.join(directory, name);
+    const stat = await fs.stat(partialPath).catch(() => null);
+    if (!stat?.size) continue;
+    const recoveredPath = recoveryPathFor(partialPath);
+    await fs.rename(partialPath, recoveredPath).catch(() => {});
+    const journalPath = partialPath.replace(/\.partial\.webm$/i, '.recording.json');
+    await fs.rm(journalPath, { force: true }).catch(() => {});
+    try { await fs.access(recoveredPath); recovered.push(recoveredPath); } catch {}
+  }
+  recoveredRecordings = recovered;
+  return recovered;
+}
+
+async function convertRecording(webmPath, convertToMp4) {
+  if (!convertToMp4) return { path: webmPath, webmPath, converted: false };
+  const mp4Path = webmPath.replace(/\.webm$/i, '.mp4');
+  const temporaryMp4Path = mp4Path.replace(/\.mp4$/i, '.partial');
+  const conversion = await runFfmpeg(webmPath, temporaryMp4Path);
+  if (conversion.ok) {
+    await fs.rename(temporaryMp4Path, mp4Path);
+    return { path: mp4Path, webmPath, converted: true };
+  }
+  await fs.rm(temporaryMp4Path, { force: true }).catch(() => {});
+  return { path: webmPath, webmPath, converted: false, conversionError: conversion.error };
 }
 
 async function getSources() {
@@ -146,6 +203,23 @@ function runFfmpeg(inputPath, outputPath) {
       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
       '-movflags', '+faststart', '-f', 'mp4', outputPath
     ], { windowsHide: true });
+    let errorText = '';
+    child.stderr.on('data', (data) => { errorText += data.toString(); });
+    child.on('error', (error) => resolve({ ok: false, error: error.message }));
+    child.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false, error: errorText || `FFmpeg exited with ${code}` }));
+  });
+}
+
+function runVideoEdit(inputPath, outputPath, options = {}) {
+  return new Promise((resolve) => {
+    const start = Math.max(0, Number(options.start) || 0);
+    const end = Number(options.end) > start ? Number(options.end) : null;
+    const args = ['-y', '-hide_banner', '-loglevel', 'error', '-ss', String(start), '-i', inputPath];
+    if (end) args.push('-t', String(end - start));
+    args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p');
+    if (options.mute) args.push('-an'); else args.push('-c:a', 'aac', '-b:a', '192k');
+    args.push('-movflags', '+faststart', outputPath);
+    const child = spawn('ffmpeg', args, { windowsHide: true });
     let errorText = '';
     child.stderr.on('data', (data) => { errorText += data.toString(); });
     child.on('error', (error) => resolve({ ok: false, error: error.message }));
@@ -199,7 +273,8 @@ async function listLibrary() {
     const stat = await fs.stat(fullPath);
     let edited = false;
     if (/\.png$/i.test(entry.name)) edited = Boolean(await readJson(projectPathFor(fullPath)));
-    return { name: entry.name, path: fullPath, size: stat.size, modified: stat.mtimeMs, extension: path.extname(entry.name).slice(1).toLowerCase(), edited };
+    const metadata = await readJson(`${fullPath}.meta.json`) || {};
+    return { name: entry.name, path: fullPath, size: stat.size, modified: stat.mtimeMs, extension: path.extname(entry.name).slice(1).toLowerCase(), edited, metadata };
   }));
   const sorted = items.sort((a, b) => b.modified - a.modified);
   return Promise.all(sorted.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item) })));
@@ -221,16 +296,40 @@ function registerIpc() {
     const directory = await ensureOutputDirectory();
     const webmPath = captureFilePath(directory, 'recording', 'webm');
     await fs.writeFile(webmPath, Buffer.from(bytes));
-    if (!convertToMp4) return { path: webmPath, webmPath, converted: false };
-    const mp4Path = webmPath.replace(/\.webm$/i, '.mp4');
-    const temporaryMp4Path = mp4Path.replace(/\.mp4$/i, '.partial');
-    const conversion = await runFfmpeg(webmPath, temporaryMp4Path);
-    if (conversion.ok) {
-      await fs.rename(temporaryMp4Path, mp4Path);
-      return { path: mp4Path, webmPath, converted: true };
-    }
-    await fs.rm(temporaryMp4Path, { force: true }).catch(() => {});
-    return { path: webmPath, webmPath, converted: false, conversionError: conversion.error };
+    return convertRecording(webmPath, convertToMp4);
+  });
+  ipcMain.handle('recording:begin', async (_event, details = {}) => {
+    const status = await storageStatus();
+    if (status.level === 'critical') throw new Error('אין מספיק מקום פנוי להקלטה בטוחה');
+    const id = crypto.randomUUID();
+    const paths = recordingPaths(await ensureOutputDirectory());
+    await fs.writeFile(paths.partialPath, Buffer.alloc(0));
+    await fs.writeFile(paths.journalPath, JSON.stringify({ id, startedAt: new Date().toISOString(), mimeType: details.mimeType || 'video/webm', partialPath: paths.partialPath }, null, 2), 'utf8');
+    recordingSessions.set(id, { ...paths, bytes: 0, chunks: 0 });
+    return { id, path: paths.partialPath, storage: status };
+  });
+  ipcMain.handle('recording:append', async (_event, id, bytes) => {
+    const session = recordingSessions.get(id);
+    if (!session) throw new Error('Recording session is not active');
+    const buffer = Buffer.from(bytes);
+    await fs.appendFile(session.partialPath, buffer);
+    session.bytes += buffer.length;
+    session.chunks += 1;
+    return { bytes: session.bytes, chunks: session.chunks };
+  });
+  ipcMain.handle('recording:finish', async (_event, id, convertToMp4) => {
+    const session = recordingSessions.get(id);
+    if (!session) throw new Error('Recording session is not active');
+    recordingSessions.delete(id);
+    await fs.rename(session.partialPath, session.finalPath);
+    await fs.rm(session.journalPath, { force: true });
+    return { ...(await convertRecording(session.finalPath, convertToMp4)), bytes: session.bytes, chunks: session.chunks, recovered: false };
+  });
+  ipcMain.handle('storage:status', storageStatus);
+  ipcMain.handle('cursor:position', () => {
+    const point = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(point);
+    return { point, displayId: String(display.id), bounds: display.bounds };
   });
   ipcMain.handle('library:list', listLibrary);
   ipcMain.handle('library:open', async (_event, filePath) => shell.openPath(filePath));
@@ -248,7 +347,29 @@ function registerIpc() {
       const project = await readJson(newProjectPath);
       if (project) await fs.writeFile(newProjectPath, JSON.stringify({ ...project, sourcePath: targetPath, outputPath: targetPath }, null, 2), 'utf8');
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await fs.rename(`${filePath}.meta.json`, `${targetPath}.meta.json`).catch((error) => { if (error.code !== 'ENOENT') throw error; });
     return { path: targetPath, name: path.basename(targetPath) };
+  });
+  ipcMain.handle('library:metadata', async (_event, filePath, metadata) => {
+    const directory = path.resolve(await ensureOutputDirectory());
+    const resolved = path.resolve(filePath);
+    if (path.dirname(resolved).toLowerCase() !== directory.toLowerCase()) throw new Error('הקובץ אינו בספרייה המקומית');
+    const safe = { client: String(metadata.client || '').trim().slice(0, 80), tags: String(metadata.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 12), favorite: Boolean(metadata.favorite), note: String(metadata.note || '').trim().slice(0, 500) };
+    await fs.writeFile(`${resolved}.meta.json`, JSON.stringify(safe, null, 2), 'utf8');
+    return safe;
+  });
+  ipcMain.handle('library:share-local', async (_event, filePath) => {
+    clipboard.writeText(filePath);
+    return { path: filePath, private: true };
+  });
+  ipcMain.handle('video:edit', async (_event, filePath, options) => {
+    const directory = path.resolve(await ensureOutputDirectory());
+    const resolved = path.resolve(filePath);
+    if (path.dirname(resolved).toLowerCase() !== directory.toLowerCase() || !/\.(mp4|webm)$/i.test(resolved)) throw new Error('קובץ וידאו לא תקין');
+    const outputPath = path.join(directory, `${path.basename(resolved, path.extname(resolved))} — ערוך.mp4`);
+    const result = await runVideoEdit(resolved, outputPath, options);
+    if (!result.ok) throw new Error(result.error);
+    return { path: outputPath };
   });
   ipcMain.handle('editor:load', async (_event, filePath) => {
     const sourcePath = assertEditableImagePath(filePath, await ensureOutputDirectory());
@@ -283,6 +404,20 @@ function registerIpc() {
     return outputDirectory;
   });
   ipcMain.handle('output:get', ensureOutputDirectory);
+  ipcMain.handle('shortcuts:get', () => ({ shortcuts: activeShortcuts, registration: shortcutRegistration }));
+  ipcMain.handle('shortcuts:set', (_event, candidate) => {
+    const shortcuts = normalizeShortcutMap(candidate);
+    const conflicts = [...shortcutConflicts(shortcuts), ...reservedShortcutConflicts(shortcuts)];
+    if (conflicts.length) return { ok: false, conflicts, shortcuts: activeShortcuts, registration: shortcutRegistration };
+    activeShortcuts = shortcuts;
+    shortcutRegistration = registerShortcuts();
+    return { ok: Object.values(shortcutRegistration).every(Boolean), shortcuts: activeShortcuts, registration: shortcutRegistration };
+  });
+  ipcMain.handle('shortcuts:test', (_event, action) => {
+    if (!Object.hasOwn(DEFAULT_SHORTCUTS, action)) return false;
+    mainWindow?.webContents.send('shortcut', action, { test: true });
+    return true;
+  });
   ipcMain.handle('qa:status', qaStatus);
   ipcMain.handle('qa:run', runQa);
   ipcMain.handle('qa:copy', (_event, text) => { clipboard.writeText(String(text || '')); return true; });
@@ -293,24 +428,30 @@ function registerIpc() {
 }
 
 function registerShortcuts() {
-  const shortcuts = [
-    ['CommandOrControl+Shift+1', 'screenshot'],
-    ['CommandOrControl+Shift+2', 'record'],
-    ['CommandOrControl+Shift+Q', 'stop']
-  ];
-  for (const [accelerator, action] of shortcuts) {
-    globalShortcut.register(accelerator, () => {
-      if (!mainWindow) return;
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-      mainWindow.webContents.send('shortcut', action);
-    });
+  globalShortcut.unregisterAll();
+  const result = {};
+  for (const [action, binding] of Object.entries(activeShortcuts)) {
+    const accelerator = acceleratorForBinding(binding);
+    result[action] = Boolean(accelerator && globalShortcut.register(accelerator, () => dispatchShortcut(action, 'global')));
   }
+  shortcutRegistration = result;
+  return result;
+}
+
+function dispatchShortcut(action, source = 'unknown') {
+  if (!mainWindow) return false;
+  const now = Date.now();
+  if (now - (lastShortcutDispatch.get(action) || 0) < 180) return false;
+  lastShortcutDispatch.set(action, now);
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.webContents.send('shortcut', action, { source });
+  return true;
 }
 
 app.whenReady().then(async () => {
   await ensureOutputDirectory();
+  await recoverInterruptedRecordings();
   registerIpc();
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     try {

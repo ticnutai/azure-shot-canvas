@@ -14,6 +14,13 @@ const state = {
   qaSystemAudioOscillator: null,
   drawTimer: null,
   chunks: [],
+  recordingSession: null,
+  recordingAppendQueue: Promise.resolve(),
+  recordingWriteError: null,
+  recordingBytes: 0,
+  recordingChunks: 0,
+  cursorInfo: null,
+  cursorTimer: null,
   startedAt: 0,
   timer: null,
   busy: false,
@@ -27,6 +34,7 @@ const state = {
   recentFilter: 'all',
   recentSort: 'date-desc',
   recentView: 'cards',
+  shortcuts: {},
   afterScreenshotAction: 'save',
   region: { x: 0, y: 0, width: 1, height: 1 }
 };
@@ -40,6 +48,69 @@ const recordingContext = recordingCanvas.getContext('2d', { alpha: false });
 let latestQaStatus = null;
 let qaConsoleText = '';
 let themeEditorOpen = false;
+let listeningShortcutAction = null;
+let editingVideoItem = null;
+
+const defaultShortcuts = {
+  record: 'Ctrl+Shift+Digit2', screenshot: 'Ctrl+Shift+Digit1', region: 'Ctrl+Shift+Digit3',
+  pause: 'Ctrl+Shift+KeyP', microphone: 'Ctrl+Shift+KeyM', camera: 'Ctrl+Shift+KeyC'
+};
+
+function shortcutLabel(binding) {
+  return String(binding || '').replace(/Key([A-Z])/g, '$1').replace(/Digit([0-9])/g, '$1').replaceAll('+', ' + ');
+}
+
+function shortcutBindingFromEvent(event) {
+  if (!/^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2]))$/.test(event.code)) return null;
+  const modifiers = [];
+  if (event.ctrlKey) modifiers.push('Ctrl');
+  if (event.altKey) modifiers.push('Alt');
+  if (event.shiftKey) modifiers.push('Shift');
+  if (event.metaKey) modifiers.push('Meta');
+  if (!modifiers.length && !/^F(?:[1-9]|1[0-2])$/.test(event.code)) return null;
+  return [...modifiers, event.code].join('+');
+}
+
+function renderShortcutSettings(registration = {}) {
+  $$('[data-shortcut-action]').forEach((button) => {
+    button.textContent = shortcutLabel(state.shortcuts[button.dataset.shortcutAction]);
+    button.classList.toggle('listening', button.dataset.shortcutAction === listeningShortcutAction);
+  });
+  $$('[data-shortcut-summary]').forEach((element) => { element.textContent = shortcutLabel(state.shortcuts[element.dataset.shortcutSummary]); });
+  const failed = Object.entries(registration).filter(([, registered]) => !registered).map(([action]) => action);
+  const banner = $('#shortcut-status-banner');
+  if (banner) {
+    banner.classList.toggle('error', Boolean(failed.length));
+    banner.querySelector('b').textContent = failed.length ? `${failed.length} קיצורים לא נרשמו` : 'כל הקיצורים רשומים ופעילים';
+    banner.querySelector('small').textContent = failed.length ? 'ייתכן שתוכנה אחרת משתמשת בהם. בחר שילוב אחר.' : 'הזיהוי מבוסס על מיקום המקש ולכן אינו תלוי בעברית או באנגלית.';
+  }
+}
+
+async function applyShortcutSettings(candidate, persist = true) {
+  const result = await api.setShortcuts({ ...defaultShortcuts, ...candidate });
+  if (!result.ok && result.conflicts?.length) {
+    const [first] = result.conflicts;
+    const reserved = typeof first[1] === 'string' && !Object.hasOwn(defaultShortcuts, first[1]);
+    showToast(reserved ? `הקיצור שמור עבור ${first[1]}` : 'קיימת התנגשות בין שני קיצורים');
+    renderShortcutSettings(result.registration);
+    return false;
+  }
+  state.shortcuts = result.shortcuts;
+  if (persist) localStorage.setItem('aurum-shortcuts', JSON.stringify(state.shortcuts));
+  renderShortcutSettings(result.registration);
+  return true;
+}
+
+async function loadShortcutSettings() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('aurum-shortcuts') || '{}'); } catch {}
+  state.shortcuts = { ...defaultShortcuts, ...saved };
+  const accepted = await applyShortcutSettings(state.shortcuts, false);
+  if (!accepted) {
+    state.shortcuts = { ...defaultShortcuts };
+    await applyShortcutSettings(state.shortcuts);
+  }
+}
 
 const themeVariables = ['--bg', '--top', '--panel', '--panel-2', '--text', '--muted', '--gold', '--line', '--success', '--danger'];
 const themeDefinitions = {
@@ -498,6 +569,9 @@ async function acquireInputs(includeRecordingInputs) {
   });
   displayVideo.srcObject = state.displayStream;
   await waitForVideo(displayVideo);
+  if (includeRecordingInputs && $('#cursor-highlight')?.checked) {
+    state.cursorTimer = setInterval(() => api.getCursorPosition().then((info) => { state.cursorInfo = info; }).catch(() => {}), 40);
+  }
 
   if (includeSystemAudio && api.qaEnabled) {
     state.displayStream.getAudioTracks().forEach((track) => {
@@ -555,7 +629,10 @@ function stopInputStreams() {
   if (state.qaSystemAudioContext && state.qaSystemAudioContext.state !== 'closed') state.qaSystemAudioContext.close();
   state.qaSystemAudioContext = null;
   clearInterval(state.drawTimer);
+  clearInterval(state.cursorTimer);
   state.drawTimer = null;
+  state.cursorTimer = null;
+  state.cursorInfo = null;
   displayVideo.srcObject = null;
   cameraVideo.srcObject = null;
 }
@@ -576,6 +653,25 @@ function drawFrame() {
     recordingCanvas.height = outputHeight - (outputHeight % 2);
   }
   recordingContext.drawImage(displayVideo, sx, sy, sw, sh, 0, 0, recordingCanvas.width, recordingCanvas.height);
+  if ($('#cursor-highlight')?.checked && state.cursorInfo && state.selectedSource?.type === 'screen') {
+    const { point, bounds } = state.cursorInfo;
+    const nx = (point.x - bounds.x) / bounds.width;
+    const ny = (point.y - bounds.y) / bounds.height;
+    if (nx >= crop.x && nx <= crop.x + crop.width && ny >= crop.y && ny <= crop.y + crop.height) {
+      const x = ((nx - crop.x) / crop.width) * recordingCanvas.width;
+      const y = ((ny - crop.y) / crop.height) * recordingCanvas.height;
+      const radius = Math.max(14, recordingCanvas.width * 0.012);
+      recordingContext.save();
+      recordingContext.beginPath();
+      recordingContext.arc(x, y, radius, 0, Math.PI * 2);
+      recordingContext.fillStyle = '#f4bc3f44';
+      recordingContext.fill();
+      recordingContext.strokeStyle = '#f4bc3fee';
+      recordingContext.lineWidth = Math.max(2, radius * 0.12);
+      recordingContext.stroke();
+      recordingContext.restore();
+    }
+  }
   if (state.cameraStream && cameraVideo.videoWidth) {
     const targetWidth = Math.round(recordingCanvas.width * 0.2);
     const targetHeight = Math.round(targetWidth * cameraVideo.videoHeight / cameraVideo.videoWidth);
@@ -583,13 +679,15 @@ function drawFrame() {
     const x = recordingCanvas.width - targetWidth - margin;
     const y = recordingCanvas.height - targetHeight - margin;
     recordingContext.save();
-    roundedRect(recordingContext, x, y, targetWidth, targetHeight, Math.max(12, targetWidth * 0.05));
+    const cameraShape = $('#camera-shape')?.value || 'rounded';
+    const radius = cameraShape === 'circle' ? Math.min(targetWidth, targetHeight) / 2 : cameraShape === 'square' ? 0 : Math.max(12, targetWidth * 0.05);
+    roundedRect(recordingContext, x, y, targetWidth, targetHeight, radius);
     recordingContext.clip();
     recordingContext.drawImage(cameraVideo, x, y, targetWidth, targetHeight);
     recordingContext.restore();
     recordingContext.strokeStyle = '#ffffffcc';
     recordingContext.lineWidth = Math.max(2, targetWidth * 0.008);
-    roundedRect(recordingContext, x, y, targetWidth, targetHeight, Math.max(12, targetWidth * 0.05));
+    roundedRect(recordingContext, x, y, targetWidth, targetHeight, radius);
     recordingContext.stroke();
   }
 }
@@ -661,14 +759,15 @@ function chooseRegion() {
   });
 }
 
-async function beginCapture(kind) {
+async function beginCapture(kind, forcedScope = null) {
   if (state.busy || state.recorder) return;
   if (!state.selectedSource) return showToast('יש לבחור מסך או חלון תחילה');
   state.busy = true;
   setStatus('מכין מקורות…', 'busy');
   try {
     await acquireInputs(kind === 'record');
-    const region = state.captureScope === 'full' ? { x: 0, y: 0, width: 1, height: 1 } : await chooseRegion();
+    const scope = forcedScope || state.captureScope;
+    const region = scope === 'full' ? { x: 0, y: 0, width: 1, height: 1 } : await chooseRegion();
     if (!region) {
       stopInputStreams();
       setStatus('מוכן');
@@ -725,10 +824,24 @@ async function startRecording() {
   const mixedTrack = await createMixedAudioTrack();
   if (mixedTrack) canvasStream.addTrack(mixedTrack);
   state.outputStream = canvasStream;
-  state.chunks = [];
   const mimeType = recorderMimeType();
   state.recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: preset.bitrate, audioBitsPerSecond: 192_000 });
-  state.recorder.addEventListener('dataavailable', (event) => { if (event.data.size) state.chunks.push(event.data); });
+  state.recordingSession = await api.beginRecordingFile({ mimeType, fps: preset.fps, targetHeight: state.targetHeight });
+  state.recordingAppendQueue = Promise.resolve();
+  state.recordingWriteError = null;
+  state.recordingBytes = 0;
+  state.recordingChunks = 0;
+  state.recorder.addEventListener('dataavailable', (event) => {
+    if (!event.data.size) return;
+    state.recordingAppendQueue = state.recordingAppendQueue.then(async () => {
+      const result = await api.appendRecordingChunk(state.recordingSession.id, await event.data.arrayBuffer());
+      state.recordingBytes = result.bytes;
+      state.recordingChunks = result.chunks;
+      document.documentElement.dataset.recordingBytes = String(result.bytes);
+      document.documentElement.dataset.recordingChunks = String(result.chunks);
+      if ($('#recording-size')) $('#recording-size').textContent = `${(result.bytes / 1024 / 1024).toFixed(1)} MB`;
+    }).catch((error) => { state.recordingWriteError = error; });
+  });
   state.recorder.addEventListener('stop', finalizeRecording, { once: true });
   state.displayStream.getVideoTracks()[0].addEventListener('ended', () => { if (state.recorder?.state !== 'inactive') state.recorder.stop(); }, { once: true });
   state.recorder.start(1000);
@@ -753,8 +866,10 @@ async function finalizeRecording() {
   const recorder = state.recorder;
   state.recorder = null;
   try {
-    const blob = new Blob(state.chunks, { type: recorder.mimeType || 'video/webm' });
-    const result = await api.saveRecording(await blob.arrayBuffer(), $('#convert-mp4').checked);
+    await state.recordingAppendQueue;
+    if (state.recordingWriteError) throw state.recordingWriteError;
+    const result = await api.finishRecordingFile(state.recordingSession.id, $('#convert-mp4').checked);
+    state.recordingSession = null;
     document.documentElement.dataset.lastSavedPath = result.path;
     stopInputStreams();
     if (result.converted) showToast(`ההקלטה נשמרה כ-MP4: ${result.path}`, 7000);
@@ -767,6 +882,16 @@ async function finalizeRecording() {
     setStatus('שגיאת שמירה', 'error');
     showToast(`שמירת ההקלטה נכשלה: ${error.message}`, 9000);
   }
+}
+
+async function refreshStorageStatus() {
+  const status = await api.getStorageStatus();
+  const freeLabel = Number.isFinite(status.freeBytes) ? `${(status.freeBytes / 1024 ** 3).toFixed(1)} GB פנויים` : 'לא ניתן למדוד';
+  if ($('#storage-status')) $('#storage-status').textContent = freeLabel;
+  if ($('#recovery-status')) $('#recovery-status').textContent = status.recovered ? `${status.recovered} שוחזרו` : 'אין הקלטות לשחזור';
+  document.documentElement.dataset.storageLevel = status.level;
+  document.documentElement.dataset.recoveredRecordings = String(status.recovered || 0);
+  return status;
 }
 
 function stopRecording() {
@@ -855,11 +980,21 @@ function renderLibrary() {
       const row = document.createElement('div');
       row.className = 'library-item';
       const baseName = item.name.replace(/\.[^.]+$/, '');
-      const editButton = item.extension === 'png' ? '<button class="gold-button edit-image">עריכה</button>' : '';
-      row.innerHTML = `<span class="file-icon">${thumbnailMarkup(item)}</span><div class="file-details"><strong>${escapeHtml(item.name)}${item.edited ? ' <em class="edited-badge">נערך</em>' : ''}</strong><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)} · ${item.extension.toUpperCase()}</small><div class="rename-editor hidden"><input maxlength="120" value="${escapeHtml(baseName)}" aria-label="שם קובץ חדש"><button class="gold-button save-name">שמירה</button><button class="ghost cancel-name">ביטול</button></div></div><div class="library-actions">${editButton}<button class="ghost rename">שינוי שם</button><button class="ghost open">פתיחה</button><button class="ghost show">בתיקייה</button></div>`;
+      const editButton = item.extension === 'png' ? '<button class="gold-button edit-image">עריכה</button>' : '<button class="gold-button edit-video">חיתוך וידאו</button>';
+      const metadata = item.metadata || {};
+      const metaBadges = [metadata.favorite ? '★ מועדף' : '', metadata.client ? `לקוח: ${escapeHtml(metadata.client)}` : '', ...(metadata.tags || []).map((tag) => `#${escapeHtml(tag)}`)].filter(Boolean).map((label) => `<span>${label}</span>`).join('');
+      row.classList.toggle('favorite', Boolean(metadata.favorite));
+      row.innerHTML = `<span class="file-icon">${thumbnailMarkup(item)}</span><div class="file-details"><strong>${escapeHtml(item.name)}${item.edited ? ' <em class="edited-badge">נערך</em>' : ''}</strong><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)} · ${item.extension.toUpperCase()}</small><div class="library-meta">${metaBadges}</div><div class="rename-editor hidden"><input maxlength="120" value="${escapeHtml(baseName)}" aria-label="שם קובץ חדש"><button class="gold-button save-name">שמירה</button><button class="ghost cancel-name">ביטול</button></div></div><div class="library-actions">${editButton}<button class="ghost metadata">פרטים</button><button class="ghost share">שיתוף פרטי</button><button class="ghost rename">שם</button><button class="ghost open">פתיחה</button><button class="ghost show">בתיקייה</button></div><div class="metadata-editor hidden"><input class="meta-client" maxlength="80" placeholder="לקוח / פרויקט" value="${escapeHtml(metadata.client || '')}"><input class="meta-tags" maxlength="160" placeholder="תגיות מופרדות בפסיק" value="${escapeHtml((metadata.tags || []).join(', '))}"><label><input class="meta-favorite" type="checkbox" ${metadata.favorite ? 'checked' : ''}> מועדף</label><button class="gold-button save-metadata">שמירה</button></div>`;
       row.querySelector('.edit-image')?.addEventListener('click', () => window.aurumEditor?.open(item.path, 'professional'));
+      row.querySelector('.edit-video')?.addEventListener('click', () => openVideoEditor(item));
       row.querySelector('.open').addEventListener('click', () => api.openFile(item.path));
       row.querySelector('.show').addEventListener('click', () => api.showFile(item.path));
+      row.querySelector('.share').addEventListener('click', async () => { await api.shareLocal(item.path); showToast('נתיב הקובץ הועתק לשיתוף פרטי'); });
+      row.querySelector('.metadata').addEventListener('click', () => row.querySelector('.metadata-editor').classList.toggle('hidden'));
+      row.querySelector('.save-metadata').addEventListener('click', async () => {
+        await api.saveLibraryMetadata(item.path, { client: row.querySelector('.meta-client').value, tags: row.querySelector('.meta-tags').value, favorite: row.querySelector('.meta-favorite').checked });
+        await loadLibrary();
+      });
       row.querySelector('.rename').addEventListener('click', () => {
         row.querySelector('.rename-editor').classList.remove('hidden');
         row.querySelector('.rename-editor input').focus();
@@ -876,6 +1011,23 @@ function renderLibrary() {
       container.append(row);
     }
   }
+}
+
+function openVideoEditor(item) {
+  editingVideoItem = item;
+  $('#video-editor-name').textContent = item.name;
+  $('#video-trim-start').value = '0';
+  $('#video-trim-end').value = '';
+  $('#video-mute').checked = false;
+  $('#video-editor-preview').src = `file:///${item.path.replaceAll('\\', '/')}`;
+  $('#video-editor-modal').classList.remove('hidden');
+}
+
+function closeVideoEditor() {
+  $('#video-editor-preview').pause();
+  $('#video-editor-preview').removeAttribute('src');
+  $('#video-editor-modal').classList.add('hidden');
+  editingVideoItem = null;
 }
 
 function recentLibraryItems(items) {
@@ -959,6 +1111,7 @@ function showPage(page) {
 
 async function initialize() {
   restoreUserPreferences();
+  await loadShortcutSettings();
   $$('.nav-item[data-page]').forEach((button) => button.addEventListener('click', () => {
     if (button.dataset.action === 'edit') {
       openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`));
@@ -976,6 +1129,37 @@ async function initialize() {
     if (button.dataset.preferenceTab === 'development') loadQaDashboard();
     if (button.dataset.preferenceTab === 'appearance') openThemeEditor();
   }));
+  $$('[data-shortcut-action]').forEach((button) => button.addEventListener('click', () => {
+    listeningShortcutAction = button.dataset.shortcutAction;
+    renderShortcutSettings();
+    button.textContent = 'לחץ על הקיצור…';
+    button.focus();
+  }));
+  $$('[data-shortcut-test]').forEach((button) => button.addEventListener('click', async () => {
+    const action = button.dataset.shortcutTest;
+    button.textContent = 'בודק…';
+    await api.testShortcut(action);
+    setTimeout(() => { button.textContent = 'בדיקה'; }, 1200);
+  }));
+  $('#reset-shortcuts').addEventListener('click', () => applyShortcutSettings(defaultShortcuts));
+  document.addEventListener('keydown', async (event) => {
+    if (!listeningShortcutAction) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.key === 'Escape') {
+      listeningShortcutAction = null;
+      renderShortcutSettings();
+      return;
+    }
+    const binding = shortcutBindingFromEvent(event);
+    if (!binding) return;
+    const action = listeningShortcutAction;
+    listeningShortcutAction = null;
+    const previous = state.shortcuts[action];
+    state.shortcuts[action] = binding;
+    if (!await applyShortcutSettings(state.shortcuts)) state.shortcuts[action] = previous;
+    renderShortcutSettings();
+  }, true);
   $$('#quality-options button').forEach((button) => button.addEventListener('click', () => {
     $$('#quality-options button').forEach((item) => item.classList.remove('active'));
     button.classList.add('active');
@@ -986,6 +1170,32 @@ async function initialize() {
   $('#record-button').addEventListener('click', () => state.recorder ? stopRecording() : beginCapture(state.captureKind));
   $('#stop-recording').addEventListener('click', stopRecording);
   $('#pause-recording').addEventListener('click', togglePause);
+  $('#recording-pause').addEventListener('click', togglePause);
+  $('#recording-mic').addEventListener('click', () => {
+    const muted = state.microphoneStream?.getAudioTracks().some((track) => track.enabled) ?? false;
+    state.microphoneStream?.getAudioTracks().forEach((track) => { track.enabled = !muted; });
+    $('#recording-mic').classList.toggle('off', muted);
+  });
+  $('#recording-camera').addEventListener('click', () => {
+    const enabled = state.cameraStream?.getVideoTracks().some((track) => track.enabled) ?? false;
+    state.cameraStream?.getVideoTracks().forEach((track) => { track.enabled = !enabled; });
+    $('#recording-camera').classList.toggle('off', enabled);
+  });
+  $('#close-video-editor').addEventListener('click', closeVideoEditor);
+  $('#cancel-video-edit').addEventListener('click', closeVideoEditor);
+  $('#save-video-edit').addEventListener('click', async () => {
+    if (!editingVideoItem) return;
+    const button = $('#save-video-edit');
+    button.disabled = true;
+    button.textContent = 'מעבד…';
+    try {
+      const result = await api.editVideo(editingVideoItem.path, { start: Number($('#video-trim-start').value) || 0, end: Number($('#video-trim-end').value) || null, mute: $('#video-mute').checked });
+      closeVideoEditor();
+      showToast(`העותק הערוך נשמר: ${result.path}`);
+      await loadLibrary();
+    } catch (error) { showToast(`עריכת הווידאו נכשלה: ${error.message}`); }
+    finally { button.disabled = false; button.textContent = 'שמירת עותק ערוך'; }
+  });
   $('#open-output').addEventListener('click', () => api.openOutput());
   $('#quick-open-output').addEventListener('click', () => api.openOutput());
   $('#edit-latest-image').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
@@ -1145,12 +1355,23 @@ async function initialize() {
   $('#copy-qa-report').addEventListener('click', (event) => copyWithFeedback(event.currentTarget, qaReportText(latestQaStatus)));
   $('#open-qa-report').addEventListener('click', () => api.openQaReport());
   navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
-  api.onShortcut((action) => {
-    if (action === 'stop') stopRecording();
-    else beginCapture(action === 'screenshot' ? 'screenshot' : 'record');
+  api.onShortcut((action, meta = {}) => {
+    if (meta.test) {
+      const row = $(`[data-shortcut-row="${action}"]`);
+      row?.classList.add('tested');
+      setTimeout(() => row?.classList.remove('tested'), 1200);
+      showToast(`הקיצור עבור ${row?.querySelector('b')?.textContent || action} מחובר ותקין`);
+      return;
+    }
+    if (action === 'record') state.recorder ? stopRecording() : beginCapture('record', 'full');
+    if (action === 'screenshot') beginCapture('screenshot', 'full');
+    if (action === 'region') beginCapture('screenshot', 'region');
+    if (action === 'pause') togglePause();
+    if (action === 'microphone') $('#mic-chip').click();
+    if (action === 'camera') $('#camera-chip').click();
   });
   $('#output-path').textContent = await api.getOutput();
-  await Promise.all([refreshSources(), loadLibrary()]);
+  await Promise.all([refreshSources(), loadLibrary(), refreshStorageStatus()]);
   document.documentElement.dataset.appReady = 'true';
 }
 

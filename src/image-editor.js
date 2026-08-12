@@ -107,13 +107,13 @@
   document.addEventListener('keydown', (event) => {
     if (!engine || shell.classList.contains('hidden')) return;
     const targetIsInput = /input|textarea/i.test(event.target.tagName);
-    if (event.ctrlKey && event.key.toLowerCase() === 'z') { event.preventDefault(); return event.shiftKey ? engine.redo() : engine.undo(); }
-    if (event.ctrlKey && event.key.toLowerCase() === 'y') { event.preventDefault(); return engine.redo(); }
-    if (event.ctrlKey && event.key.toLowerCase() === 's') { event.preventDefault(); return save(); }
+    if (event.ctrlKey && event.code === 'KeyZ') { event.preventDefault(); return event.shiftKey ? engine.redo() : engine.undo(); }
+    if (event.ctrlKey && event.code === 'KeyY') { event.preventDefault(); return engine.redo(); }
+    if (event.ctrlKey && event.code === 'KeyS') { event.preventDefault(); return save(); }
     if (targetIsInput) return;
     if (event.key === 'Delete' || event.key === 'Backspace') engine.deleteSelected();
     if (event.key === 'Escape') selectTool('select');
-    const shortcuts = { v: 'select', a: 'arrow', l: 'line', r: 'rect', o: 'ellipse', p: 'polygon', d: 'pen', t: 'text' };
-    if (shortcuts[event.key.toLowerCase()]) selectTool(shortcuts[event.key.toLowerCase()]);
+    const shortcuts = { KeyV: 'select', KeyA: 'arrow', KeyL: 'line', KeyR: 'rect', KeyO: 'ellipse', KeyP: 'polygon', KeyD: 'pen', KeyT: 'text' };
+    if (shortcuts[event.code]) selectTool(shortcuts[event.code]);
   });
 })();
