@@ -1273,6 +1273,7 @@ function showPage(page) {
     settings: ['הגדרות', 'תיקיית שמירה, פורמטים וקיצורי דרך.']
   };
   $$('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === page));
+  $('.content-shell').dataset.activePage = page;
   $('#theme-menu')?.classList.add('hidden');
   if (page !== 'settings' && themeEditorOpen) cancelThemeEditor(false);
   $$('.page').forEach((section) => section.classList.remove('active'));

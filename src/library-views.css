@@ -15,6 +15,8 @@
 .library-list.view-grid .library-item { display: flex; flex-direction: column; align-items: stretch; gap: 11px; padding: 12px; }
 .library-list.view-grid .file-icon { width: 100%; height: auto; aspect-ratio: 16/9; border-radius: 12px; }
 .library-list.view-grid .file-details { min-width: 0; }
+.library-list.view-grid .rename-editor { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto auto; }
+.library-list.view-grid .rename-editor input { width: 100%; min-width: 0; }
 .library-list.view-grid .library-actions { flex-wrap: wrap; }
 .library-list.view-grid .library-actions button { flex: 1; padding-inline: 7px; }
 .library-list.view-table { display: block; }

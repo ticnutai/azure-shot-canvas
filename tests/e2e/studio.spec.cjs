@@ -139,22 +139,39 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('button[data-recent-filter]')).toHaveCount(3);
     await expect(page.locator('button[data-recent-view]')).toHaveCount(3);
     await expect(page.locator('#recent-sort option')).toHaveCount(5);
-    await expect(page.locator('.capture-quick-actions > button')).toHaveCount(3);
-    const unusedRailSpace = await page.locator('.settings-rail').evaluate((rail) => {
-      const quick = rail.querySelector('.capture-quick-actions');
-      return Math.round(rail.getBoundingClientRect().bottom - quick.getBoundingClientRect().bottom);
-    });
-    expect(unusedRailSpace).toBeLessThanOrEqual(30);
+    await expect(page.locator('.settings-cards')).toHaveCount(0);
+    await expect(page.locator('.capture-quick-actions')).toHaveCount(0);
+    await expect(page.locator('.recent-utility-actions > button')).toHaveCount(3);
+    const captureLayout = await page.locator('.content-shell, .capture-stage, .library-strip').evaluateAll((nodes) => Object.fromEntries(nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      const isShell = node.classList.contains('content-shell');
+      return [isShell ? 'shell' : node.classList.contains('capture-stage') ? 'stage' : 'media', { left: rect.left + (isShell ? parseFloat(style.paddingLeft) : 0), right: rect.right - (isShell ? parseFloat(style.paddingRight) : 0), width: rect.width - (isShell ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 0), top: rect.top }];
+    })));
+    expect(Math.abs(captureLayout.media.left - captureLayout.shell.left)).toBeLessThanOrEqual(2);
+    expect(Math.abs(captureLayout.media.right - captureLayout.shell.right)).toBeLessThanOrEqual(2);
+    expect(captureLayout.media.width).toBeGreaterThan(captureLayout.stage.width);
+    expect(captureLayout.media.top).toBeGreaterThan(captureLayout.stage.top);
     await page.locator('[data-recent-filter="image"]').click();
     await page.locator('#recent-sort').selectOption('size-desc');
     await page.locator('[data-recent-view="list"]').click();
     await expect(page.locator('html')).toHaveAttribute('data-recent-filter', 'image');
     await expect(page.locator('html')).toHaveAttribute('data-recent-sort', 'size-desc');
     await expect(page.locator('#recent-library')).toHaveClass(/recent-view-list/);
-    metrics.push(metric('Recent media controls and productive settings rail', 11, 'assertions', 11, 'min', `3 filters, 5 sorts, 3 views, 3 quick actions; unused rail tail=${unusedRailSpace}px`));
+    metrics.push(metric('Full-width recent media and compact actions', 12, 'assertions', 12, 'min', '3 filters, 5 sorts, 3 views, 3 compact file actions; removed two info cards and oversized quick-action panel; media spans both columns'));
 
     await page.locator('[data-page="library"]').click();
     await expect(page.locator('#library-page')).toHaveClass(/active/);
+    await expect(page.locator('#capture-settings')).toBeHidden();
+    const libraryLayout = await page.locator('.content-shell, #library-page').evaluateAll((nodes) => nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      const style = getComputedStyle(node);
+      const isShell = node.classList.contains('content-shell');
+      return { left: rect.left + (isShell ? parseFloat(style.paddingLeft) : 0), right: rect.right - (isShell ? parseFloat(style.paddingRight) : 0), width: rect.width - (isShell ? parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) : 0) };
+    }));
+    expect(Math.abs(libraryLayout[0].left - libraryLayout[1].left)).toBeLessThanOrEqual(2);
+    expect(Math.abs(libraryLayout[0].right - libraryLayout[1].right)).toBeLessThanOrEqual(2);
+    expect(libraryLayout[1].width).toBeGreaterThan(1000);
     await expect(page.locator('button[data-library-view]')).toHaveCount(3);
     for (const view of ['list', 'table', 'grid']) {
       await page.locator(`[data-library-view="${view}"]`).click();

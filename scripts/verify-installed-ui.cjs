@@ -30,7 +30,7 @@ async function main() {
       filters: await page.locator('button[data-recent-filter]').count(),
       sorts: await page.locator('#recent-sort option').count(),
       views: await page.locator('button[data-recent-view]').count(),
-      quickActions: await page.locator('.capture-quick-actions > button').count()
+      quickActions: await page.locator('.recent-utility-actions > button').count()
     };
     result.shortcuts = await page.locator('[data-shortcut-action]').count();
     result.videoEditor = await page.locator('#video-editor-modal').count();

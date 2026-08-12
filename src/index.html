@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="recent-library.css">
   <link rel="stylesheet" href="shortcut-settings.css">
   <link rel="stylesheet" href="live-preview.css">
+  <link rel="stylesheet" href="wide-layout.css">
   <link rel="stylesheet" href="image-editor.css">
 </head>
 <body>
@@ -87,13 +88,6 @@
             <label class="switch-row unavailable"><span><b>טשטוש מידע רגיש</b><small>בקרוב — זיהוי אוטומטי</small></span><input type="checkbox" disabled><i></i></label>
           </section>
 
-          <div class="settings-cards"><button><span>▱</span><small>שטח פנוי</small><b>בודק…</b></button><button><span>◉</span><small>ערכת מותג</small><b>זהב · נייבי</b></button></div>
-          <section class="capture-quick-actions" aria-labelledby="capture-quick-title">
-            <div class="capture-quick-heading"><span>⚡</span><div><h3 id="capture-quick-title">פעולות מהירות</h3><p id="capture-default-summary">וידאו · מסך מלא</p></div></div>
-            <button id="quick-edit-latest" type="button"><span>✎</span><div><b>עריכת הצילום האחרון</b><small>פתיחה בעורך המקצועי</small></div><i>‹</i></button>
-            <button type="button" data-page-link="library"><span>▦</span><div><b>פתיחת הספרייה</b><small>חיפוש, מיון ושינוי שם</small></div><i>‹</i></button>
-            <button id="quick-open-output" type="button"><span>⌑</span><div><b>פתיחת תיקיית השמירה</b><small>גישה ישירה לקבצים</small></div><i>‹</i></button>
-          </section>
           <div class="legacy-quality" id="quality-options" aria-hidden="true"><button data-quality="text"></button><button data-quality="balanced"></button><button class="active" data-quality="motion"></button></div>
         </aside>
 
@@ -132,6 +126,11 @@
               <div class="section-heading recent-heading">
                 <div><h2>המדיה האחרונה</h2><p id="library-count">הקבצים שלך נשמרים מקומית</p></div>
                 <div class="recent-controls">
+                  <div class="recent-utility-actions" role="group" aria-label="פעולות קבצים מהירות">
+                    <button id="quick-edit-latest" type="button" title="עריכת הצילום האחרון" aria-label="עריכת הצילום האחרון">✎</button>
+                    <button type="button" data-page-link="library" title="פתיחת כל הספרייה" aria-label="פתיחת כל הספרייה">▦</button>
+                    <button id="quick-open-output" type="button" title="פתיחת תיקיית השמירה" aria-label="פתיחת תיקיית השמירה">⌑</button>
+                  </div>
                   <div class="recent-tabs" role="tablist" aria-label="סינון המדיה האחרונה">
                     <button class="active" type="button" data-recent-filter="all" role="tab">הכול <span data-recent-count="all">0</span></button>
                     <button type="button" data-recent-filter="video" role="tab">וידאו <span data-recent-count="video">0</span></button>
