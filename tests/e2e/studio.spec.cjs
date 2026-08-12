@@ -324,6 +324,22 @@ test.describe('Electron production workflow', () => {
     const sourcePath = await waitForNewFile(outputDir, '.png', before, 30_000);
     await page.locator('.nav-item[data-action="edit"]').click();
     await expect(page.locator('#image-editor-shell')).toBeVisible();
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(page.locator('.sidebar .nav-item[data-action="edit"]')).toHaveClass(/active/);
+    const editorChrome = await page.locator('#image-editor-shell, .sidebar, .editor-tools, #editor-workspace').evaluateAll((nodes) => Object.fromEntries(nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      const key = node.id === 'image-editor-shell' ? 'shell' : node.classList.contains('sidebar') ? 'sidebar' : node.classList.contains('editor-tools') ? 'tools' : 'workspace';
+      return [key, { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }];
+    })));
+    expect(editorChrome.shell.right).toBeLessThanOrEqual(editorChrome.sidebar.left + 1);
+    expect(editorChrome.tools.left).toBeGreaterThanOrEqual(8);
+    expect(editorChrome.tools.right).toBeLessThanOrEqual(editorChrome.workspace.left + 1);
+    expect(editorChrome.tools.top).toBeGreaterThan(109);
+    await page.locator('.sidebar .nav-item[data-page="library"]').click();
+    await expect(page.locator('#image-editor-shell')).toBeHidden();
+    await expect(page.locator('#library-page')).toHaveClass(/active/);
+    await page.locator('.sidebar .nav-item[data-action="edit"]').click();
+    await expect(page.locator('#image-editor-shell')).toBeVisible();
     await expect(page.locator('[data-editor-tool]')).toHaveCount(18);
     await page.locator('button[data-editor-mode="professional"]').click();
     const canvas = page.locator('#image-editor-shell .upper-canvas');

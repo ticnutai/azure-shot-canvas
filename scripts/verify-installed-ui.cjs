@@ -40,6 +40,23 @@ async function main() {
     await page.locator('.source-card').first().click();
     await page.waitForFunction(() => document.documentElement.dataset.previewState === 'ready' && Number(document.documentElement.dataset.previewFrames) > 2, null, { timeout: 15_000 });
     result.livePreview = await page.locator('#display-video').evaluate((video) => ({ width: video.videoWidth, height: video.videoHeight, paused: video.paused, frames: Number(document.documentElement.dataset.previewFrames) }));
+    const previewCollision = await page.locator('#screenshot-button, .preview-display-controls').evaluateAll((nodes) => nodes.map((node) => {
+      const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }));
+    const overlapX = Math.min(previewCollision[0].right, previewCollision[1].right) - Math.max(previewCollision[0].left, previewCollision[1].left);
+    const overlapY = Math.min(previewCollision[0].bottom, previewCollision[1].bottom) - Math.max(previewCollision[0].top, previewCollision[1].top);
+    result.previewControlsClear = overlapX <= 0 || overlapY <= 0;
+    await page.locator('#screenshot-button').click();
+    await page.waitForFunction(() => Boolean(document.documentElement.dataset.lastSavedPath), null, { timeout: 20_000 });
+    await page.locator('.sidebar .nav-item[data-action="edit"]').click();
+    await page.waitForFunction(() => document.documentElement.dataset.editorOpen === 'true', null, { timeout: 20_000 });
+    result.editorLayout = await page.locator('#image-editor-shell, .sidebar, .editor-tools, #editor-workspace').evaluateAll((nodes) => Object.fromEntries(nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      const key = node.id === 'image-editor-shell' ? 'shell' : node.classList.contains('sidebar') ? 'sidebar' : node.classList.contains('editor-tools') ? 'tools' : 'workspace';
+      return [key, { left: rect.left, right: rect.right, top: rect.top }];
+    })));
+    result.editorSidebarVisible = await page.locator('.sidebar').isVisible();
+    await page.locator('#editor-close').click();
     await page.locator('button[data-recent-filter="image"]').click();
     await page.locator('#recent-sort').selectOption('size-desc');
     await page.locator('button[data-recent-view="list"]').click();
@@ -54,6 +71,9 @@ async function main() {
     const passed = result.filters === 3 && result.sorts === 5 && result.views === 3 && result.quickActions === 3
       && result.shortcuts === 6 && result.videoEditor === 1 && result.previewControls >= 4 && result.captureDelayChoices === 4 && ['healthy', 'warning', 'unknown'].includes(result.storageLevel)
       && result.livePreview.width >= 320 && result.livePreview.height >= 200 && !result.livePreview.paused && result.livePreview.frames > 2
+      && result.previewControlsClear
+      && result.editorSidebarVisible && result.editorLayout.shell.right <= result.editorLayout.sidebar.left + 1
+      && result.editorLayout.tools.left >= 8 && result.editorLayout.tools.right <= result.editorLayout.workspace.left + 1
       && result.persisted.filter === 'image' && result.persisted.sort === 'size-desc' && result.persisted.view === 'list'
       && result.errors.length === 0;
     console.log(JSON.stringify({ passed, executablePath, ...result }, null, 2));

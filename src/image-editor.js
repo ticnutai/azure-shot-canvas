@@ -58,6 +58,8 @@
   async function openEditor(filePath, requestedMode = 'quick') {
     const payload = await api.loadEditorImage(filePath);
     shell.classList.remove('hidden');
+    document.documentElement.dataset.editorOpen = 'true';
+    document.querySelectorAll('.sidebar .nav-item').forEach((button) => button.classList.toggle('active', button.dataset.action === 'edit'));
     setMode(requestedMode);
     createEngine();
     sourcePath = payload.path;
@@ -81,6 +83,9 @@
   function closeEditor(force = false) {
     if (dirty && !force && !confirm('יש שינויים שטרם נשמרו. לסגור את העורך?')) return;
     shell.classList.add('hidden');
+    document.documentElement.dataset.editorOpen = 'false';
+    const activePage = document.querySelector('.content-shell')?.dataset.activePage || 'capture';
+    document.querySelectorAll('.sidebar .nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === activePage && !button.dataset.action));
     engine?.dispose(); engine = null; sourcePath = null;
   }
 
@@ -88,6 +93,16 @@
   $$('[data-editor-tool]').forEach((button) => button.addEventListener('click', () => selectTool(button.dataset.editorTool)));
   $$('[data-editor-mode]').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.editorMode)));
   $('#editor-close').addEventListener('click', () => closeEditor());
+  document.querySelector('.sidebar')?.addEventListener('click', (event) => {
+    const navigation = event.target.closest('.nav-item[data-page]');
+    if (!navigation || shell.classList.contains('hidden') || navigation.dataset.action === 'edit') return;
+    if (dirty && !confirm('יש שינויים שטרם נשמרו. לעבור למסך אחר?')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    closeEditor(true);
+  }, true);
   $('#editor-save').addEventListener('click', () => save());
   $('#editor-save-copy').addEventListener('click', () => save('copy'));
   $('#editor-copy').addEventListener('click', async () => { await api.copyEditorImage(engine.exportDataUrl()); $('#editor-save-state').textContent = 'התמונה הועתקה ללוח'; });
