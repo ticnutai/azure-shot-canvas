@@ -135,6 +135,17 @@ test.describe('Electron production workflow', () => {
     expect(await page.locator('#format-select option:disabled').count()).toBe(2);
     metrics.push(metric('Settings tabs and capability labels', 3, 'tabs', 3, 'min', 'video/audio/image; unavailable formats disabled'));
 
+    const recordNavigation = page.locator('.sidebar .nav-item[data-page="capture"]:not([data-action])');
+    const screenshotNavigation = page.locator('.sidebar .nav-item[data-action="screenshot"]');
+    await screenshotNavigation.click();
+    await expect(screenshotNavigation).toHaveClass(/active/);
+    await expect(recordNavigation).not.toHaveClass(/active/);
+    await expect(page.locator('.sidebar .nav-item.active')).toHaveCount(1);
+    await recordNavigation.click();
+    await expect(recordNavigation).toHaveClass(/active/);
+    await expect(screenshotNavigation).not.toHaveClass(/active/);
+    await expect(page.locator('.sidebar .nav-item.active')).toHaveCount(1);
+
     await page.setViewportSize({ width: 1280, height: 840 });
     await expect(page.locator('button[data-recent-filter]')).toHaveCount(3);
     await expect(page.locator('button[data-recent-view]')).toHaveCount(3);
@@ -335,6 +346,11 @@ test.describe('Electron production workflow', () => {
     expect(editorChrome.tools.left).toBeGreaterThanOrEqual(8);
     expect(editorChrome.tools.right).toBeLessThanOrEqual(editorChrome.workspace.left + 1);
     expect(editorChrome.tools.top).toBeGreaterThan(109);
+    const workspaceStyle = await page.locator('#editor-workspace, #editor-canvas-wrap').evaluateAll((nodes) => nodes.map((node) => ({ radius: parseFloat(getComputedStyle(node).borderRadius), overflow: getComputedStyle(node).overflow })));
+    expect(workspaceStyle[0].radius).toBeGreaterThanOrEqual(12);
+    expect(workspaceStyle[0].radius).toBeLessThanOrEqual(16);
+    expect(workspaceStyle[1].radius).toBeGreaterThanOrEqual(8);
+    expect(workspaceStyle[1].overflow).toBe('hidden');
     await page.locator('.sidebar .nav-item[data-page="library"]').click();
     await expect(page.locator('#image-editor-shell')).toBeHidden();
     await expect(page.locator('#library-page')).toHaveClass(/active/);

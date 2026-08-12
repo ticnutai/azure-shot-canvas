@@ -1266,14 +1266,18 @@ async function openLatestScreenshotEditor(mode = 'professional') {
   await window.aurumEditor?.open(latestImage.path, mode);
 }
 
-function showPage(page) {
+function showPage(page, navigationAction = null) {
   const titles = {
     capture: ['מה תרצה ליצור?', 'בחר מקור, איכות וקול — והתחל בלחיצה אחת.'],
     library: ['הספרייה שלי', 'כל הצילומים וההקלטות שנשמרו במחשב.'],
     settings: ['הגדרות', 'תיקיית שמירה, פורמטים וקיצורי דרך.']
   };
-  $$('.nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === page));
+  $$('.nav-item').forEach((button) => {
+    const action = button.dataset.action || null;
+    button.classList.toggle('active', button.dataset.page === page && action === navigationAction);
+  });
   $('.content-shell').dataset.activePage = page;
+  $('.content-shell').dataset.activeNavigation = navigationAction || page;
   $('#theme-menu')?.classList.add('hidden');
   if (page !== 'settings' && themeEditorOpen) cancelThemeEditor(false);
   $$('.page').forEach((section) => section.classList.remove('active'));
@@ -1294,7 +1298,7 @@ async function initialize() {
       openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`));
       return;
     }
-    showPage(button.dataset.page);
+    showPage(button.dataset.page, button.dataset.action || null);
     if (button.dataset.action === 'screenshot') $('[data-settings-tab="image"]').click();
   }));
   $$('[data-page-link]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.pageLink)));

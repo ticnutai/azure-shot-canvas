@@ -1,6 +1,6 @@
 {
   "name": "hebrew-screen-studio",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "אולפן צילום והקלטת מסך מקומי ל-Windows",
   "main": "src/main.cjs",
   "author": "Screen Studio",

@@ -56,7 +56,23 @@ async function main() {
       return [key, { left: rect.left, right: rect.right, top: rect.top }];
     })));
     result.editorSidebarVisible = await page.locator('.sidebar').isVisible();
+    result.editorRounding = await page.locator('#editor-workspace, #editor-canvas-wrap').evaluateAll((nodes) => Object.fromEntries(nodes.map((node) => {
+      const style = getComputedStyle(node);
+      return [node.id, { radius: Number.parseFloat(style.borderTopLeftRadius), overflow: style.overflow }];
+    })));
     await page.locator('#editor-close').click();
+    const recordingNav = page.locator('.sidebar .nav-item[data-page="capture"]:not([data-action="screenshot"])');
+    const screenshotNav = page.locator('.sidebar .nav-item[data-action="screenshot"]');
+    await screenshotNav.click();
+    result.screenshotNavExclusive = await page.locator('.sidebar .nav-item.active').evaluateAll((nodes) => ({
+      count: nodes.length,
+      action: nodes[0]?.dataset.action || null
+    }));
+    await recordingNav.click();
+    result.recordingNavExclusive = await page.locator('.sidebar .nav-item.active').evaluateAll((nodes) => ({
+      count: nodes.length,
+      action: nodes[0]?.dataset.action || null
+    }));
     await page.locator('button[data-recent-filter="image"]').click();
     await page.locator('#recent-sort').selectOption('size-desc');
     await page.locator('button[data-recent-view="list"]').click();
@@ -74,6 +90,10 @@ async function main() {
       && result.previewControlsClear
       && result.editorSidebarVisible && result.editorLayout.shell.right <= result.editorLayout.sidebar.left + 1
       && result.editorLayout.tools.left >= 8 && result.editorLayout.tools.right <= result.editorLayout.workspace.left + 1
+      && result.editorRounding['editor-workspace'].radius >= 12 && result.editorRounding['editor-canvas-wrap'].radius >= 8
+      && result.editorRounding['editor-canvas-wrap'].overflow === 'hidden'
+      && result.screenshotNavExclusive.count === 1 && result.screenshotNavExclusive.action === 'screenshot'
+      && result.recordingNavExclusive.count === 1 && result.recordingNavExclusive.action === null
       && result.persisted.filter === 'image' && result.persisted.sort === 'size-desc' && result.persisted.view === 'list'
       && result.errors.length === 0;
     console.log(JSON.stringify({ passed, executablePath, ...result }, null, 2));

@@ -84,8 +84,13 @@
     if (dirty && !force && !confirm('יש שינויים שטרם נשמרו. לסגור את העורך?')) return;
     shell.classList.add('hidden');
     document.documentElement.dataset.editorOpen = 'false';
-    const activePage = document.querySelector('.content-shell')?.dataset.activePage || 'capture';
-    document.querySelectorAll('.sidebar .nav-item').forEach((button) => button.classList.toggle('active', button.dataset.page === activePage && !button.dataset.action));
+    const content = document.querySelector('.content-shell');
+    const activePage = content?.dataset.activePage || 'capture';
+    const activeNavigation = content?.dataset.activeNavigation || activePage;
+    document.querySelectorAll('.sidebar .nav-item').forEach((button) => {
+      const action = button.dataset.action || button.dataset.page;
+      button.classList.toggle('active', button.dataset.page === activePage && action === activeNavigation);
+    });
     engine?.dispose(); engine = null; sourcePath = null;
   }
 
