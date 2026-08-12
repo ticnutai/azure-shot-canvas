@@ -1,0 +1,18 @@
+@media (max-width: 1120px) {
+  body { min-width: 900px; }
+  .topbar { grid-template-columns: 1fr 320px 1fr; }
+  .content-shell { grid-template-columns: minmax(0, 1fr); }
+  .main-column { grid-column: 1; grid-row: 1; }
+  .settings-rail { grid-column: 1; grid-row: 2; min-height: auto; }
+  .source-grid { grid-template-columns: repeat(4, minmax(110px, 1fr)); }
+}
+
+@media (max-width: 960px) {
+  body { min-width: 760px; }
+  .app-shell { grid-template-columns: minmax(0, 1fr) 72px; }
+  .topbar { grid-template-columns: 1fr 280px 1fr; padding-inline: 14px; }
+  .wordmark p, .countdown-note { display: none; }
+  .content-shell { padding: 14px; }
+  .source-toolbar { overflow-x: auto; }
+  .source-type { white-space: nowrap; }
+}

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="he" dir="rtl" data-theme="midnight">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; img-src 'self' data: blob:">
+  <title>אורום סטודיו — סטודיו הקלטת מסך ווידאו</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="responsive.css">
+  <link rel="stylesheet" href="qa.css">
+  <link rel="stylesheet" href="theme-editor.css">
+  <link rel="stylesheet" href="theme-library.css">
+  <link rel="stylesheet" href="clean-theme.css">
+  <link rel="stylesheet" href="theme-controls.css">
+  <link rel="stylesheet" href="library.css">
+  <link rel="stylesheet" href="library-views.css">
+  <link rel="stylesheet" href="capture-preferences.css">
+  <link rel="stylesheet" href="recent-library.css">
+  <link rel="stylesheet" href="image-editor.css">
+</head>
+<body>
+  <div class="app-shell">
+    <section class="workspace">
+      <header class="topbar">
+        <div class="topbar-actions">
+          <button class="profile-button"><span>ד</span> דניאל⌄</button>
+          <button class="icon-button" aria-label="התראות">♧</button>
+          <div class="theme-picker">
+            <button class="icon-button theme-button-labeled" id="theme-button" aria-label="בחירת ערכת נושא" title="בחירת ערכת נושא"><span aria-hidden="true">◉</span><b>ערכות נושא</b></button>
+            <div class="theme-menu hidden" id="theme-menu">
+              <button data-theme-choice="midnight"><i class="swatch midnight"></i> נייבי זהב</button>
+              <button data-theme-choice="porcelain"><i class="swatch porcelain"></i> פורצלן בהיר</button>
+              <button data-theme-choice="sky"><i class="swatch sky"></i> תכלת שמיים</button>
+              <button data-theme-choice="sand"><i class="swatch sand"></i> חול חמים</button>
+              <button data-theme-choice="mint"><i class="swatch mint"></i> מנטה רענן</button>
+              <button data-theme-choice="ivory"><i class="swatch ivory"></i> שנהב דק ונקי</button>
+              <div id="custom-theme-menu-items"></div>
+              <div class="theme-menu-divider"></div>
+              <button class="theme-manage-button" id="create-theme-shortcut">＋ יצירת ערכה חדשה</button>
+              <button class="theme-manage-button" id="manage-themes-shortcut">✎ ניהול ועריכת ערכות</button>
+            </div>
+          </div>
+          <span class="pro-badge">✣ PRO</span>
+        </div>
+        <label class="search-box"><span>⌕</span><input id="global-search" placeholder="חיפוש הקלטות, קליפים ותבניות…"><kbd>⌘ K</kbd></label>
+        <div class="wordmark"><h1><b>אורום</b> סטודיו</h1><p>הקלטת מסך, מצלמה וצילום — בשליטה מלאה</p></div>
+      </header>
+
+      <main class="content-shell">
+        <aside class="settings-rail" id="capture-settings">
+          <div class="settings-tabs" role="tablist">
+            <button class="settings-tab active" data-settings-tab="video">וידאו</button>
+            <button class="settings-tab" data-settings-tab="audio">אודיו</button>
+            <button class="settings-tab" data-settings-tab="image">צילום</button>
+          </div>
+
+          <section class="settings-section active" data-settings-section="video">
+            <label class="field-row"><span><b>רזולוציה</b><small>איכות הווידאו הסופית</small></span><select id="resolution-select"><option value="2160">4K UHD</option><option value="1440">1440p QHD</option><option value="1080">1080p FHD</option><option value="720">720p HD</option></select></label>
+            <label class="field-row"><span><b>קצב פריימים</b></span><select id="fps-select"><option>24</option><option>30</option><option selected>60</option><option>120</option></select></label>
+            <label class="field-row"><span><b>פורמט</b></span><select id="format-select"><option value="mp4">MP4</option><option value="webm">WebM</option><option disabled>MOV — בקרוב</option><option disabled>GIF — בקרוב</option></select></label>
+            <label class="range-field"><span><b>ביטרייט</b><output id="bitrate-output">24 Mbps</output></span><input id="bitrate-range" type="range" min="6" max="50" value="24"></label>
+            <label class="switch-row"><span><b>מצלמה מרחפת</b><small>בועה עגולה מעל גבי המסך</small></span><input type="checkbox" id="camera"><i></i></label>
+            <label class="switch-row unavailable" title="מתוכנן לשלב הבא"><span><b>זום אוטומטי לקליקים</b><small>בקרוב — לא מופעל עדיין</small></span><input type="checkbox" disabled><i></i></label>
+          </section>
+
+          <section class="settings-section" data-settings-section="audio">
+            <label class="switch-row"><span><b>קול המחשב</b><small>שמע יישומים, דפדפן ומשחקים</small></span><input type="checkbox" id="system-audio" checked><i></i></label>
+            <label class="switch-row"><span><b>מיקרופון</b><small>המיקרופון המובנה או החיצוני</small></span><input type="checkbox" id="microphone"><i></i></label>
+            <div class="device-selects" id="device-selects"></div>
+            <label class="range-field"><span><b>עוצמת מיקרופון</b><output id="mic-volume-output">100%</output></span><input id="mic-volume" type="range" min="0" max="150" value="100"></label>
+            <label class="switch-row"><span><b>סינון רעשים</b><small>הפחתת רעשי רקע בזמן ההקלטה</small></span><input type="checkbox" id="noise-suppression" checked><i></i></label>
+            <label class="switch-row unavailable"><span><b>הסרת שתיקות</b><small>בקרוב — בעריכה אוטומטית</small></span><input type="checkbox" disabled><i></i></label>
+          </section>
+
+          <section class="settings-section" data-settings-section="image">
+            <fieldset class="choice-group"><legend>אזור צילום</legend><label><input type="radio" name="screenshot-mode" value="region" checked><span>אזור נבחר</span></label><label><input type="radio" name="screenshot-mode" value="full"><span>מסך מלא</span></label><label class="unavailable"><input type="radio" disabled><span>עמוד גלילה — בקרוב</span></label><label class="unavailable"><input type="radio" disabled><span>אלמנט — בקרוב</span></label></fieldset>
+            <label class="field-row"><span><b>פורמט תמונה</b></span><select id="image-format"><option>PNG</option><option disabled>JPG — בקרוב</option><option disabled>WEBP — בקרוב</option><option disabled>PDF — בקרוב</option></select></label>
+            <label class="switch-row unavailable"><span><b>רקע מעוצב</b><small>בקרוב — צל ורקע מותג</small></span><input type="checkbox" disabled><i></i></label>
+            <label class="switch-row unavailable"><span><b>טשטוש מידע רגיש</b><small>בקרוב — זיהוי אוטומטי</small></span><input type="checkbox" disabled><i></i></label>
+          </section>
+
+          <div class="settings-cards"><button><span>▱</span><small>שטח פנוי</small><b>בודק…</b></button><button><span>◉</span><small>ערכת מותג</small><b>זהב · נייבי</b></button></div>
+          <section class="capture-quick-actions" aria-labelledby="capture-quick-title">
+            <div class="capture-quick-heading"><span>⚡</span><div><h3 id="capture-quick-title">פעולות מהירות</h3><p id="capture-default-summary">וידאו · מסך מלא</p></div></div>
+            <button id="quick-edit-latest" type="button"><span>✎</span><div><b>עריכת הצילום האחרון</b><small>פתיחה בעורך המקצועי</small></div><i>‹</i></button>
+            <button type="button" data-page-link="library"><span>▦</span><div><b>פתיחת הספרייה</b><small>חיפוש, מיון ושינוי שם</small></div><i>‹</i></button>
+            <button id="quick-open-output" type="button"><span>⌑</span><div><b>פתיחת תיקיית השמירה</b><small>גישה ישירה לקבצים</small></div><i>‹</i></button>
+          </section>
+          <div class="legacy-quality" id="quality-options" aria-hidden="true"><button data-quality="text"></button><button data-quality="balanced"></button><button class="active" data-quality="motion"></button></div>
+        </aside>
+
+        <section class="main-column">
+          <section id="capture-page" class="page active">
+            <div class="capture-stage panel">
+              <div class="source-toolbar">
+                <button class="source-type active" data-source-filter="screen">▰ <span>מסך מלא</span></button>
+                <button class="source-type" data-source-filter="window">▤ <span>חלון</span></button>
+                <button class="source-type unavailable" disabled>◉ <span>לשונית</span></button>
+                <button class="source-type" id="camera-source-shortcut">▣ <span>מצלמה</span></button>
+                <button class="refresh-button" id="refresh-sources">↻ רענון</button>
+                <span class="countdown-note">◷ ספירה לאחר 3 שניות</span>
+              </div>
+              <div class="source-drawer" id="source-drawer"><div class="source-grid" id="source-grid"><div class="loading">טוען מסכים וחלונות…</div></div></div>
+              <div class="capture-preview">
+                <div class="preview-status"><span id="quality-status">4K · 60fps</span><span id="stage-time">00:00</span></div>
+                <button class="expand-button" aria-label="הגדלה">↗</button>
+                <div class="empty-preview"><span>▰</span><b id="selected-source-label">תצוגה מקדימה — מסך מלא</b><p>בחר מקור למעלה, כוון את ההגדרות ולחץ על הקלטה כדי להתחיל</p></div>
+                <button class="snapshot-fab" id="screenshot-button" title="צילום תמונה">▣</button>
+                <div class="audio-meter" aria-label="מד עוצמת קול"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              </div>
+              <div class="transport-bar">
+                <div class="capture-chips">
+                  <button id="mic-chip">♩ מיקרופון</button><button id="camera-chip">▣ מצלמה</button><button class="active">⌁ הדגשת עכבר</button>
+                </div>
+                <div class="transport-actions"><button class="pause-main" id="pause-recording">Ⅱ <span>השהה</span></button><button class="record-main" id="record-button">▷ <span>התחל הקלטה</span></button></div>
+              </div>
+            </div>
+
+            <section class="library-strip panel">
+              <div class="section-heading recent-heading">
+                <div><h2>המדיה האחרונה</h2><p id="library-count">הקבצים שלך נשמרים מקומית</p></div>
+                <div class="recent-controls">
+                  <div class="recent-tabs" role="tablist" aria-label="סינון המדיה האחרונה">
+                    <button class="active" type="button" data-recent-filter="all" role="tab">הכול <span data-recent-count="all">0</span></button>
+                    <button type="button" data-recent-filter="video" role="tab">וידאו <span data-recent-count="video">0</span></button>
+                    <button type="button" data-recent-filter="image" role="tab">צילומים <span data-recent-count="image">0</span></button>
+                  </div>
+                  <label class="recent-sort" title="מיון המדיה"><span aria-hidden="true">⇅</span><select id="recent-sort" aria-label="מיון המדיה האחרונה"><option value="date-desc">החדשים תחילה</option><option value="date-asc">הישנים תחילה</option><option value="name-asc">שם א׳–ת׳</option><option value="name-desc">שם ת׳–א׳</option><option value="size-desc">הגדולים תחילה</option></select></label>
+                  <div class="recent-view-picker" role="group" aria-label="צורת תצוגת המדיה האחרונה">
+                    <button class="active" type="button" data-recent-view="cards" title="כרטיסים גדולים" aria-label="כרטיסים גדולים"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m6 16 4-4 3 3 2-2 3 3"/></svg></button>
+                    <button type="button" data-recent-view="compact" title="רשת קומפקטית" aria-label="רשת קומפקטית"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+                    <button type="button" data-recent-view="list" title="רשימה" aria-label="רשימה"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg></button>
+                  </div>
+                  <button class="text-button recent-all" type="button" data-page-link="library">כל הספרייה</button>
+                </div>
+              </div>
+              <div id="recent-library" class="clip-grid recent-view-cards"><div class="loading">טוען את הספרייה…</div></div>
+            </section>
+
+            <div class="dashboard-grid">
+              <section class="quick-panel panel"><h2>⌨ קיצורי מקלדת</h2><div class="shortcut-grid"><div><span>התחל / עצור הקלטה</span><kbd>Ctrl Shift R</kbd></div><div><span>צילום אזור</span><kbd>Ctrl Shift 1</kbd></div><div><span>השהיה</span><kbd>Ctrl Shift P</kbd></div><div><span>השתקת מיקרופון</span><kbd>Ctrl Shift M</kbd></div></div></section>
+              <section class="system-panel panel"><h2>מצב המערכת</h2><div><span>⚡ האצת חומרה</span><b>פעילה</b></div><div><span>◔ העלאה אוטומטית</span><b>כבויה — פרטי</b></div><div><span>✣ תכונות AI</span><b>בקרוב</b></div></section>
+            </div>
+          </section>
+
+          <section id="library-page" class="page panel page-panel">
+            <div class="section-heading"><div><h2>הספרייה שלי</h2><p>כל התמונות והסרטונים שנשמרו במחשב</p></div><div class="library-heading-actions"><button class="gold-button" id="edit-latest-image">✎ עריכת צילום אחרון</button><button class="ghost" id="open-output">פתיחת תיקייה</button></div></div>
+            <div class="library-toolbar">
+              <label class="library-search">⌕ <input id="library-search" placeholder="חיפוש לפי שם…"></label>
+              <label>מיון<select id="library-sort"><option value="date-desc">החדשים תחילה</option><option value="date-asc">הישנים תחילה</option><option value="name-asc">שם א׳–ת׳</option><option value="name-desc">שם ת׳–א׳</option><option value="type">סוג הקובץ</option></select></label>
+              <label>קיבוץ<select id="library-group"><option value="time">לפי זמן</option><option value="type">לפי סוג</option><option value="none">ללא קיבוץ</option></select></label>
+              <div class="library-view-picker" role="group" aria-label="צורת תצוגת הספרייה">
+                <button data-library-view="grid" title="תצוגת רשת" aria-label="תצוגת רשת"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+                <button data-library-view="list" title="תצוגת רשימה" aria-label="תצוגת רשימה"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="5" rx="1"/><path d="M11 6.5h10M11 17.5h10"/><rect x="3" y="15" width="5" height="5" rx="1"/></svg></button>
+                <button data-library-view="table" title="תצוגת טבלה" aria-label="תצוגת טבלה"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg></button>
+              </div>
+              <label class="library-size-control"><span>גודל</span><input id="library-size" type="range" min="1" max="3" step="1" value="2"><output id="library-size-output">בינוני</output></label>
+            </div>
+            <div id="library-list" class="library-list view-grid size-medium"></div>
+          </section>
+          <section id="settings-page" class="page panel page-panel settings-page">
+            <div class="page-tabs">
+              <button class="page-tab active" data-preference-tab="general">הגדרות כלליות</button>
+              <button class="page-tab" data-preference-tab="appearance">עיצוב וערכות נושא</button>
+              <button class="page-tab" data-preference-tab="development">פיתוח ו־QA</button>
+            </div>
+            <div class="preference-section active" data-preference-section="general">
+              <h2>ברירות מחדל לצילום</h2>
+              <div class="capture-default-grid">
+                <label><span><b>הפעולה של הכפתור הראשי</b><small>מה יקרה בלחיצה על התחלה</small></span><select id="default-capture-kind"><option value="record">הקלטת וידאו</option><option value="screenshot">צילום תמונה</option></select></label>
+                <label><span><b>שטח הצילום</b><small>התחלה מיידית או בחירת שטח</small></span><select id="default-capture-scope"><option value="full">כל המקור — התחלה מיד</option><option value="region">בחירת אזור לפני התחלה</option></select></label>
+                <label><span><b>אחרי צילום תמונה</b><small>שמירה בלבד או מעבר לעריכה</small></span><select id="after-screenshot-action"><option value="save">שמירה בלבד</option><option value="quick">פתיחת עריכה מהירה</option><option value="professional">פתיחת עריכה מקצועית</option></select></label>
+              </div>
+              <h2 class="settings-subheading">שמירה ופורמט</h2><p class="path" id="output-path"></p><button class="gold-button" id="choose-output">בחירת תיקייה אחרת</button><label class="check-line"><input type="checkbox" id="convert-mp4" checked> יצירת MP4 תואם לאחר שמירת מקור WebM</label>
+            </div>
+            <div class="preference-section" data-preference-section="appearance">
+              <div class="theme-editor-heading"><div><h2>עורך ערכות נושא</h2><p>בחר ערכת בסיס והתאם את הצבעים. כל שינוי מוצג מיד לפני השמירה.</p></div><span class="draft-badge" id="theme-draft-status">אין שינויים</span></div>
+              <div class="theme-library-toolbar"><label><span>ערכה אישית</span><select id="custom-theme-select"><option value="">יצירת ערכה חדשה</option></select></label><button class="gold-button" id="new-custom-theme">＋ חדשה</button><button class="ghost" id="duplicate-custom-theme" disabled>⧉ שכפול</button><button class="danger-button" id="delete-custom-theme" disabled>⌫ מחיקה</button></div>
+              <label class="theme-name-field"><span><b>שם הערכה</b><small>השם שיופיע בתפריט הבחירה</small></span><input id="custom-theme-name" maxlength="40" placeholder="לדוגמה: כחול המשרד שלי"></label>
+              <label class="theme-base-field"><span><b>ערכת בסיס</b><small>התחל מאחת משש הערכות המובנות</small></span><select id="theme-base-select"><option value="midnight">נייבי זהב</option><option value="porcelain">פורצלן בהיר</option><option value="sky">תכלת שמיים</option><option value="sand">חול חמים</option><option value="mint">מנטה רענן</option><option value="ivory">שנהב דק ונקי</option></select></label>
+              <div class="theme-editor-layout">
+                <div class="theme-color-grid">
+                  <label><span>רקע ראשי<small>חלל האפליקציה</small></span><input type="color" data-theme-var="--bg"><output></output></label>
+                  <label><span>סרגל עליון<small>כותרת עליונה</small></span><input type="color" data-theme-var="--top"><output></output></label>
+                  <label><span>כרטיסים<small>לוחות מרכזיים</small></span><input type="color" data-theme-var="--panel"><output></output></label>
+                  <label><span>כרטיס משני<small>שדות ואזורים פנימיים</small></span><input type="color" data-theme-var="--panel-2"><output></output></label>
+                  <label><span>טקסט ראשי<small>כותרות ותוכן</small></span><input type="color" data-theme-var="--text"><output></output></label>
+                  <label><span>טקסט משני<small>הסברים ומידע</small></span><input type="color" data-theme-var="--muted"><output></output></label>
+                  <label><span>צבע הדגשה<small>כפתורים ופעולות</small></span><input type="color" data-theme-var="--gold"><output></output></label>
+                  <label><span>מסגרות<small>קווים והפרדות</small></span><input type="color" data-theme-var="--line"><output></output></label>
+                  <label><span>הצלחה<small>מצבים תקינים</small></span><input type="color" data-theme-var="--success"><output></output></label>
+                  <label><span>שגיאה<small>אזהרות וכשלים</small></span><input type="color" data-theme-var="--danger"><output></output></label>
+                </div>
+                <div class="theme-live-preview">
+                  <small>תצוגה מקדימה חיה</small><h3>אורום סטודיו</h3><p>כך ייראו הכרטיסים, הטקסט והפעולות בערכה שלך.</p><div><button>כפתור ראשי</button><span>מצב תקין</span></div>
+                </div>
+              </div>
+              <div class="theme-editor-actions"><button class="ghost" id="reset-theme-draft">↺ שחזור ערכת הבסיס</button><span></span><button class="ghost" id="cancel-theme-edit">ביטול</button><button class="gold-button" id="save-theme-edit">שמירת הערכה</button></div>
+            </div>
+            <div class="preference-section" data-preference-section="development">
+              <div class="qa-heading"><div><h2>מרכז QA מדעי</h2><p>בדיקות אוטומטיות ברקע, מדדי ביצועים והשוואת רגרסיה לריצה הקודמת</p></div><div class="qa-actions"><button class="ghost" id="refresh-qa">↻ רענון</button><button class="gold-button" id="run-qa">▷ הפעל QA מלא</button></div></div>
+              <div class="qa-summary" id="qa-summary">
+                <article><small>מצב</small><b id="qa-status">אין דוח</b></article><article><small>בדיקות</small><b id="qa-tests-count">—</b></article><article><small>מדדים</small><b id="qa-metrics-count">—</b></article><article><small>חריגות סף</small><b id="qa-failures-count">—</b></article><article><small>משך</small><b id="qa-duration">—</b></article>
+              </div>
+              <div class="qa-block">
+                <div class="qa-block-title"><div><h3>תוצאות ממוספרות והשוואת רגרסיה</h3><small id="qa-comparison-label">בהשוואה לריצה הקודמת</small></div><button class="copy-button" id="copy-qa-report" title="העתקת התוצאות">⧉ העתק</button></div>
+                <div class="qa-table-wrap"><table class="qa-table"><thead><tr><th>#</th><th>מדד</th><th>נמדד</th><th>סף</th><th>שינוי</th><th>תוצאה</th></tr></thead><tbody id="qa-metrics-body"><tr><td colspan="6">אין עדיין תוצאות</td></tr></tbody></table></div>
+              </div>
+              <div class="qa-block">
+                <div class="qa-block-title"><div><h3>קונסול מפורט</h3><small>פלט חי של בדיקות היחידה ו־Playwright headless</small></div><button class="copy-button" id="copy-qa-console" title="העתקת הקונסול">⧉ העתק</button></div>
+                <pre class="qa-console" id="qa-console">הקונסול יופיע כאן בזמן הריצה.</pre>
+              </div>
+              <button class="text-button" id="open-qa-report">פתיחת דוח HTML המלא ↗</button>
+            </div>
+          </section>
+        </section>
+      </main>
+    </section>
+
+    <aside class="sidebar">
+      <div class="logo-mark">א</div>
+      <nav>
+        <button class="nav-item active" data-page="capture"><span>▣</span><small>הקלטה</small></button>
+        <button class="nav-item" data-page="capture" data-action="screenshot"><span>▱</span><small>צילומי מסך</small></button>
+        <button class="nav-item" data-page="editor" data-action="edit"><span>✎</span><small>עריכה</small></button>
+        <button class="nav-item" data-page="library"><span>▥</span><small>ספרייה</small></button>
+        <button class="nav-item unavailable" disabled><span>✣</span><small>אפקטים</small></button>
+        <button class="nav-item" data-page="settings"><span>☷</span><small>הגדרות</small></button>
+      </nav>
+      <button class="help-button" title="עזרה">◉</button>
+    </aside>
+  </div>
+
+  <section class="image-editor-shell hidden" id="image-editor-shell" aria-label="עורך צילומי מסך">
+    <header class="editor-topbar">
+      <div class="editor-title"><button class="editor-icon" id="editor-close" title="סגירה">×</button><div><b id="editor-file-name">עורך צילום מסך</b><small id="editor-save-state">עריכה לא־הרסנית</small></div></div>
+      <div class="editor-history"><button class="editor-icon" id="editor-undo" title="ביטול Ctrl+Z">↶</button><button class="editor-icon" id="editor-redo" title="ביצוע מחדש Ctrl+Y">↷</button><button class="editor-icon" id="editor-fit" title="התאמה למסך">⛶</button><button class="editor-icon" id="editor-zoom-out">−</button><output id="editor-zoom">100%</output><button class="editor-icon" id="editor-zoom-in">＋</button></div>
+      <div class="editor-save-actions"><button class="ghost" id="editor-copy">⧉ העתקה</button><button class="ghost" id="editor-save-copy">שמירת עותק</button><button class="gold-button" id="editor-save">שמירה</button></div>
+    </header>
+    <div class="editor-modebar"><button data-editor-mode="quick" class="active">עריכה מהירה</button><button data-editor-mode="professional">עריכה מקצועית</button><span></span><label><input type="checkbox" id="editor-snap"> הצמדה לרשת</label></div>
+    <div class="editor-layout">
+      <nav class="editor-tools" aria-label="כלי עריכה">
+        <button data-editor-tool="select" class="active" title="בחירה (V)"><span>⌖</span><small>בחירה</small></button><button data-editor-tool="arrow" title="חץ (A)"><span>➜</span><small>חץ</small></button><button data-editor-tool="double-arrow"><span>↔</span><small>דו־חץ</small></button><button data-editor-tool="line"><span>╱</span><small>קו</small></button><button data-editor-tool="rect"><span>□</span><small>מלבן</small></button><button data-editor-tool="ellipse"><span>○</span><small>עיגול</small></button><button data-editor-tool="polygon" title="לחיצה כפולה לסיום"><span>⬡</span><small>פוליגון</small></button><button data-editor-tool="pen"><span>✎</span><small>עט</small></button><button data-editor-tool="highlighter"><span>▰</span><small>מרקר</small></button><button data-editor-tool="text"><span>T</span><small>טקסט</small></button><button data-editor-tool="callout"><span>▣</span><small>הערה</small></button><button data-editor-tool="counter"><span>①</span><small>מספור</small></button><button data-editor-tool="blur" data-editor-advanced><span>▧</span><small>טשטוש</small></button><button data-editor-tool="pixelate" data-editor-advanced><span>▦</span><small>פיקסול</small></button><button data-editor-tool="redact"><span>██</span><small>השחרה</small></button><button data-editor-tool="crop" data-editor-advanced><span>⌗</span><small>חיתוך</small></button><button data-editor-tool="magnify" data-editor-advanced><span>⌕</span><small>הגדלה</small></button><button data-editor-tool="image" data-editor-advanced><span>▧</span><small>תמונה</small></button>
+      </nav>
+      <main class="editor-workspace" id="editor-workspace"><div class="editor-canvas-wrap" id="editor-canvas-wrap"><canvas id="editor-canvas"></canvas></div></main>
+      <aside class="editor-properties"><h3>עיצוב הכלי</h3><label><span>צבע קו</span><input type="color" id="editor-stroke" value="#ef3340"></label><label><span>צבע מילוי</span><div class="fill-control"><input type="color" id="editor-fill" value="#ffffff"><button id="editor-fill-none" class="ghost">ללא</button></div></label><label><span>עובי <output id="editor-width-output">6</output></span><input type="range" id="editor-width" min="1" max="40" value="6"></label><label><span>שקיפות <output id="editor-opacity-output">100%</output></span><input type="range" id="editor-opacity" min="10" max="100" value="100"></label><label><span>גודל כתב <output id="editor-font-output">42</output></span><input type="range" id="editor-font-size" min="14" max="140" value="42"></label><label class="editor-text-property"><span>תוכן טקסט</span><textarea id="editor-text" dir="rtl" rows="3"></textarea></label><div class="editor-object-actions"><button class="ghost" id="editor-duplicate">⧉ שכפול</button><button class="ghost danger-text" id="editor-delete">⌫ מחיקה</button></div><div class="editor-advanced-actions" data-editor-advanced><h3>שכבות ויישור</h3><div><button class="ghost" data-editor-layer="front">קדימה ביותר</button><button class="ghost" data-editor-layer="back">אחורה ביותר</button><button class="ghost" data-editor-align="horizontal">מרכוז אופקי</button><button class="ghost" data-editor-align="vertical">מרכוז אנכי</button></div></div><div class="editor-stats" id="editor-stats"></div></aside>
+    </div>
+    <input type="file" id="editor-overlay-file" accept="image/*" hidden>
+  </section>
+
+  <div class="recording-bar hidden" id="recording-bar"><span class="record-dot"></span><strong id="recording-time">00:00</strong><button id="stop-recording">■ עצירה</button></div>
+  <div class="modal hidden" id="region-modal"><div class="region-dialog"><div class="modal-title"><div><h2>בחירת אזור</h2><p>גרור מלבן על התצוגה, או בחר את כל המקור.</p></div><button id="cancel-region">×</button></div><div class="preview-wrap" id="preview-wrap"><canvas id="preview-canvas"></canvas><div id="selection-box"></div></div><div class="modal-actions"><button class="ghost" id="full-region">כל המקור</button><button class="primary" id="confirm-region" disabled>אישור האזור</button></div></div></div>
+  <div class="toast hidden" id="toast"></div>
+  <video id="display-video" autoplay muted playsinline></video><video id="camera-video" autoplay muted playsinline></video><canvas id="recording-canvas"></canvas>
+  <script src="browser-api.js"></script>
+  <script src="dev-client.js"></script>
+  <script src="editor-engine.js"></script>
+  <script src="image-editor.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+.settings-rail {
+  align-self: start;
+  min-height: 0;
+}
+
+.capture-quick-actions {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.capture-quick-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.capture-quick-heading > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 11%, var(--panel-2));
+}
+
+.capture-quick-heading h3 { margin: 0; font-size: 12px; }
+.capture-quick-heading p { margin: 4px 0 0; color: var(--muted); font-size: 9px; }
+
+.capture-quick-actions > button {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 30px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  text-align: right;
+  cursor: pointer;
+}
+
+.capture-quick-actions > button:hover,
+.capture-quick-actions > button:focus-visible {
+  border-color: var(--line);
+  background: var(--panel-2);
+  outline: none;
+}
+
+.capture-quick-actions > button > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--gold);
+}
+
+.capture-quick-actions > button b,
+.capture-quick-actions > button small { display: block; }
+.capture-quick-actions > button b { font-size: 10px; }
+.capture-quick-actions > button small { margin-top: 4px; color: var(--muted); font-size: 8px; }
+.capture-quick-actions > button i { color: var(--muted); font-size: 18px; font-style: normal; }
+
+.recent-heading { gap: 16px; align-items: center; }
+.recent-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.recent-tabs { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+.recent-tabs button { min-height: 31px; padding: 0 10px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); font-size: 9px; cursor: pointer; }
+.recent-tabs button.active { background: var(--gold); color: var(--accent-text); font-weight: 750; }
+.recent-tabs span { display: inline-grid; min-width: 16px; height: 16px; margin-inline-start: 3px; place-items: center; border-radius: 8px; background: color-mix(in srgb, currentColor 11%, transparent); font-size: 7px; }
+
+.recent-sort { height: 38px; display: flex; align-items: center; gap: 4px; padding-inline-start: 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel-2); color: var(--gold); }
+.recent-sort select { max-width: 112px; height: 100%; padding-inline: 4px 8px; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 9px; cursor: pointer; }
+.recent-sort option { background: var(--panel); color: var(--text); }
+
+.recent-view-picker { display: flex; direction: ltr; padding: 3px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel-2); }
+.recent-view-picker button { width: 32px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; }
+.recent-view-picker button.active { background: var(--gold); color: var(--accent-text); }
+.recent-view-picker svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.recent-all { padding: 8px; white-space: nowrap; }
+
+#recent-library .clip-card { cursor: default; outline: none; }
+#recent-library .clip-card:focus-visible .clip-thumb { box-shadow: 0 0 0 2px var(--gold); }
+#recent-library .clip-details { min-width: 0; }
+
+#recent-library.recent-view-compact { grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 9px; }
+#recent-library.recent-view-compact .clip-thumb { height: 64px; border-radius: 12px; }
+#recent-library.recent-view-compact .clip-card b { margin-top: 6px; font-size: 9px; }
+#recent-library.recent-view-compact .clip-card > .clip-details > small { font-size: 7px; }
+
+#recent-library.recent-view-list { grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+#recent-library.recent-view-list .clip-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); align-items: center; gap: 10px; padding: 7px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+#recent-library.recent-view-list .clip-thumb { width: 112px; height: 66px; border-radius: 10px; }
+#recent-library.recent-view-list .clip-card b { margin-top: 0; }
+
+@media (max-width: 1320px) {
+  .recent-heading { align-items: flex-start; flex-direction: column; }
+  .recent-controls { width: 100%; justify-content: flex-start; }
+  #recent-library.recent-view-compact { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1200px) {
+  #recent-library.recent-view-compact .clip-card:nth-child(4) { display: block; }
+  #recent-library.recent-view-list .clip-card:nth-child(4) { display: grid; }
+}
+
+@media (max-width: 1120px) {
+  .settings-rail { min-height: auto; }
+  #recent-library.recent-view-compact { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
