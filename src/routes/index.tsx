@@ -18,7 +18,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "אורום סטודיו — סטודיו הקלטת מסך ווידאו" },
       {
         property: "og:description",
-        content: "הקלטת מסך ווידאו באיכות 4K עם שליטה מלאה על אודיו, מצלמה וצילומי מסך.",
+        content: "סטודיו מקצועי להקלטת מסך, מצלמה וצילומי מסך: 4K, 60fps, אודיו חכם, קיצורי מקלדת וספריית קליפים.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

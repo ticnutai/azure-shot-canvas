@@ -77,20 +77,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "אורום סטודיו — הקלטת מסך ווידאו" },
+      { title: "אורום סטודיו — סטודיו הקלטת מסך ווידאו" },
       {
         name: "description",
-        content: "סטודיו הקלטת מסך ווידאו עם בקרה מלאה על איכות, אודיו, מצלמה ועריכה.",
+        content: "סטודיו מקצועי להקלטת מסך, מצלמה וצילומי מסך: 4K, 60fps, אודיו חכם, קיצורי מקלדת וספריית קליפים.",
       },
       { name: "author", content: "Aurum Studio" },
-      { property: "og:title", content: "אורום סטודיו — הקלטת מסך ווידאו" },
+      { property: "og:title", content: "אורום סטודיו — סטודיו הקלטת מסך ווידאו" },
       {
         property: "og:description",
-        content: "סטודיו הקלטת מסך ווידאו עם בקרה מלאה על איכות, אודיו, מצלמה ועריכה.",
+        content: "סטודיו מקצועי להקלטת מסך, מצלמה וצילומי מסך: 4K, 60fps, אודיו חכם, קיצורי מקלדת וספריית קליפים.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "אורום סטודיו — סטודיו הקלטת מסך ווידאו" },
+      { name: "twitter:description", content: "סטודיו מקצועי להקלטת מסך, מצלמה וצילומי מסך: 4K, 60fps, אודיו חכם, קיצורי מקלדת וספריית קליפים." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4663b2476e32583dd43b5d8784a80a00/id-preview-8443606a--aab9d4e0-2e67-4b5f-aa9c-ab23fc639965.lovable.app-1786526534034.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4663b2476e32583dd43b5d8784a80a00/id-preview-8443606a--aab9d4e0-2e67-4b5f-aa9c-ab23fc639965.lovable.app-1786526534034.png" },
     ],
     links: [
       {
