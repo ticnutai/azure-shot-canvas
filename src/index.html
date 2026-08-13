@@ -186,16 +186,11 @@
               <h2 class="settings-subheading">שמירה ופורמט</h2><p class="path" id="output-path"></p><button class="gold-button" id="choose-output">בחירת תיקייה אחרת</button><label class="check-line"><input type="checkbox" id="convert-mp4" checked> יצירת MP4 תואם לאחר שמירת מקור WebM</label>
             </div>
             <div class="preference-section" data-preference-section="shortcuts">
-              <div class="shortcut-settings-heading"><div><h2>קיצורי דרך דו־לשוניים</h2><p>הקיצורים נשמרים לפי המיקום הפיזי של המקש ופועלים בפריסת עברית ואנגלית.</p></div><button class="ghost" id="reset-shortcuts">↺ איפוס ברירות מחדל</button></div>
+              <div class="shortcut-settings-heading"><div><h2>מרכז פעולות וקיצורי דרך</h2><p>צירוף, מקש יחיד או לחיצה כפולה לפי המיקום הפיזי — בעברית ובאנגלית.</p></div><button class="ghost" id="reset-shortcuts">↺ איפוס ברירות מחדל</button></div>
               <div class="shortcut-status-banner" id="shortcut-status-banner"><span>●</span><div><b>בודק רישום קיצורים…</b><small>המערכת תתריע על התנגשות או קיצור שנתפס בידי תוכנה אחרת.</small></div></div>
-              <div class="shortcut-settings-list" id="shortcut-settings-list">
-                <div data-shortcut-row="record"><div><b>התחלה / עצירת הקלטה</b><small>פועל גם כשהאפליקציה ברקע</small></div><button class="shortcut-recorder" data-shortcut-action="record"></button><button class="shortcut-test" data-shortcut-test="record">בדיקה</button></div>
-                <div data-shortcut-row="screenshot"><div><b>צילום מסך מלא</b><small>שמירה מיידית לפי ברירת המחדל</small></div><button class="shortcut-recorder" data-shortcut-action="screenshot"></button><button class="shortcut-test" data-shortcut-test="screenshot">בדיקה</button></div>
-                <div data-shortcut-row="region"><div><b>צילום אזור</b><small>פותח בחירת שטח לפני הצילום</small></div><button class="shortcut-recorder" data-shortcut-action="region"></button><button class="shortcut-test" data-shortcut-test="region">בדיקה</button></div>
-                <div data-shortcut-row="pause"><div><b>השהיה / המשך</b><small>זמין בזמן הקלטה פעילה</small></div><button class="shortcut-recorder" data-shortcut-action="pause"></button><button class="shortcut-test" data-shortcut-test="pause">בדיקה</button></div>
-                <div data-shortcut-row="microphone"><div><b>השתקת מיקרופון</b><small>הפעלה וכיבוי מהירים</small></div><button class="shortcut-recorder" data-shortcut-action="microphone"></button><button class="shortcut-test" data-shortcut-test="microphone">בדיקה</button></div>
-                <div data-shortcut-row="camera"><div><b>הפעלת מצלמה</b><small>הצגה או הסתרה בזמן הכנה</small></div><button class="shortcut-recorder" data-shortcut-action="camera"></button><button class="shortcut-test" data-shortcut-test="camera">בדיקה</button></div>
-              </div>
+              <div class="shortcut-toolbar"><input id="shortcut-search" type="search" placeholder="חיפוש פעולה…"><select id="shortcut-category"><option value="all">כל הקטגוריות</option><option value="recording">הקלטה</option><option value="capture">צילום</option><option value="audio">שמע</option><option value="camera">מצלמה</option><option value="library">ספרייה</option><option value="window">חלון</option></select><span><b id="shortcut-visible-count">0</b> פעולות</span></div>
+              <div class="shortcut-safety-note">מקש אות יחיד מוגבל כברירת מחדל לחלון האפליקציה כדי שלא יופעל בזמן הקלדה. מקשי F, ‏Print Screen ו־Numpad מתאימים להפעלה גלובלית.</div>
+              <div class="shortcut-settings-list" id="shortcut-settings-list"></div>
               <aside class="developer-shortcuts-note"><b>קיצורי פיתוח שמורים</b><span><kbd>Ctrl Shift R</kbd> רענון עמוק</span><span><kbd>Ctrl Shift I</kbd> קונסול</span><span><kbd>F12</kbd> קונסול</span></aside>
             </div>
             <div class="preference-section" data-preference-section="appearance">

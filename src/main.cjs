@@ -7,7 +7,7 @@ const { captureFilePath, developerShortcut } = require('./main-utils.cjs');
 const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, projectPathFor } = require('./editor-utils.cjs');
-const { DEFAULT_SHORTCUTS, acceleratorForBinding, actionForInput, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
+const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingPaths, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 
@@ -20,6 +20,7 @@ let qaConsole = '';
 let activeShortcuts = { ...DEFAULT_SHORTCUTS };
 let shortcutRegistration = {};
 const lastShortcutDispatch = new Map();
+const pendingDoublePress = new Map();
 const recordingSessions = new Map();
 let recoveredRecordings = [];
 const thumbnailJobs = new Map();
@@ -118,10 +119,10 @@ function createWindow() {
       if (action === 'toggle-devtools') mainWindow.webContents.toggleDevTools();
       return;
     }
-    const captureAction = actionForInput(input, activeShortcuts);
-    if (captureAction) {
+    const shortcutAction = Object.keys(activeShortcuts).find((name) => activeShortcuts[name]?.scope === 'global' && inputMatchesBinding(input, activeShortcuts[name]));
+    if (shortcutAction) {
       event.preventDefault();
-      dispatchShortcut(captureAction, 'focused-physical-key');
+      handleShortcutPress(shortcutAction, activeShortcuts[shortcutAction], 'focused-physical-key');
     }
   });
   const devUrl = process.env.SCREEN_STUDIO_DEV_URL;
@@ -466,10 +467,10 @@ function registerIpc() {
     if (conflicts.length) return { ok: false, conflicts, shortcuts: activeShortcuts, registration: shortcutRegistration };
     activeShortcuts = shortcuts;
     shortcutRegistration = registerShortcuts();
-    return { ok: Object.values(shortcutRegistration).every(Boolean), shortcuts: activeShortcuts, registration: shortcutRegistration };
+    return { ok: Object.values(shortcutRegistration).every((registered) => registered !== false), shortcuts: activeShortcuts, registration: shortcutRegistration };
   });
   ipcMain.handle('shortcuts:test', (_event, action) => {
-    if (!Object.hasOwn(DEFAULT_SHORTCUTS, action)) return false;
+    if (!Object.hasOwn(ACTION_DEFINITIONS, action)) return false;
     mainWindow?.webContents.send('shortcut', action, { test: true });
     return true;
   });
@@ -490,11 +491,30 @@ function registerShortcuts() {
   }
   const result = {};
   for (const [action, binding] of Object.entries(activeShortcuts)) {
+    if (!binding) {
+      result[action] = null;
+      continue;
+    }
+    if (binding.scope === 'focused') {
+      result[action] = true;
+      continue;
+    }
     const accelerator = acceleratorForBinding(binding);
-    result[action] = Boolean(accelerator && globalShortcut.register(accelerator, () => dispatchShortcut(action, 'global')));
+    result[action] = Boolean(accelerator && globalShortcut.register(accelerator, () => handleShortcutPress(action, binding, 'global')));
   }
   shortcutRegistration = result;
   return result;
+}
+
+function handleShortcutPress(action, binding, source) {
+  if (binding?.kind !== 'double') return dispatchShortcut(action, source);
+  const now = Date.now();
+  const previous = pendingDoublePress.get(action) || 0;
+  pendingDoublePress.set(action, now);
+  if (now - previous < 60) return false;
+  if (now - previous > binding.intervalMs) return false;
+  pendingDoublePress.delete(action);
+  return dispatchShortcut(action, `${source}-double`);
 }
 
 function dispatchShortcut(action, source = 'unknown') {
@@ -502,6 +522,15 @@ function dispatchShortcut(action, source = 'unknown') {
   const now = Date.now();
   if (now - (lastShortcutDispatch.get(action) || 0) < 180) return false;
   lastShortcutDispatch.set(action, now);
+  if (action === 'toggleWindow') {
+    if (mainWindow.isVisible() && !mainWindow.isMinimized()) mainWindow.hide();
+    else { if (mainWindow.isMinimized()) mainWindow.restore(); mainWindow.show(); }
+    return true;
+  }
+  if (action === 'openOutput') {
+    ensureOutputDirectory().then((directory) => shell.openPath(directory)).catch(() => {});
+    return true;
+  }
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (!mainWindow.isVisible()) mainWindow.show();
   mainWindow.webContents.send('shortcut', action, { source });

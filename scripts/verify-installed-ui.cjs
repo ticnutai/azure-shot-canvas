@@ -33,6 +33,8 @@ async function main() {
       quickActions: await page.locator('.recent-utility-actions > button').count()
     };
     result.shortcuts = await page.locator('[data-shortcut-action]').count();
+    result.shortcutKinds = await page.locator('[data-shortcut-kind]').count();
+    result.shortcutScopes = await page.locator('[data-shortcut-scope]').count();
     result.videoEditor = await page.locator('#video-editor-modal').count();
     result.previewControls = await page.locator('.preview-display-controls button, .preview-display-controls input').count();
     result.captureDelayChoices = await page.locator('#capture-delay option').count();
@@ -85,7 +87,7 @@ async function main() {
     }));
     result.errors = errors;
     const passed = result.filters === 3 && result.sorts === 5 && result.views === 3 && result.quickActions === 3
-      && result.shortcuts === 6 && result.videoEditor === 1 && result.previewControls >= 4 && result.captureDelayChoices === 4 && ['healthy', 'warning', 'unknown'].includes(result.storageLevel)
+      && result.shortcuts === 15 && result.shortcutKinds === 15 && result.shortcutScopes === 15 && result.videoEditor === 1 && result.previewControls >= 4 && result.captureDelayChoices === 4 && ['healthy', 'warning', 'unknown'].includes(result.storageLevel)
       && result.livePreview.width >= 320 && result.livePreview.height >= 200 && !result.livePreview.paused && result.livePreview.frames > 2
       && result.previewControlsClear
       && result.editorSidebarVisible && result.editorLayout.shell.right <= result.editorLayout.sidebar.left + 1

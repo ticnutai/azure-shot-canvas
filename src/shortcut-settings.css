@@ -7,8 +7,13 @@
 .shortcut-status-banner b { font-size: 11px; }
 .shortcut-status-banner small { margin-top: 4px; color: var(--muted); font-size: 9px; }
 .shortcut-status-banner.error > span { color: var(--danger); }
+.shortcut-toolbar { display: grid; grid-template-columns: minmax(180px,1fr) 160px auto; gap: 9px; align-items: center; margin-bottom: 9px; }
+.shortcut-toolbar input,.shortcut-toolbar select,.shortcut-kind,.shortcut-scope { min-height: 36px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2); color: var(--text); padding: 0 10px; }
+.shortcut-toolbar span { color: var(--muted); font-size: 9px; }.shortcut-toolbar b { color: var(--gold); }
+.shortcut-safety-note { margin-bottom: 10px; padding: 9px 12px; border-radius: 11px; background: color-mix(in srgb,var(--gold) 7%,var(--panel-2)); color: var(--muted); font-size: 8px; line-height: 1.7; }
 .shortcut-settings-list { display: grid; gap: 8px; }
-.shortcut-settings-list > div { display: grid; grid-template-columns: minmax(220px,1fr) 180px 65px; align-items: center; gap: 10px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+.shortcut-settings-list > div { display: grid; grid-template-columns: minmax(190px,1fr) 105px 105px 170px 58px 34px; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel-2); }
+.shortcut-settings-list > div.filtered-out { display:none; }
 .shortcut-settings-list b,.shortcut-settings-list small { display: block; }
 .shortcut-settings-list b { font-size: 11px; }
 .shortcut-settings-list small { margin-top: 4px; color: var(--muted); font-size: 8px; }
@@ -16,6 +21,8 @@
 .shortcut-recorder { direction: ltr; color: var(--gold); font: 650 11px Consolas,monospace; }
 .shortcut-recorder.listening { border-color: var(--gold); box-shadow: 0 0 0 2px color-mix(in srgb,var(--gold) 18%,transparent); animation: shortcut-pulse 1s infinite alternate; }
 .shortcut-test { color: var(--muted); font-size: 9px; }
+.shortcut-clear { width:34px; height:34px; border:1px solid var(--line); border-radius:10px; background:transparent; color:var(--muted); cursor:pointer; }
+.shortcut-clear:hover { color:var(--danger); border-color:var(--danger); }
 .shortcut-test:hover { color: var(--gold); }
 .shortcut-settings-list > div.conflict { border-color: var(--danger); }
 .shortcut-settings-list > div.tested { border-color: var(--success); box-shadow: 0 0 0 2px color-mix(in srgb,var(--success) 14%,transparent); }
@@ -24,4 +31,4 @@
 .developer-shortcuts-note span { display: flex; align-items: center; gap: 5px; }
 .developer-shortcuts-note kbd { direction: ltr; color: var(--gold); }
 @keyframes shortcut-pulse { to { box-shadow: 0 0 0 4px color-mix(in srgb,var(--gold) 8%,transparent); } }
-@media(max-width:1050px) { .shortcut-settings-list > div { grid-template-columns: 1fr 150px 60px; } }
+@media(max-width:1150px) { .shortcut-settings-list > div { grid-template-columns: minmax(170px,1fr) 90px 90px 140px 52px 32px; }.shortcut-kind,.shortcut-scope{font-size:9px;} }
