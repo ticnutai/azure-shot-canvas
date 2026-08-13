@@ -1,0 +1,23 @@
+#display-video.live-preview-video { position:absolute; inset:0; left:0; top:0; width:100%; height:100%; object-fit:contain; background:#05080c; opacity:0; transition:opacity .22s ease; z-index:1; }
+html[data-preview-fit="cover"] #display-video.live-preview-video { object-fit:cover; }
+.capture-preview.preview-ready #display-video.live-preview-video { opacity:1; }
+.capture-preview .preview-shade { position:absolute; inset:0; z-index:2; pointer-events:none; background:linear-gradient(180deg,#0004,transparent 20%,transparent 78%,#0003); opacity:0; transition:opacity .2s; }
+.capture-preview.preview-ready .preview-shade { opacity:1; }
+.capture-preview .preview-status,.capture-preview .expand-button,.capture-preview .snapshot-fab,.capture-preview .audio-meter { z-index:4; }
+.preview-display-controls { position:absolute; left:16px; top:16px; bottom:auto; z-index:5; display:flex; align-items:center; gap:5px; padding:4px; border:1px solid #ffffff33; border-radius:13px; background:#05080cbb; backdrop-filter:blur(10px); opacity:0; transition:opacity .2s; }
+.capture-preview.preview-ready .preview-display-controls { opacity:1; }
+.preview-display-controls button { width:31px; height:29px; border:0; border-radius:8px; background:transparent; color:#ddd; cursor:pointer; }
+.preview-display-controls button.active { background:var(--gold); color:var(--accent-text); }
+.preview-display-controls label { display:flex; align-items:center; gap:5px; padding:0 5px; color:#ddd; font-size:9px; direction:ltr; }
+.preview-display-controls input { width:78px; accent-color:var(--gold); }
+.preview-display-controls output { min-width:32px; }
+.preview-safe-area { position:absolute; inset:8%; z-index:3; pointer-events:none; opacity:0; border:1px dashed #f4bc3fcc; box-shadow:inset 0 0 0 1px #0006; }
+.preview-safe-area::before { content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent 33.2%,#f4bc3f66 33.3%,transparent 33.45%,transparent 66.5%,#f4bc3f66 66.6%,transparent 66.75%),linear-gradient(0deg,transparent 33.2%,#f4bc3f66 33.3%,transparent 33.45%,transparent 66.5%,#f4bc3f66 66.6%,transparent 66.75%); }
+.capture-preview.safe-area-visible .preview-safe-area { opacity:1; }
+.capture-preview .empty-preview { position:relative; z-index:3; transition:opacity .18s; }
+.capture-preview.preview-ready .empty-preview { opacity:0; pointer-events:none; }
+.capture-preview.preview-loading .empty-preview > span { animation:preview-spin 1s linear infinite; }
+.capture-preview.preview-error .empty-preview > span { color:var(--danger); border-color:var(--danger); }
+.capture-preview:fullscreen { width:100vw; height:100vh; border-radius:0; background:#000; }
+.capture-preview:fullscreen .live-preview-video { object-fit:contain; }
+@keyframes preview-spin { to { transform:rotate(360deg); } }

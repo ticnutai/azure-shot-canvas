@@ -1,0 +1,29 @@
+.library-toolbar { grid-template-columns: minmax(200px,1fr) auto auto auto minmax(170px,220px); align-items: center; }
+.library-view-picker { display: flex; direction: ltr; border: 1px solid var(--line); border-radius: 13px; padding: 3px; background: var(--panel-2); }
+.library-view-picker button { width: 35px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; }
+.library-view-picker button.active { color: var(--accent-text); background: var(--gold); }
+.library-view-picker svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.library-size-control input { min-width: 90px; width: 100%; accent-color: var(--gold); }
+.library-size-control output { min-width: 35px; color: var(--gold); }
+.library-list.size-small { --list-thumb-w: 82px; --grid-min: 175px; }
+.library-list.size-medium { --list-thumb-w: 140px; --grid-min: 245px; }
+.library-list.size-large { --list-thumb-w: 210px; --grid-min: 330px; }
+.library-list.view-list .library-item { grid-template-columns: var(--list-thumb-w) minmax(0,1fr) auto; }
+.library-list.view-list .file-icon { width: var(--list-thumb-w); height: calc(var(--list-thumb-w) * .625); }
+.library-list.view-grid { grid-template-columns: repeat(auto-fill,minmax(min(100%,var(--grid-min)),1fr)); gap: 14px; }
+.library-list.view-grid .library-group-title { grid-column: 1/-1; }
+.library-list.view-grid .library-item { display: flex; flex-direction: column; align-items: stretch; gap: 11px; padding: 12px; }
+.library-list.view-grid .file-icon { width: 100%; height: auto; aspect-ratio: 16/9; border-radius: 12px; }
+.library-list.view-grid .file-details { min-width: 0; }
+.library-list.view-grid .rename-editor { width: 100%; display: grid; grid-template-columns: minmax(0,1fr) auto auto; }
+.library-list.view-grid .rename-editor input { width: 100%; min-width: 0; }
+.library-list.view-grid .library-actions { flex-wrap: wrap; }
+.library-list.view-grid .library-actions button { flex: 1; padding-inline: 7px; }
+.library-list.view-table { display: block; }
+.library-list.view-table .library-group-title { margin-top: 18px; }
+.library-list.view-table .library-item { grid-template-columns: 64px minmax(0,1fr) auto; border-radius: 0; border-inline: 0; border-bottom: 0; padding-block: 8px; background: transparent; }
+.library-list.view-table .file-icon { width: 64px; height: 40px; border-radius: 7px; }
+.library-list.view-table .library-actions button { padding: 6px 9px; font-size: 10px; }
+@media(max-width:1250px) { .library-toolbar { grid-template-columns: 1fr 1fr auto; } .library-search { grid-column: 1/4; } .library-size-control { grid-column: span 2; } }
+.edited-badge { display: inline-block; margin-inline-start: 6px; padding: 2px 6px; border-radius: 8px; background: color-mix(in srgb,var(--gold) 18%,transparent); color: var(--gold); font-size: 8px; font-style: normal; font-weight: 600; }
+.library-heading-actions { display: flex; align-items: center; gap: 8px; }

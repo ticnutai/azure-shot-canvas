@@ -1,0 +1,46 @@
+/* File-first layout: capture controls stay beside the stage, media uses the full row below. */
+.content-shell { align-items: start; }
+.main-column { display: contents; }
+
+#capture-page.active { display: contents; }
+#capture-page .capture-stage { grid-column: 2; grid-row: 1; min-width: 0; }
+#capture-page .library-strip { grid-column: 1 / -1; grid-row: 2; width: 100%; margin-top: 0; }
+#capture-page .dashboard-grid { grid-column: 1 / -1; grid-row: 3; width: 100%; }
+
+#library-page.active,
+#settings-page.active { grid-column: 1 / -1; grid-row: 1; width: 100%; min-width: 0; }
+
+.recent-utility-actions {
+  display: flex;
+  direction: ltr;
+  gap: 5px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel-2);
+}
+
+.recent-utility-actions button {
+  width: 32px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--gold);
+  cursor: pointer;
+}
+
+.recent-utility-actions button:hover,
+.recent-utility-actions button:focus-visible {
+  background: color-mix(in srgb, var(--gold) 14%, var(--panel));
+  outline: none;
+}
+
+@media (max-width: 1120px) {
+  #capture-page .capture-stage { grid-column: 1; grid-row: 1; }
+  .settings-rail { grid-column: 1; grid-row: 2; }
+  #capture-page .library-strip { grid-column: 1; grid-row: 3; }
+  #capture-page .dashboard-grid { grid-column: 1; grid-row: 4; }
+}

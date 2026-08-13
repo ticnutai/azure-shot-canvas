@@ -1,0 +1,26 @@
+html[data-theme="ivory"] {
+  color-scheme: light;
+  --bg: #f8f6f1;
+  --top: #fffefd;
+  --panel: #fffefa;
+  --panel-2: #faf7f0;
+  --line: #ddd5c7;
+  --line-soft: #ebe5da;
+  --text: #3d3932;
+  --muted: #928978;
+  --gold: #bd8d2d;
+  --gold-2: #a97b25;
+  --accent-text: #fffefa;
+  --success: #00ac7c;
+  --danger: #bd5a5a;
+  --shadow: #74664a14;
+}
+html[data-theme="ivory"] body { letter-spacing: .015em; }
+html[data-theme="ivory"] :is(h1,h2,h3,.wordmark h1,.section-heading h2,.page-panel h2) { font-weight: 400; letter-spacing: .035em; }
+html[data-theme="ivory"] :is(button,select,input,.field-row b,.switch-row b,.range-field b,.nav-item small,.clip-card b,.library-item strong) { font-weight: 400; }
+html[data-theme="ivory"] :is(.panel,.settings-rail,.source-type,.refresh-button,.field-row select,.device-selects select,.theme-menu,.library-item,.clip-thumb,.search-box,.profile-button,.settings-cards button) { border-width: 1px; box-shadow: none; }
+html[data-theme="ivory"] :is(.panel,.settings-rail) { border-radius: 18px; }
+html[data-theme="ivory"] .source-card.selected { border-width: 1px; box-shadow: 0 0 0 1px var(--gold); }
+html[data-theme="ivory"] .record-main { background: var(--gold); box-shadow: none; }
+html[data-theme="ivory"] .capture-preview { background-image: linear-gradient(#e9e3d8 1px,transparent 1px),linear-gradient(90deg,#e9e3d8 1px,transparent 1px); }
+.swatch.ivory { background: #f8f6f1; border-color: #cfc5b5; }

@@ -1,0 +1,26 @@
+.theme-button-labeled {
+  width: auto;
+  min-width: 112px;
+  padding-inline: 14px;
+  gap: 8px;
+  border-radius: 999px;
+}
+.theme-button-labeled b {
+  color: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.theme-menu::before {
+  content: "בחר ערכת נושא";
+  display: block;
+  padding: 5px 8px 8px;
+  color: var(--muted);
+  font-size: 11px;
+  border-bottom: 1px solid var(--line-soft, var(--line));
+  margin-bottom: 4px;
+}
+@media (max-width: 1080px) {
+  .theme-button-labeled { min-width: 42px; padding-inline: 11px; }
+  .theme-button-labeled b { display: none; }
+}
