@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds, shouldHideMainWindowOnClose } = require('../src/quickbar-utils.cjs');
+const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds, shouldHideMainWindowOnClose } = require('../src/quickbar-utils.cjs');
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
@@ -60,4 +60,10 @@ test('recent captures are newest first, unique per file and capped', () => {
   assert.equal(list.length, 6);
   assert.equal(list[0].name, 'again');
   assert.equal(list.filter((entry) => entry.path.toLowerCase() === 'c:\\a\\5.png').length, 1);
+});
+test('capture card keys are unique and map only to card actions', () => {
+  const accelerators = CAPTURE_CARD_KEYS.map((item) => item.accelerator);
+  assert.equal(new Set(accelerators).size, accelerators.length);
+  for (const item of CAPTURE_CARD_KEYS) assert.ok(['edit', 'copy', 'pin', 'open-folder', 'trash', 'close'].includes(item.action));
+  for (const action of ['edit', 'copy', 'pin', 'open-folder', 'trash', 'close']) assert.ok(CAPTURE_CARD_KEYS.some((item) => item.action === action), action);
 });

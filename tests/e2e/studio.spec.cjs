@@ -1099,6 +1099,16 @@ test.describe('Electron production workflow', () => {
     await app.evaluate(({ clipboard }) => clipboard.clear());
     await card.locator('[data-capture-action="copy"]').click();
     await expect.poll(() => app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty())).toBe(true);
+
+    // Card keys: live only while the pointer is over the card, run the same handler as the buttons.
+    await card.locator('#quickbar').dispatchEvent('mouseenter');
+    await expect(card.locator('html')).toHaveAttribute('data-card-keys', '7');
+    await app.evaluate(({ clipboard }) => clipboard.clear());
+    const sendCardKey = (action) => app.evaluate(({ BrowserWindow }, key) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).webContents.send('quickbar:card-key', key), action);
+    await sendCardKey('copy');
+    await expect.poll(() => app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty())).toBe(true);
+    await card.locator('#quickbar').dispatchEvent('mouseleave');
+    await expect(card.locator('html')).toHaveAttribute('data-card-keys', '0');
     const pinWindows = () => app.windows().filter((candidate) => candidate.url().startsWith('data:text/html'));
     const pinsBefore = pinWindows().length;
     await card.locator('[data-capture-action="pin"]').click();
@@ -1142,7 +1152,7 @@ test.describe('Electron production workflow', () => {
 
     const metrics = [
       metric('Capture card response', cardMs, 'ms', 1000, 'max', 'file saved to card with thumbnail on screen, quickbar switched off'),
-      metric('Capture card actions', 4, 'actions', 4, 'min', 'copy to clipboard, pin window, recent-strip selection, open in editor'),
+      metric('Capture card actions', 5, 'actions', 5, 'min', 'copy to clipboard, pin window, recent-strip selection, open in editor, keyboard copy while hovered (keys released on leave)'),
       metric('Capture card auto-hide and off switch', 2, 'states', 2, 'min', 'hides after 4 s; stays closed when disabled')
     ];
     await attachMetrics(testInfo, metrics);

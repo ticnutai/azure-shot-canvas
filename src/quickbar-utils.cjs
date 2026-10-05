@@ -55,9 +55,20 @@ function shouldHideMainWindowOnClose(preferences, environment = {}) {
   return Boolean(preferences.enabled && environment.qa !== true && environment.headless !== true && environment.quitting !== true);
 }
 
+// Keys for the capture card, live only while the pointer is over it (the card window never takes focus).
+const CAPTURE_CARD_KEYS = Object.freeze([
+  { accelerator: 'Enter', action: 'edit', label: 'Enter' },
+  { accelerator: 'E', action: 'edit', label: 'E' },
+  { accelerator: 'CommandOrControl+C', action: 'copy', label: 'Ctrl+C' },
+  { accelerator: 'P', action: 'pin', label: 'P' },
+  { accelerator: 'O', action: 'open-folder', label: 'O' },
+  { accelerator: 'Delete', action: 'trash', label: 'Delete' },
+  { accelerator: 'Escape', action: 'close', label: 'Esc' }
+]);
+
 // Newest first, one entry per file, capped — a capture re-saved under the same path moves to the front.
 function addRecentCapture(list, item, max = MAX_RECENT_CAPTURES) {
   return [item, ...list.filter((entry) => entry.path.toLowerCase() !== item.path.toLowerCase())].slice(0, max);
 }
 
-module.exports = { CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds, shouldHideMainWindowOnClose };
+module.exports = { CAPTURE_CARD_KEYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds, shouldHideMainWindowOnClose };

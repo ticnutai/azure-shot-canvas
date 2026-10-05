@@ -7,5 +7,7 @@ contextBridge.exposeInMainWorld('quickbarApi', {
   onCaptures: (callback) => ipcRenderer.on('quickbar:captures', (_event, value) => callback(value)),
   captureAction: (filePath, action) => ipcRenderer.invoke('quickbar:capture-action', filePath, action),
   setView: (view) => ipcRenderer.invoke('quickbar:set-view', view),
-  startDrag: (filePath) => ipcRenderer.send('quickbar:start-drag', filePath)
+  startDrag: (filePath) => ipcRenderer.send('quickbar:start-drag', filePath),
+  cardHover: (filePath) => ipcRenderer.invoke('quickbar:card-hover', filePath),
+  onCardKey: (callback) => ipcRenderer.on('quickbar:card-key', (_event, action) => callback(action))
 });

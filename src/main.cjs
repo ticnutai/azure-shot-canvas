@@ -12,7 +12,7 @@ const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatch
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
-const { DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
 const { normalizeTimelineProject } = require('./video-timeline-utils.cjs');
 const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
@@ -41,6 +41,9 @@ let quickbarCursorTimer = null;
 // Post-capture card: which view the bar shows and the recent captures it lists (newest first).
 let quickbarView = 'actions';
 let recentCaptures = [];
+// Card keys are registered only while the pointer is over the card, then released.
+let cardKeysPath = null;
+const registeredCardKeys = new Set();
 let isQuitting = false;
 const privateShareServer = new PrivateShareServer();
 
@@ -72,7 +75,7 @@ function quickbarBounds(expanded = quickbarExpanded) {
 function positionQuickbar(expanded = quickbarExpanded) {
   if (!quickbarWindow || quickbarWindow.isDestroyed()) return;
   quickbarExpanded = Boolean(expanded || quickbarPreferences.pinned);
-  if (!quickbarExpanded) quickbarView = 'actions';
+  if (!quickbarExpanded) { quickbarView = 'actions'; setCardKeys(null); }
   quickbarWindow.setBounds(quickbarBounds(quickbarExpanded), false);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
   // With the bar switched off, the window only exists to show the capture card: no edge tab once it closes.
@@ -187,6 +190,21 @@ async function showCapturePreview(filePath) {
   const timeout = quickbarPreferences.captureTimeout && kind === 'video' ? Math.max(10, quickbarPreferences.captureTimeout) : quickbarPreferences.captureTimeout;
   quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: true, timeout });
   return { shown: true, recent: recentCaptures.length };
+}
+
+// A key press is forwarded to the card, which runs the very same handler as the button (one code path).
+// Keys already taken by the user's own global shortcuts are never claimed.
+function setCardKeys(filePath) {
+  if (process.env.SCREEN_STUDIO_QA !== '1') for (const accelerator of registeredCardKeys) globalShortcut.unregister(accelerator);
+  registeredCardKeys.clear();
+  cardKeysPath = filePath || null;
+  if (!cardKeysPath || !quickbarWindow || quickbarWindow.isDestroyed()) return;
+  for (const { accelerator, action } of CAPTURE_CARD_KEYS) {
+    // QA runs never grab real system keys (same rule as the app's own shortcuts); keys are only recorded.
+    if (process.env.SCREEN_STUDIO_QA === '1') { registeredCardKeys.add(accelerator); continue; }
+    if (globalShortcut.isRegistered(accelerator)) continue;
+    if (globalShortcut.register(accelerator, () => quickbarWindow?.webContents.send('quickbar:card-key', action))) registeredCardKeys.add(accelerator);
+  }
 }
 
 async function runCaptureCardAction(filePath, action) {
@@ -1040,6 +1058,10 @@ function registerIpc() {
     if (!['edit', 'copy', 'pin', 'open-folder', 'trash'].includes(action)) throw new Error('פעולה לא מוכרת בכרטיס הצילום');
     return runCaptureCardAction(filePath, action);
   });
+  ipcMain.handle('quickbar:card-hover', async (_event, filePath) => {
+    setCardKeys(filePath && quickbarView === 'capture' ? (await assertLibraryFile(filePath)) : null);
+    return [...registeredCardKeys];
+  });
   ipcMain.handle('quickbar:set-view', (_event, view) => { quickbarView = view === 'capture' && recentCaptures.length ? 'capture' : 'actions'; positionQuickbar(quickbarExpanded); return quickbarView; });
   // Drag a capture out of the card straight into another program (must run synchronously during dragstart).
   ipcMain.on('quickbar:start-drag', async (event, filePath) => {
@@ -1087,6 +1109,9 @@ function registerIpc() {
 
 function registerShortcuts() {
   globalShortcut.unregisterAll();
+  // unregisterAll also dropped any live card keys; forget them so they are never 'released' over a user shortcut.
+  registeredCardKeys.clear();
+  cardKeysPath = null;
   if (process.env.SCREEN_STUDIO_QA === '1') {
     shortcutRegistration = Object.fromEntries(Object.keys(activeShortcuts).map((action) => [action, true]));
     return shortcutRegistration;
