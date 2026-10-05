@@ -1249,6 +1249,89 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('image formats JPG, WEBP and PDF and video formats MOV and GIF are real files the library understands', async ({}, testInfo) => {
+    test.setTimeout(240_000);
+    const signatures = { jpg: (b) => b[0] === 0xff && b[1] === 0xd8, webp: (b) => b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP', pdf: (b) => b.toString('latin1', 0, 5) === '%PDF-' };
+    const files = {};
+    for (const format of ['jpg', 'webp', 'pdf']) {
+      await setCaptureDefaults(page, 'screenshot', 'full');
+      await page.locator('#open-capture-settings').click();
+      await page.locator('[data-settings-tab="image"]').click();
+      await page.locator('#image-format').selectOption(format);
+      await page.locator('#close-capture-settings').click();
+      const before = new Set(await fs.readdir(outputDir));
+      await page.locator('#record-button').click();
+      files[format] = await waitForNewFile(outputDir, `.${format}`, before, 30_000);
+      const bytes = await fs.readFile(files[format]);
+      expect(signatures[format](bytes), `${format} signature`).toBe(true);
+      expect(bytes.length).toBeGreaterThan(1000);
+    }
+    await page.evaluate(() => loadLibrary());
+    const kinds = await page.evaluate((paths) => paths.map((file) => state.libraryItems.find((item) => item.path === file)?.kind), [files.jpg, files.webp, files.pdf]);
+    expect(kinds).toEqual(['image', 'image', 'document']);
+    // A JPG opens in the editor; saving writes a separate PNG copy and leaves the JPG untouched.
+    const jpgBefore = await fs.readFile(files.jpg);
+    await page.evaluate((file) => window.aurumEditor.open(file, 'professional'), files.jpg);
+    await expect(page.locator('#image-editor-shell')).toHaveAttribute('data-editor-ready', 'true');
+    const beforeSave = new Set(await fs.readdir(outputDir));
+    await page.locator('#editor-save').click();
+    await expect(page.locator('#editor-save-state')).toHaveText('הפרויקט נשמר מקומית');
+    const editedCopy = await waitForNewFile(outputDir, '.png', beforeSave, 15_000);
+    expect(path.basename(editedCopy)).toMatch(/— ערוך\.png$/);
+    expect(Buffer.compare(await fs.readFile(files.jpg), jpgBefore)).toBe(0);
+    await page.evaluate(() => window.aurumEditor.close(true));
+    await page.locator('#open-capture-settings').click();
+    await page.locator('[data-settings-tab="image"]').click();
+    await page.locator('#image-format').selectOption('png');
+    await page.locator('#close-capture-settings').click();
+
+    const recordAs = async (format, extension) => {
+      await setCaptureDefaults(page, 'record', 'full');
+      await page.locator('#open-capture-settings').click();
+      await page.locator('[data-settings-tab="video"]').click();
+      await page.locator('#format-select').selectOption(format);
+      await page.locator('#close-capture-settings').click();
+      const before = new Set(await fs.readdir(outputDir));
+      await page.locator('#record-button').click();
+      await expect(page.locator('#recording-bar')).toBeVisible();
+      await page.waitForTimeout(2500);
+      await page.locator('#stop-recording').click();
+      const file = await waitForNewFile(outputDir, extension, before, 90_000);
+      return { ...(await probe(file)), head: (await fs.readFile(file)).subarray(0, 12) };
+    };
+    // 'Single window' switches the source list to windows and captures the chosen window whole, with no picker.
+    await setCaptureDefaults(page, 'screenshot', 'window');
+    await expect.poll(() => page.evaluate(() => state.sourceFilter)).toBe('window');
+    await expect(page.locator('.source-type[data-source-filter="window"]')).toHaveClass(/active/);
+    await expect(page.locator('.source-card').first()).toBeVisible({ timeout: 20_000 });
+    await page.locator('.source-card').first().click();
+    const beforeWindow = new Set(await fs.readdir(outputDir));
+    await page.locator('#record-button').click();
+    await waitForNewFile(outputDir, '.png', beforeWindow, 30_000);
+    await expect(page.locator('#region-modal')).toBeHidden();
+    await page.locator('.source-type[data-source-filter="screen"]').click();
+    await page.locator('.source-card').first().click();
+
+    const mov = await recordAs('mov', '.mov');
+    // A QuickTime file: 'ftyp' box with the 'qt  ' brand.
+    expect(mov.head.toString('latin1', 4, 12)).toBe('ftypqt  ');
+    expect(mov.streams.find((stream) => stream.codec_type === 'video').codec_name).toBe('h264');
+    const gif = await recordAs('gif', '.gif');
+    expect(gif.streams.find((stream) => stream.codec_type === 'video').codec_name).toBe('gif');
+    expect(gif.head.toString('latin1', 0, 6)).toBe('GIF89a');
+    await page.locator('#open-capture-settings').click();
+    await page.locator('[data-settings-tab="video"]').click();
+    await page.locator('#format-select').selectOption('mp4');
+    await page.locator('#close-capture-settings').click();
+    const metrics = [
+      metric('Image formats saved', 3, 'formats', 3, 'min', 'JPG, WEBP and PDF verified by file signature; listed as image/image/document'),
+      metric('Non-PNG image editing', 1, 'copies', 1, 'min', 'JPG opened in the editor, saved as a PNG copy, original byte-identical'),
+      metric('Video formats', 2, 'formats', 2, 'min', `MOV (${mov.streams[0].codec_name}) and GIF (palette) recorded and probed`)
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
   test('smart redact finds e-mail, phone and card numbers with real OCR and blacks them out', async ({}, testInfo) => {
     test.setTimeout(150_000);
     const dataUrl = await page.evaluate(() => {

@@ -258,7 +258,9 @@ function setStatus(label, mode = 'ready') {
 
 function applyCapturePreferences(kind = state.captureKind, scope = state.captureScope, persist = true) {
   state.captureKind = ['record', 'screenshot'].includes(kind) ? kind : 'record';
-  state.captureScope = ['full', 'region', 'scroll'].includes(scope) ? scope : 'full';
+  state.captureScope = ['full', 'region', 'scroll', 'window'].includes(scope) ? scope : 'full';
+  // 'Single window' is the existing window source captured whole: switch the source list to windows.
+  if (state.captureScope === 'window' && state.sourceFilter !== 'window') $('.source-type[data-source-filter="window"]')?.click();
   if ($('#default-capture-kind')) $('#default-capture-kind').value = state.captureKind;
   if ($('#default-capture-scope')) $('#default-capture-scope').value = state.captureScope;
   $$('input[name="screenshot-mode"]').forEach((radio) => { radio.checked = radio.value === state.captureScope; });
@@ -374,6 +376,10 @@ function applyAutomaticSwitches(patch = {}, persist = true) {
     if ($(control)) $(control).checked = Boolean(state[name]);
     if (persist && name in patch) localStorage.setItem(key, state[name] ? 'on' : 'off');
   }
+  if (window.aurumImageFinish?.formats.includes(patch.imageFormat)) state.imageFormat = patch.imageFormat;
+  state.imageFormat ||= 'png';
+  if ($('#image-format')) $('#image-format').value = state.imageFormat;
+  if (persist && patch.imageFormat) localStorage.setItem('aurum-image-format', state.imageFormat);
   if (window.aurumImageFinish?.backgrounds.includes(patch.autoBeautifyStyle)) state.autoBeautifyStyle = patch.autoBeautifyStyle;
   state.autoBeautifyStyle ||= 'ocean';
   if (persist && patch.autoBeautifyStyle) localStorage.setItem('aurum-auto-beautify-style', state.autoBeautifyStyle);
@@ -381,7 +387,7 @@ function applyAutomaticSwitches(patch = {}, persist = true) {
 }
 
 function restoreUserPreferences() {
-  applyAutomaticSwitches({ ...Object.fromEntries(Object.entries(AUTOMATIC_SWITCHES).map(([name, { key }]) => [name, localStorage.getItem(key) === 'on'])), autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean' }, false);
+  applyAutomaticSwitches({ ...Object.fromEntries(Object.entries(AUTOMATIC_SWITCHES).map(([name, { key }]) => [name, localStorage.getItem(key) === 'on'])), autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean', imageFormat: localStorage.getItem('aurum-image-format') || 'png' }, false);
   setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') !== 'off', false);
   setCaptureExclusion(localStorage.getItem('aurum-exclude-studio-window') !== 'off', false);
   applyCaptureLayout(localStorage.getItem('aurum-capture-layout') || 'clean', false);
@@ -1214,9 +1220,10 @@ function addWorkflow(template = 'blank') {
 
 // One way to open a capture for editing — used by automations and by the post-capture card.
 async function openInEditor(filePath) {
-  if (/\.png$/i.test(filePath)) return window.aurumEditor?.open(filePath, 'professional');
   if (!state.libraryItems.some((entry) => entry.path === filePath)) await loadLibrary().catch(() => {});
-  const item = state.libraryItems.find((entry) => entry.path === filePath) || { path: filePath, name: filePath.split(/[\\/]/).at(-1) };
+  const item = state.libraryItems.find((entry) => entry.path === filePath) || { path: filePath, name: filePath.split(/[\\/]/).at(-1), kind: 'video' };
+  if (item.kind === 'image') return window.aurumEditor?.open(filePath, 'professional');
+  if (item.kind === 'document' || item.extension === 'gif') return api.openFile(filePath);
   return openVideoEditor(item);
 }
 
@@ -1371,7 +1378,7 @@ async function beginCapture(kind, forcedScope = null) {
     stopLivePreview({ preserveDisplay: true });
     await acquireInputs(kind === 'record');
     // 'last-region' reuses the area chosen last time; with none stored yet it falls back to the picker.
-    const region = scope === 'full' ? { x: 0, y: 0, width: 1, height: 1 } : (scope === 'last-region' && readStoredRegion('aurum-last-region')) || await chooseRegion();
+    const region = scope === 'full' || scope === 'window' ? { x: 0, y: 0, width: 1, height: 1 } : (scope === 'last-region' && readStoredRegion('aurum-last-region')) || await chooseRegion();
     if (!region) {
       stopInputStreams();
       setStatus('מוכן');
@@ -1412,8 +1419,9 @@ async function saveScreenshot() {
       showToast(`הושחרו לפני השמירה: ${detection.summary}`, 6000);
     } else document.documentElement.dataset.lastAutoRedactions = '0';
   }
-  const image = state.autoBeautify ? await finish.beautify(canvas.toDataURL('image/png'), state.autoBeautifyStyle) : await finish.toPng(canvas);
-  const result = await api.saveScreenshot(image.bytes);
+  if (state.autoBeautify) canvas = await finish.beautifyCanvas(canvas.toDataURL('image/png'), state.autoBeautifyStyle);
+  const image = await finish.encode(canvas, state.imageFormat);
+  const result = await api.saveScreenshot(image.bytes, { format: state.imageFormat, width: image.width, height: image.height });
   // The file is safe on disk: free the capture now, so library refresh, OCR and automations never block the next shot.
   state.busy = false;
   runAfterScreenshot(result);
@@ -1575,7 +1583,9 @@ async function finalizeRecording() {
     await state.recordingAppendQueue;
     const writeError = state.recordingWriteError;
     // Even after a write error, close the session so the written segments are joined and kept.
-    const result = await api.finishRecordingFile(session.id, $('#convert-mp4').checked, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples, autoSilence: Boolean(state.autoSilence), autoZoom: Boolean(state.autoZoom) });
+    const chosenFormat = $('#format-select')?.value || 'mp4';
+    const target = chosenFormat === 'mp4' ? ($('#convert-mp4').checked ? 'mp4' : 'webm') : chosenFormat;
+    const result = await api.finishRecordingFile(session.id, target, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples, autoSilence: Boolean(state.autoSilence), autoZoom: Boolean(state.autoZoom) });
     if (result.timelinePrepared) showToast(`עריכה אוטומטית מוכנה: ${result.timelinePrepared.removedSilences} קטעים שקטים הוסרו, ${result.timelinePrepared.zooms} הגדלות — פתחו בעורך הווידאו לייצוא`, 9000);
     state.recordingSession = null;
     if (writeError) showToast(`חלק מההקלטה לא נכתב לדיסק (${writeError.message}). מה שנשמר נשמר כאן: ${result.path}`, 10000);
@@ -1727,7 +1737,7 @@ function libraryGroups(items) {
   if (groupMode === 'none') return [['כל הקבצים', items]];
   const groups = new Map();
   for (const item of items) {
-    const label = groupMode === 'type' ? (item.extension === 'png' ? 'תמונות' : 'סרטונים') : timeGroupLabel(item.modified);
+    const label = groupMode === 'type' ? ({ image: 'תמונות', document: 'מסמכים' }[item.kind] || 'סרטונים') : timeGroupLabel(item.modified);
     if (!groups.has(label)) groups.set(label, []);
     groups.get(label).push(item);
   }
@@ -1735,8 +1745,8 @@ function libraryGroups(items) {
 }
 
 function thumbnailMarkup(item, compact = false) {
-  const isImage = item.extension === 'png';
-  if (!item.thumbnail) return `${isImage ? '▣' : '▷'}`;
+  const isImage = item.kind === 'image';
+  if (!item.thumbnail) return item.kind === 'document' ? '▤' : `${isImage ? '▣' : '▷'}`;
   return `<img src="${item.thumbnail}" alt="תמונה מקדימה של ${escapeHtml(item.name)}">${!isImage && compact ? '<span class="play-overlay">▷</span>' : ''}`;
 }
 
@@ -1757,7 +1767,7 @@ function renderLibrary() {
       const row = document.createElement('div');
       row.className = 'library-item';
       const baseName = item.name.replace(/\.[^.]+$/, '');
-      const isImage = item.extension === 'png';
+      const isImage = item.kind === 'image';
       const editButton = isImage ? '<button class="gold-button edit-image">עריכה</button><button class="ghost ocr">OCR</button><button class="ghost pin">הצמדה</button>' : '<button class="gold-button edit-video">עריכת וידאו</button><button class="ghost analyze">איכות</button><button class="ghost transcribe">תמלול</button>';
       const metadata = item.metadata || {};
       const metaBadges = [metadata.favorite ? '★ מועדף' : '', metadata.client ? `לקוח: ${escapeHtml(metadata.client)}` : '', ...(metadata.tags || []).map((tag) => `#${escapeHtml(tag)}`)].filter(Boolean).map((label) => `<span>${label}</span>`).join('');
@@ -1872,7 +1882,7 @@ function closeVideoEditor() {
 
 function recentLibraryItems(items) {
   const filtered = items.filter((item) => {
-    const isImage = item.extension === 'png';
+    const isImage = item.kind === 'image';
     return state.recentFilter === 'all' || (state.recentFilter === 'image' ? isImage : !isImage);
   });
   return [...filtered].sort((a, b) => {
@@ -1889,7 +1899,7 @@ function renderRecentLibrary(items = state.libraryItems) {
   if (!recent) return;
   const counts = {
     all: items.length,
-    image: items.filter((item) => item.extension === 'png').length
+    image: items.filter((item) => item.kind === 'image').length
   };
   counts.video = counts.all - counts.image;
   Object.entries(counts).forEach(([kind, count]) => {
@@ -1910,7 +1920,7 @@ function renderRecentLibrary(items = state.libraryItems) {
     const card = document.createElement('article');
     card.className = 'clip-card';
     card.dataset.searchText = item.name.toLowerCase();
-    const isImage = item.extension === 'png';
+    const isImage = item.kind === 'image';
     card.tabIndex = 0;
     card.setAttribute('aria-label', `${isImage ? 'צילום' : 'וידאו'}: ${item.name}`);
     card.innerHTML = `<div class="clip-thumb">${thumbnailMarkup(item, true)}<small>${isImage ? 'צילום' : 'וידאו'}</small></div><div class="clip-details"><b title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</b><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)}</small></div>`;
@@ -1922,7 +1932,7 @@ function renderRecentLibrary(items = state.libraryItems) {
 
 async function openLatestScreenshotEditor(mode = 'professional') {
   if (!state.libraryItems.length) await loadLibrary();
-  const latestImage = state.libraryItems.find((item) => item.extension === 'png');
+  const latestImage = state.libraryItems.find((item) => item.kind === 'image');
   if (!latestImage) {
     showPage('capture');
     $('[data-settings-tab="image"]')?.click();
@@ -1978,8 +1988,8 @@ async function refreshEngineStatus() {
 
 async function runSmartAction(action, button) {
   if (!state.libraryItems.length) await loadLibrary();
-  const image = state.libraryItems.find((item) => item.extension === 'png');
-  const video = state.libraryItems.find((item) => item.extension !== 'png');
+  const image = state.libraryItems.find((item) => item.kind === 'image');
+  const video = state.libraryItems.find((item) => item.kind === 'video');
   const target = ['ocr', 'pin'].includes(action) ? image : video || image;
   if (!target) throw new Error('אין עדיין קובץ מתאים בספרייה');
   button.disabled = true;
@@ -2128,6 +2138,7 @@ async function initialize() {
   $('#live-preview-toggle')?.addEventListener('click', () => setLivePreviewEnabled(!state.livePreviewEnabled));
   for (const [name, { control }] of Object.entries(AUTOMATIC_SWITCHES)) $(control)?.addEventListener('change', (event) => applyAutomaticSwitches({ [name]: event.target.checked }));
   $('#auto-beautify-style')?.addEventListener('change', (event) => applyAutomaticSwitches({ autoBeautifyStyle: event.target.value }));
+  $('#image-format')?.addEventListener('change', (event) => applyAutomaticSwitches({ imageFormat: event.target.value }));
   $('#live-preview-enabled')?.addEventListener('change', (event) => setLivePreviewEnabled(event.target.checked));
   $('#exclude-studio-window')?.addEventListener('change', (event) => setCaptureExclusion(event.target.checked));
   $('#camera-position').addEventListener('change', (event) => applyVisualCapturePreferences({ cameraPosition: event.target.value }));

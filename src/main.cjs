@@ -4,10 +4,11 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { captureFilePath, developerShortcut } = require('./main-utils.cjs');
+const { EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, captureFilePath, developerShortcut, extensionPattern, mediaKind } = require('./main-utils.cjs');
+const { pdfFromJpeg } = require('./pdf-utils.cjs');
 const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
-const { assertEditableImagePath, dataUrlBytes, editedCopyPath, projectPathFor } = require('./editor-utils.cjs');
+const { assertEditableImagePath, dataUrlBytes, editedCopyPath, imageMimeType, projectPathFor } = require('./editor-utils.cjs');
 const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
@@ -134,12 +135,13 @@ async function applyQuickbarPreferences(patch = {}) {
 async function runLibraryAction(filePath, action, options = {}) {
   const resolved = await assertLibraryFile(filePath);
   if (action === 'copy') {
-    if (/\.png$/i.test(resolved)) clipboard.writeImage(nativeImage.createFromPath(resolved));
+    const image = IMAGE_FILE.test(resolved) ? nativeImage.createFromPath(resolved) : null;
+    if (image && !image.isEmpty()) clipboard.writeImage(image);
     else clipboard.writeText(resolved);
     return { action, path: resolved };
   }
   if (action === 'ocr') {
-    if (!/\.png$/i.test(resolved)) return { action, skipped: true, reason: 'OCR מיועד לתמונה' };
+    if (!IMAGE_FILE.test(resolved)) return { action, skipped: true, reason: 'OCR מיועד לתמונה' };
     const result = await runOcr(resolved, { tessdataDirectory: await ensureOcrLanguageData() });
     await updateMetadata(resolved, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
     return { action, characters: result.text.length };
@@ -160,9 +162,9 @@ async function runLibraryAction(filePath, action, options = {}) {
 }
 
 async function pinImageWindow(resolved) {
-  if (!/\.png$/i.test(resolved)) throw new Error('אפשר להצמיד רק תמונה');
+  if (!IMAGE_FILE.test(resolved)) throw new Error('אפשר להצמיד רק תמונה');
   const bytes = await fs.readFile(resolved);
-  const dataUrl = `data:image/png;base64,${bytes.toString('base64')}`;
+  const dataUrl = `data:${imageMimeType(resolved)};base64,${bytes.toString('base64')}`;
   const image = nativeImage.createFromBuffer(bytes);
   const size = image.getSize();
   const scale = Math.min(1, 900 / Math.max(size.width, 1), 700 / Math.max(size.height, 1));
@@ -179,7 +181,7 @@ async function showCapturePreview(filePath) {
   const stat = await fs.stat(resolved);
   const extension = path.extname(resolved).slice(1).toLowerCase();
   const thumbnail = await thumbnailFor({ path: resolved, extension, modified: stat.mtimeMs, size: stat.size });
-  const kind = extension === 'png' ? 'image' : 'video';
+  const kind = mediaKind(resolved) || 'video';
   const durationSeconds = kind === 'video' ? (await readJson(`${resolved}.quality.json`))?.durationSeconds || null : null;
   recentCaptures = addRecentCapture(recentCaptures, { path: resolved, name: path.basename(resolved), kind, size: stat.size, durationSeconds, thumbnail, at: Date.now() });
   if (!quickbarPreferences.capturePreview) return { shown: false, recent: recentCaptures.length };
@@ -224,7 +226,7 @@ async function runCaptureCardAction(filePath, action) {
   return { action, path: resolved };
 }
 
-async function assertLibraryFile(filePath, extensions = /\.(png|webm|mp4)$/i) {
+async function assertLibraryFile(filePath, extensions = LIBRARY_FILE) {
   const directory = path.resolve(await ensureOutputDirectory());
   const resolved = path.resolve(String(filePath || ''));
   if (path.dirname(resolved).toLowerCase() !== directory.toLowerCase() || !extensions.test(resolved)) throw new Error('הקובץ אינו קובץ מדיה תקין בספרייה המקומית');
@@ -486,15 +488,18 @@ async function remuxWebm(webmPath) {
   return true;
 }
 
-async function convertRecording(webmPath, convertToMp4) {
+async function convertRecording(webmPath, requestedFormat) {
   await remuxWebm(webmPath);
-  if (!convertToMp4) {
+  // Older callers pass true/false for 'MP4 or keep WebM'.
+  const format = requestedFormat === true ? 'mp4' : ['mp4', 'mov', 'gif'].includes(requestedFormat) ? requestedFormat : 'webm';
+  if (format === 'gif') return convertToGif(webmPath);
+  if (format === 'webm') {
     const quality = await analyzeMedia(webmPath).catch((error) => ({ valid: false, error: error.message }));
     return { path: webmPath, webmPath, converted: false, quality };
   }
-  const mp4Path = webmPath.replace(/\.webm$/i, '.mp4');
-  const temporaryMp4Path = mp4Path.replace(/\.mp4$/i, '.partial');
-  const conversion = await runFfmpeg(webmPath, temporaryMp4Path);
+  const mp4Path = webmPath.replace(/\.webm$/i, `.${format}`);
+  const temporaryMp4Path = `${mp4Path}.partial`;
+  const conversion = await runFfmpeg(webmPath, temporaryMp4Path, format);
   if (conversion.ok) {
     await fs.rename(temporaryMp4Path, mp4Path);
     const quality = await analyzeMedia(mp4Path).catch((error) => ({ valid: false, error: error.message }));
@@ -503,6 +508,21 @@ async function convertRecording(webmPath, convertToMp4) {
   await fs.rm(temporaryMp4Path, { force: true }).catch(() => {});
   const quality = await analyzeMedia(webmPath).catch((error) => ({ valid: false, error: error.message }));
   return { path: webmPath, webmPath, converted: false, conversionError: conversion.error, quality };
+}
+
+// Animated GIF: 15 fps, at most 1280 px wide, one optimised palette per clip (much sharper than the default palette).
+async function convertToGif(webmPath) {
+  const gifPath = webmPath.replace(/\.webm$/i, '.gif');
+  const temporaryPath = `${gifPath}.partial`;
+  const result = await runHidden('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', webmPath, '-vf', "fps=15,scale='min(1280,iw)':-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=5", '-loop', '0', '-f', 'gif', temporaryPath], { timeoutMs: 10 * 60_000 });
+  if (!result.ok) {
+    await fs.rm(temporaryPath, { force: true }).catch(() => {});
+    const quality = await analyzeMedia(webmPath).catch((error) => ({ valid: false, error: error.message }));
+    return { path: webmPath, webmPath, converted: false, conversionError: result.error || 'המרה ל-GIF נכשלה', quality };
+  }
+  await fs.rename(temporaryPath, gifPath);
+  const quality = await analyzeMedia(gifPath).catch((error) => ({ valid: false, error: error.message }));
+  return { path: gifPath, webmPath, converted: true, encoder: 'gif', hardwareEncoder: false, quality };
 }
 
 async function getSources() {
@@ -558,7 +578,7 @@ async function getEncoderCapabilities(force = false) {
   return encoderCapabilities;
 }
 
-async function runFfmpeg(inputPath, outputPath) {
+async function runFfmpeg(inputPath, outputPath, container = 'mp4') {
   const capabilities = await getEncoderCapabilities();
   const candidates = encoderCandidates(capabilities.encoders);
   let lastError = '';
@@ -567,7 +587,7 @@ async function runFfmpeg(inputPath, outputPath) {
     const result = await runProcess('ffmpeg', [
       '-y', '-hide_banner', '-loglevel', 'error', '-i', inputPath,
       ...encoder.args, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k',
-      '-movflags', '+faststart', '-f', 'mp4', outputPath
+      '-movflags', '+faststart', '-f', container, outputPath
     ]);
     if (result.ok) return { ok: true, encoder: encoder.id, hardware: encoder.hardware };
     lastError = result.error;
@@ -716,7 +736,8 @@ async function createThumbnail(item) {
     await fs.mkdir(cacheDirectory, { recursive: true });
     const cacheKey = crypto.createHash('sha1').update(`${item.path}|${item.modified}|${item.size}`).digest('hex');
     const thumbnailPath = path.join(cacheDirectory, `${cacheKey}.jpg`);
-    if (item.extension === 'png') {
+    if (item.extension === 'pdf') return null;
+    if (['png', 'jpg'].includes(item.extension)) {
       const cached = await fs.readFile(thumbnailPath).catch(() => null);
       if (cached) return `data:image/jpeg;base64,${cached.toString('base64')}`;
       const image = nativeImage.createFromPath(item.path);
@@ -746,14 +767,14 @@ async function createThumbnail(item) {
 async function listLibrary() {
   const directory = await ensureOutputDirectory();
   const entries = await fs.readdir(directory, { withFileTypes: true });
-  const supported = entries.filter((entry) => entry.isFile() && /\.(png|webm|mp4)$/i.test(entry.name));
+  const supported = entries.filter((entry) => entry.isFile() && LIBRARY_FILE.test(entry.name));
   const items = await Promise.all(supported.map(async (entry) => {
     const fullPath = path.join(directory, entry.name);
     const stat = await fs.stat(fullPath);
     let edited = false;
-    if (/\.png$/i.test(entry.name)) edited = Boolean(await readJson(projectPathFor(fullPath)));
+    if (IMAGE_FILE.test(entry.name)) edited = Boolean(await readJson(projectPathFor(fullPath)));
     const metadata = await readJson(`${fullPath}.meta.json`) || {};
-    return { name: entry.name, path: fullPath, size: stat.size, modified: stat.mtimeMs, extension: path.extname(entry.name).slice(1).toLowerCase(), edited, metadata };
+    return { name: entry.name, path: fullPath, size: stat.size, modified: stat.mtimeMs, extension: path.extname(entry.name).slice(1).toLowerCase(), kind: mediaKind(entry.name), edited, metadata };
   }));
   const sorted = items.sort((a, b) => b.modified - a.modified);
   return Promise.all(sorted.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item) })));
@@ -793,10 +814,12 @@ function registerIpc() {
     pendingCapture = { sourceId: options.sourceId, includeSystemAudio: Boolean(options.includeSystemAudio) };
     return true;
   });
-  ipcMain.handle('file:save-screenshot', async (_event, bytes) => {
+  ipcMain.handle('file:save-screenshot', async (_event, bytes, options = {}) => {
     const directory = await ensureOutputDirectory();
-    const filePath = captureFilePath(directory, 'screenshot', 'png');
-    await fs.writeFile(filePath, Buffer.from(bytes));
+    const format = ['png', 'jpg', 'webp', 'pdf'].includes(options.format) ? options.format : 'png';
+    const filePath = captureFilePath(directory, 'screenshot', format);
+    const data = Buffer.from(bytes);
+    await fs.writeFile(filePath, format === 'pdf' ? pdfFromJpeg(data, Number(options.width) || 1, Number(options.height) || 1) : data);
     return { path: filePath };
   });
   ipcMain.handle('file:save-recording', async (_event, bytes, convertToMp4) => {
@@ -910,7 +933,7 @@ function registerIpc() {
     return { point, displayId: String(display.id), bounds: display.bounds };
   });
   ipcMain.handle('library:list', listLibrary);
-  const openableLibraryFile = /\.(png|webm|mp4|m4a)$/i;
+  const openableLibraryFile = extensionPattern([...LIBRARY_FILE.source.match(/\(([^)]+)\)/)[1].split('|'), 'm4a']);
   ipcMain.handle('library:open', async (_event, filePath) => shell.openPath(await assertLibraryFile(filePath, openableLibraryFile)));
   ipcMain.handle('library:show', async (_event, filePath) => shell.showItemInFolder(await assertLibraryFile(filePath, openableLibraryFile)));
   ipcMain.handle('library:rename', async (_event, filePath, requestedName) => {
@@ -947,7 +970,7 @@ function registerIpc() {
     return { ...share, path: resolved };
   });
   ipcMain.handle('library:analyze', async (_event, filePath) => {
-    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
     const quality = await analyzeMedia(resolved);
     await updateMetadata(resolved, { quality });
     return quality;
@@ -956,7 +979,8 @@ function registerIpc() {
   ipcMain.handle('editor:detect-sensitive', async (_event, dataUrl) => {
     const imagePath = path.join(os.tmpdir(), `aurum-redact-${crypto.randomUUID()}.png`);
     // OCR reads small interface text far better enlarged; boxes are scaled back to the original pixels.
-    const image = nativeImage.createFromBuffer(dataUrlBytes(dataUrl));
+    const image = nativeImage.createFromDataURL(String(dataUrl || ''));
+    if (image.isEmpty()) throw new Error('נתוני התמונה אינם תקינים');
     const { width } = image.getSize();
     const scale = width && width < 2200 ? 2 : 1;
     await fs.writeFile(imagePath, scale === 1 ? image.toPNG() : image.resize({ width: width * scale, quality: 'best' }).toPNG());
@@ -969,19 +993,19 @@ function registerIpc() {
     }
   });
   ipcMain.handle('library:ocr', async (_event, filePath) => {
-    const resolved = await assertLibraryFile(filePath, /\.png$/i);
+    const resolved = await assertLibraryFile(filePath, IMAGE_FILE);
     const result = await runOcr(resolved, { tessdataDirectory: await ensureOcrLanguageData() });
     await updateMetadata(resolved, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
     return result;
   });
   ipcMain.handle('library:transcribe', async (_event, filePath) => {
-    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
     const result = await transcribeMedia(resolved, { language: 'he' });
     await updateMetadata(resolved, { transcriptText: result.text, transcriptPath: result.transcriptPath, srtPath: result.srtPath, transcribedAt: new Date().toISOString() });
     return result;
   });
   ipcMain.handle('library:waveform', async (_event, filePath) => {
-    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
     const cacheDirectory = path.join(app.getPath('userData'), 'waveforms');
     await fs.mkdir(cacheDirectory, { recursive: true });
     const outputPath = path.join(cacheDirectory, `${crypto.createHash('sha1').update(resolved).digest('hex')}.png`);
@@ -992,7 +1016,7 @@ function registerIpc() {
     }
     return `data:image/png;base64,${(await fs.readFile(outputPath)).toString('base64')}`;
   });
-  ipcMain.handle('library:pin', async (_event, filePath) => pinImageWindow(await assertLibraryFile(filePath, /\.png$/i)));
+  ipcMain.handle('library:pin', async (_event, filePath) => pinImageWindow(await assertLibraryFile(filePath, IMAGE_FILE)));
   ipcMain.handle('video:edit', async (_event, filePath, options) => {
     const directory = path.resolve(await ensureOutputDirectory());
     const resolved = path.resolve(filePath);
@@ -1003,14 +1027,14 @@ function registerIpc() {
     return { path: outputPath };
   });
   ipcMain.handle('video:timeline-load', async (_event, filePath) => {
-    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
     const quality = await analyzeMedia(resolved, { countFrames: false, persist: false });
     const project = await readJson(`${resolved}.timeline.json`);
     const cursorSamples = await readJson(`${resolved}.cursor.json`) || [];
     return { project: normalizeTimelineProject(project || {}, quality.durationSeconds), cursorSamples, quality };
   });
   ipcMain.handle('video:timeline-save', async (_event, filePath, candidate) => {
-    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
     const quality = await analyzeMedia(resolved, { countFrames: false, persist: false });
     const project = normalizeTimelineProject(candidate, quality.durationSeconds);
     const projectPath = `${resolved}.timeline.json`;
@@ -1018,13 +1042,13 @@ function registerIpc() {
     return { project, projectPath };
   });
   ipcMain.handle('video:timeline-export', async (_event, filePath, candidate) => {
-    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
     const outputPath = path.join(path.dirname(resolved), `${path.basename(resolved, path.extname(resolved))} — Timeline.mp4`);
     const result = await exportTimeline(resolved, outputPath, candidate);
     await fs.writeFile(`${resolved}.timeline.json`, JSON.stringify(result.project, null, 2), 'utf8');
     return result;
   });
-  ipcMain.handle('video:detect-silence', async (_event, filePath, options) => detectSilences(await assertLibraryFile(filePath, /\.(webm|mp4)$/i), options));
+  ipcMain.handle('video:detect-silence', async (_event, filePath, options) => detectSilences(await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE), options));
   ipcMain.handle('workflow:action', async (_event, filePath, action, options = {}) => {
     if (!WORKFLOW_ACTIONS.has(action)) throw new Error('פעולת אוטומציה אינה מוכרת');
     return runLibraryAction(filePath, action, options);
@@ -1033,7 +1057,7 @@ function registerIpc() {
     const sourcePath = assertEditableImagePath(filePath, await ensureOutputDirectory());
     const bytes = await fs.readFile(sourcePath);
     const project = await readJson(projectPathFor(sourcePath));
-    return { path: sourcePath, name: path.basename(sourcePath), dataUrl: `data:image/png;base64,${bytes.toString('base64')}`, project };
+    return { path: sourcePath, name: path.basename(sourcePath), dataUrl: `data:${imageMimeType(sourcePath)};base64,${bytes.toString('base64')}`, project };
   });
   ipcMain.handle('editor:save', async (_event, payload) => {
     const sourcePath = assertEditableImagePath(payload.sourcePath, await ensureOutputDirectory());

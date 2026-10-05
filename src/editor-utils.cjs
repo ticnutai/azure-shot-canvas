@@ -1,14 +1,19 @@
 const path = require('node:path');
+const { IMAGE_FILE } = require('./main-utils.cjs');
 
 function assertEditableImagePath(filePath, outputDirectory) {
   const resolved = path.resolve(String(filePath || ''));
   const library = path.resolve(outputDirectory);
   if (path.dirname(resolved).toLowerCase() !== library.toLowerCase()) throw new Error('ניתן לערוך רק תמונה מהספרייה המקומית');
-  if (path.extname(resolved).toLowerCase() !== '.png') throw new Error('עורך התמונות תומך כרגע בקובצי PNG');
+  if (!IMAGE_FILE.test(resolved)) throw new Error('עורך התמונות פותח רק תמונות (PNG, JPG, WEBP)');
   return resolved;
 }
 
-function projectPathFor(imagePath) { return imagePath.replace(/\.png$/i, '.aurum.json'); }
+// Any image extension is replaced. (Replacing only '.png' returned a JPG's own path, so saving the project would overwrite the image.)
+function projectPathFor(imagePath) { return imagePath.replace(/\.[^.\\/]+$/, '.aurum.json'); }
+
+const IMAGE_MIME = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
+function imageMimeType(imagePath) { return IMAGE_MIME[path.extname(imagePath).slice(1).toLowerCase()] || 'image/png'; }
 
 function editedCopyPath(imagePath, exists = () => false) {
   const directory = path.dirname(imagePath);
@@ -25,4 +30,4 @@ function dataUrlBytes(dataUrl) {
   return Buffer.from(match[1], 'base64');
 }
 
-module.exports = { assertEditableImagePath, dataUrlBytes, editedCopyPath, projectPathFor };
+module.exports = { assertEditableImagePath, dataUrlBytes, editedCopyPath, imageMimeType, projectPathFor };

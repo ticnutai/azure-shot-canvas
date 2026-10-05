@@ -1,6 +1,18 @@
 const path = require('node:path');
 
-const ALLOWED_EXTENSIONS = new Set(['png', 'webm', 'mp4']);
+// The one place that knows which files the studio makes and lists. Everything else asks here.
+const MEDIA_EXTENSIONS = Object.freeze({ image: ['png', 'jpg', 'webp'], video: ['webm', 'mp4', 'mov', 'gif'], document: ['pdf'] });
+const ALLOWED_EXTENSIONS = new Set(Object.values(MEDIA_EXTENSIONS).flat());
+const extensionPattern = (extensions) => new RegExp(`\\.(${extensions.join('|')})$`, 'i');
+const LIBRARY_FILE = extensionPattern([...ALLOWED_EXTENSIONS]);
+const IMAGE_FILE = extensionPattern(MEDIA_EXTENSIONS.image);
+// GIF is a finished animation: it can be listed and opened, not cut in the video editor.
+const EDITABLE_VIDEO_FILE = extensionPattern(['webm', 'mp4', 'mov']);
+
+function mediaKind(fileNameOrExtension) {
+  const extension = String(fileNameOrExtension || '').toLowerCase().replace(/^.*\./, '');
+  return Object.keys(MEDIA_EXTENSIONS).find((kind) => MEDIA_EXTENSIONS[kind].includes(extension)) || null;
+}
 
 function safeExtension(extension) {
   const normalized = String(extension || '').toLowerCase().replace(/^\./, '');
@@ -42,4 +54,4 @@ function developerShortcut(input = {}) {
   return null;
 }
 
-module.exports = { captureFilePath, developerShortcut, fileStamp, qualityPreset, safeExtension };
+module.exports = { EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, MEDIA_EXTENSIONS, captureFilePath, developerShortcut, extensionPattern, fileStamp, mediaKind, qualityPreset, safeExtension };

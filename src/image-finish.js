@@ -16,7 +16,7 @@
     return { bytes: await blob.arrayBuffer(), width: canvas.width, height: canvas.height };
   };
 
-  async function beautify(dataUrl, style = 'ocean') {
+  async function beautifyCanvas(dataUrl, style = 'ocean') {
     const image = await loadImage(dataUrl);
     const padding = Math.round(Math.max(image.width, image.height) * 0.06);
     const radius = Math.round(Math.min(image.width, image.height) * 0.025) + 6;
@@ -45,7 +45,17 @@
     context.clip();
     context.drawImage(image, padding, padding);
     context.restore();
-    return toPng(canvas);
+    return canvas;
+  }
+
+  const beautify = async (dataUrl, style) => toPng(await beautifyCanvas(dataUrl, style));
+
+  // Encodes the finished canvas in the chosen format. PDF pages embed a JPEG (the main process wraps it).
+  const ENCODINGS = { png: ['image/png'], jpg: ['image/jpeg', 0.92], webp: ['image/webp', 0.92], pdf: ['image/jpeg', 0.92] };
+  async function encode(canvas, format = 'png') {
+    const [type, quality] = ENCODINGS[format] || ENCODINGS.png;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+    return { bytes: await blob.arrayBuffer(), width: canvas.width, height: canvas.height };
   }
 
   // Burns black boxes into a copy of the source canvas; the original pixels under them are gone for good.
@@ -60,5 +70,5 @@
     return canvas;
   }
 
-  window.aurumImageFinish = { backgrounds: Object.keys(BACKGROUNDS), beautify, redact, toPng };
+  window.aurumImageFinish = { backgrounds: Object.keys(BACKGROUNDS), formats: Object.keys(ENCODINGS), beautify, beautifyCanvas, encode, redact, toPng };
 })();
