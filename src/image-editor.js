@@ -65,6 +65,7 @@
     shell.classList.remove('hidden');
     shell.dataset.editorReady = 'false';
     document.documentElement.dataset.editorOpen = 'true';
+    document.documentElement.dataset.activePage = 'edit';
     document.querySelectorAll('.sidebar .nav-item').forEach((button) => button.classList.toggle('active', button.dataset.action === 'edit'));
     setMode(requestedMode);
     createEngine();
@@ -100,6 +101,7 @@
     document.documentElement.dataset.editorOpen = 'false';
     const content = document.querySelector('.content-shell');
     const activePage = content?.dataset.activePage || 'capture';
+    document.documentElement.dataset.activePage = activePage;
     const activeNavigation = content?.dataset.activeNavigation || activePage;
     document.querySelectorAll('.sidebar .nav-item').forEach((button) => {
       const action = button.dataset.action || button.dataset.page;

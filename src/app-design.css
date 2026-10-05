@@ -1,0 +1,256 @@
+/* =====================================================================
+   מערכת העיצוב של אורום — שלוש שכבות נפרדות (לפי מדריך "תוכנה מקצועית"):
+   1. פריסה      html[data-layout]  — מבנה החלון: סרגל צד, סרגל עליון, צפיפות, טיפוגרפיה
+   2. צבעים      html[data-theme]   — ערכות הצבע הקיימות + זוג בהיר/כהה לכל פריסה
+   3. ערכת עיצוב html[data-kit]     — צורת הרכיבים: פינות, ריפוד, מסגרות, צללים
+   + צבע המסך    html[data-active-page] → --tool
+
+   פריסה וערכה לא קובעות צבעים; הן קוראות רק את משתני הצבע של הערכה הפעילה.
+   ברירת המחדל (למען + "לפי הפריסה") לא משנה דבר במראה המקורי.
+   ===================================================================== */
+
+/* ---------- ערכי ברירת מחדל = המראה המקורי של אורום ---------- */
+:root {
+  --ui-font: "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 86px;
+  --ui-sidebar-pad: 23px 8px 14px;
+  --ui-nav-h: 68px;
+  --ui-nav-icon: 23px;
+  --ui-topbar-h: 74px;
+  --ui-page-pad: 32px;
+  --ui-gap: 20px;
+  --ui-radius-panel: 24px;
+  --ui-radius-card: 16px;
+  --ui-radius-control: 14px;
+  --ui-control-h: 39px;
+  --ui-shadow: none;
+  --ui-border: 1px solid var(--line);
+  --ui-small: 11px;
+  --ui-label: 12px;
+  --ui-heading-weight: 600;
+  --tool: var(--gold);
+}
+
+/* צבע לכל מסך — רצף בין אייקון הניווט לכותרת המסך (מאופק, משמש רק בערכת "אייקונים" ובסימון הפעיל) */
+html[data-active-page="capture"] { --tool: #e5484d; }
+html[data-active-page="edit"] { --tool: #8e4ec6; }
+html[data-active-page="library"] { --tool: #0b84e0; }
+html[data-active-page="tools"] { --tool: #12a594; }
+html[data-active-page="settings"] { --tool: #6e7b8b; }
+
+/* =====================================================================
+   1. זוגות צבע לכל פריסה (בהיר + כהה). צבע הדגשה אחד, כל השאר אפורים ניטרליים.
+   ===================================================================== */
+[data-theme="pro-light"] { color-scheme: light; --bg: #f5f5f5; --top: #ffffff; --panel: #ffffff; --panel-2: #f3f3f3; --line: #dedede; --line-soft: #ececec; --text: #222222; --muted: #616161; --gold: #0265dc; --gold-2: #0054b6; --accent-text: #ffffff; --success: #12805c; --danger: #d7373f; --shadow: #0000001a; }
+[data-theme="pro-dark"] { color-scheme: dark; --bg: #1c1c1c; --top: #262626; --panel: #262626; --panel-2: #2f2f2f; --line: #424242; --line-soft: #343434; --text: #ebebeb; --muted: #a8a8a8; --gold: #3d8eff; --gold-2: #2c7bf0; --accent-text: #ffffff; --success: #2fb383; --danger: #f2555a; --shadow: #00000080; }
+[data-theme="scan-light"] { color-scheme: light; --bg: #eef1f4; --top: #fbfcfd; --panel: #ffffff; --panel-2: #f2f6fa; --line: #d2d8de; --line-soft: #e3e8ed; --text: #1d2730; --muted: #5d6874; --gold: #0b6ab3; --gold-2: #095a99; --accent-text: #ffffff; --success: #157f4f; --danger: #c4314b; --shadow: #1d273020; }
+[data-theme="scan-dark"] { color-scheme: dark; --bg: #1b1f23; --top: #23282d; --panel: #252a30; --panel-2: #2b3138; --line: #3f474f; --line-soft: #30363d; --text: #e3e7eb; --muted: #9aa4ae; --gold: #3aa0f2; --gold-2: #2589d8; --accent-text: #0c1620; --success: #3fbf86; --danger: #f06a7f; --shadow: #00000080; }
+[data-theme="classic-light"] { color-scheme: light; --bg: #f4f7fd; --top: #ffffff; --panel: #ffffff; --panel-2: #f1f5fc; --line: #e1e7f1; --line-soft: #ebf0f7; --text: #161f33; --muted: #6b7591; --gold: #2f5bd3; --gold-2: #244bb6; --accent-text: #ffffff; --success: #0f9d6e; --danger: #d94a4a; --shadow: #161f3322; }
+[data-theme="classic-dark"] { color-scheme: dark; --bg: #0e1424; --top: #141c30; --panel: #162036; --panel-2: #1b2640; --line: #2a3654; --line-soft: #202b45; --text: #e9eef8; --muted: #9aa6c4; --gold: #6b8ef0; --gold-2: #5378e3; --accent-text: #0b1120; --success: #3fcf9b; --danger: #f07070; --shadow: #00000080; }
+[data-theme="elegant-light"] { color-scheme: light; --bg: #f6f6f8; --top: #fbfbfd; --panel: #ffffff; --panel-2: #f4f4f6; --line: #e3e3e8; --line-soft: #ededf1; --text: #1d1d1f; --muted: #6e6e73; --gold: #0071e3; --gold-2: #0062c4; --accent-text: #ffffff; --success: #248a3d; --danger: #d70015; --shadow: #00000014; }
+[data-theme="elegant-dark"] { color-scheme: dark; --bg: #1c1c1e; --top: #232325; --panel: #2c2c2e; --panel-2: #323234; --line: #3d3d40; --line-soft: #333336; --text: #f5f5f7; --muted: #a1a1a6; --gold: #0a84ff; --gold-2: #0071e3; --accent-text: #ffffff; --success: #30d158; --danger: #ff453a; --shadow: #00000080; }
+[data-theme="office-light"] { color-scheme: light; --bg: #f3f2f1; --top: #ffffff; --panel: #ffffff; --panel-2: #f8f8f8; --line: #e1dfdd; --line-soft: #edebe9; --text: #242424; --muted: #616161; --gold: #185abd; --gold-2: #124a9e; --accent-text: #ffffff; --success: #107c10; --danger: #c50f1f; --shadow: #00000018; }
+[data-theme="office-dark"] { color-scheme: dark; --bg: #1f1f1f; --top: #292929; --panel: #292929; --panel-2: #303030; --line: #444444; --line-soft: #383838; --text: #f0f0f0; --muted: #adadad; --gold: #4f8fe8; --gold-2: #3b7bd6; --accent-text: #ffffff; --success: #54b054; --danger: #f1707b; --shadow: #00000080; }
+[data-theme="modern-light"] { color-scheme: light; --bg: #fbfbfc; --top: #ffffff; --panel: #ffffff; --panel-2: #f7f7f8; --line: #e6e6ea; --line-soft: #efeff2; --text: #18181b; --muted: #71717a; --gold: #5e6ad2; --gold-2: #4f5bc4; --accent-text: #ffffff; --success: #16a34a; --danger: #e5484d; --shadow: #0000000f; }
+[data-theme="modern-dark"] { color-scheme: dark; --bg: #0f0f11; --top: #141417; --panel: #17171a; --panel-2: #1c1c20; --line: #2a2a30; --line-soft: #212126; --text: #ededf0; --muted: #8b8b94; --gold: #7c85ea; --gold-2: #6b74de; --accent-text: #0f0f11; --success: #3dd68c; --danger: #ff6369; --shadow: #00000099; }
+
+/* המיניאטורות בגלריה מקבלות את צבעי הערכה דרך data-theme על האלמנט עצמו */
+.layout-mini { --m-bg: var(--bg); --m-top: var(--top); --m-side: var(--panel-2); --m-card: var(--panel); --m-accent: var(--gold); }
+.layout-mini[data-theme="midnight"] { --m-bg: #031126; --m-top: #151b22; --m-side: #06172f; --m-card: #081c38; --m-accent: #f4bc3f; }
+.layout-mini[data-theme="porcelain"] { --m-bg: #f1eee7; --m-top: #fffdf8; --m-side: #f6f1e8; --m-card: #fffefa; --m-accent: #bc8727; }
+.layout-mini[data-layout-preview="classic"] { --m-side: #18213a; }
+.layout-mini[data-layout-preview="finereader"] { --m-top: var(--gold); }
+.layout-mini[data-layout-preview="modern"] { --m-side: var(--bg); }
+/* צבעים קשיחים בעיצוב הבסיס שנכתבו לנייבי-זהב — מותאמים לכל ערכות הפריסות */
+html:is([data-theme$="-light"], [data-theme$="-dark"]) .record-main { background: var(--gold); color: var(--accent-text); }
+html:is([data-theme$="-light"], [data-theme$="-dark"]) .logo-mark { background: var(--gold); color: var(--accent-text); }
+html:is([data-theme$="-light"], [data-theme$="-dark"]) .clip-thumb { background: var(--panel-2); }
+html:is([data-theme$="-light"], [data-theme$="-dark"]) .switch-row i { background: color-mix(in srgb, var(--muted) 45%, var(--panel-2)); }
+html:is([data-theme$="-light"], [data-theme$="-dark"]) .switch-row i:after { background: var(--panel); box-shadow: 0 1px 2px #0003; }
+html:is([data-theme$="-light"], [data-theme$="-dark"]) .switch-row input:checked + i:after { background: var(--accent-text); }
+html[data-theme$="-light"] .modal { background: #1d273066; }
+html[data-theme$="-light"] .preview-wrap #selection-box { background: color-mix(in srgb, var(--gold) 18%, transparent); }
+
+/* =====================================================================
+   2. התנהגות של תוכנה אמיתית (כל הפריסות)
+   ===================================================================== */
+.sidebar, .topbar, .settings-tabs, .source-toolbar, .transport-bar, .section-heading, .nav-item, .editor-tools { user-select: none; -webkit-user-select: none; }
+img, svg { -webkit-user-drag: none; }
+:focus:not(:focus-visible) { outline: none; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+:is(#recording-time, #recording-size, #recording-segments, #editor-zoom, output, .tabular, kbd) { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+@media (forced-colors: active) {
+  :is(.panel, .settings-rail, .ghost, .primary, .gold-button) { border: 1px solid CanvasText; }
+  :is(.primary, .gold-button, .record-main) { background: Highlight; color: HighlightText; }
+}
+
+/* =====================================================================
+   3. השכבה המשותפת: חלה בכל פריסה שאינה "למען" או כשנבחרה ערכה.
+      כל הפריסות והערכות רק מחליפות משתנים — הכללים כתובים פעם אחת.
+   ===================================================================== */
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) {
+  /* תנועה קצרה כמו בתוכנות Windows: תגובה מיידית בלי "ריקוד" */
+  --ui-motion: 83ms;
+}
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) :is(button, [role="button"], .nav-item, select) { transition-duration: var(--ui-motion); }
+
+html[data-layout]:not([data-layout="lemaan"]) body { font-family: var(--ui-font); }
+html[data-layout]:not([data-layout="lemaan"]) .app-shell { grid-template-columns: minmax(0, 1fr) var(--ui-sidebar-w); }
+html[data-layout]:not([data-layout="lemaan"]) .sidebar { padding: var(--ui-sidebar-pad); border-right: 0; border-left: 1px solid var(--line); }
+html[data-layout]:not([data-layout="lemaan"]) .nav-item { height: var(--ui-nav-h); }
+html[data-layout]:not([data-layout="lemaan"]) .nav-item span { font-size: var(--ui-nav-icon); }
+html[data-layout]:not([data-layout="lemaan"]) .nav-item small { font-size: var(--ui-small); font-weight: 500; line-height: 1.2; max-width: 100%; text-align: center; }
+/* ריחוף עדין ושונה מהמצב הפעיל — בבסיס שניהם נראו זהים */
+html[data-layout]:not([data-layout="lemaan"]) .nav-item:hover:not(.active):not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); border-color: transparent; }
+html[data-layout]:not([data-layout="lemaan"]) .topbar { height: var(--ui-topbar-h); padding: 0 calc(var(--ui-page-pad) * .75); }
+html[data-layout]:not([data-layout="lemaan"]) .content-shell { padding: var(--ui-page-pad); gap: var(--ui-gap); }
+html[data-layout]:not([data-layout="lemaan"]) :is(h1, h2, h3, .wordmark h1, .section-heading h2, .page-panel h2) { font-weight: var(--ui-heading-weight); letter-spacing: 0; }
+/* קריאות: טקסט עזר לא קטן מ-11 פיקסלים (המקור השתמש ב-7–10) */
+html[data-layout]:not([data-layout="lemaan"]) :is(.field-row small, .switch-row small, .section-heading p, .clip-card > small, .library-item small, .countdown-note, .preview-status span, .wordmark p, .settings-cards small, .empty-preview p, .system-panel > div, .shortcut-grid div, .choice-group label) { font-size: var(--ui-small); }
+html[data-layout]:not([data-layout="lemaan"]) :is(.field-row b, .switch-row b, .range-field b, .settings-tab, .source-type, .refresh-button, .capture-chips button, .clip-card b, .text-button, .settings-cards b) { font-size: var(--ui-label); }
+
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) :is(.panel, .settings-rail, .page-panel, .region-dialog, .video-editor-dialog, .theme-menu) { border-radius: var(--ui-radius-panel); box-shadow: var(--ui-shadow); border: var(--ui-border); }
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) :is(.ghost, .primary, .gold-button, .danger-button, .source-type, .refresh-button, .capture-chips button, .pause-main, .record-main, .profile-button, .search-box, .field-row select, .device-selects select, .settings-tabs, .page-tab) { border-radius: var(--ui-radius-control); }
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) .settings-tab { border-radius: max(2px, calc(var(--ui-radius-control) - 4px)); }
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) :is(.source-type, .refresh-button, .capture-chips button, .search-box, .profile-button) { height: var(--ui-control-h); }
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) :is(.clip-thumb, .source-card, .library-item, .settings-cards button, .shortcut-grid div, .choice-group label, .file-icon, .empty-preview > span, .snapshot-fab, .expand-button) { border-radius: var(--ui-radius-card); }
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) .nav-item { border-radius: var(--ui-radius-control); }
+
+/* =====================================================================
+   4. שבע הפריסות
+   ===================================================================== */
+
+/* --- מקצועי: אפורים ניטרליים, כחול אחד, סרגל צר עם אייקונים, קווים דקים --- */
+html[data-layout="acrobat"] {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 78px; --ui-sidebar-pad: 10px 6px; --ui-nav-h: 60px; --ui-nav-icon: 19px;
+  --ui-topbar-h: 52px; --ui-page-pad: 16px; --ui-gap: 16px;
+  --ui-radius-panel: 8px; --ui-radius-card: 6px; --ui-radius-control: 6px; --ui-control-h: 32px;
+  --ui-shadow: 0 1px 2px #0000000d;
+}
+html[data-layout="acrobat"] .sidebar { background: var(--top); }
+html[data-layout="acrobat"] .nav-item.active { color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, transparent); border-color: transparent; box-shadow: inset -3px 0 0 var(--gold); }
+html[data-layout="acrobat"] .content-shell { max-width: none; }
+
+/* --- סריקה ומסמכים: צפוף, פינות כמעט ישרות, סרגל כלים בסגנון רצועה --- */
+html[data-layout="finereader"] {
+  --ui-font: "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 74px; --ui-sidebar-pad: 8px 4px; --ui-nav-h: 56px; --ui-nav-icon: 18px;
+  --ui-topbar-h: 44px; --ui-page-pad: 12px; --ui-gap: 12px;
+  --ui-radius-panel: 4px; --ui-radius-card: 3px; --ui-radius-control: 3px; --ui-control-h: 30px;
+  --ui-shadow: 0 1px 2px #0000001a;
+}
+html[data-layout="finereader"] .sidebar { background: var(--panel-2); border-left: 1px solid var(--line); }
+html[data-layout="finereader"] .nav-item.active { background: color-mix(in srgb, var(--gold) 14%, var(--panel)); color: var(--gold-2); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+html[data-layout="finereader"] .topbar { background: var(--gold); border-bottom-color: var(--gold-2); }
+html[data-layout="finereader"] .topbar :is(.wordmark h1, .wordmark h1 b, .wordmark p, .icon-button, .theme-button-labeled) { color: var(--accent-text); }
+html[data-layout="finereader"] .topbar .search-box { background: color-mix(in srgb, var(--accent-text) 92%, transparent); border-color: transparent; }
+html[data-layout="finereader"] .topbar .search-box input { color: #1d2730; }
+html[data-layout="finereader"] .topbar .pro-badge { background: color-mix(in srgb, var(--accent-text) 22%, transparent); color: var(--accent-text); }
+html[data-layout="finereader"] :is(.source-toolbar, .transport-bar) { background: var(--panel-2); }
+html[data-layout="finereader"] .content-shell { max-width: none; }
+
+/* --- קלאסי: סרגל צד כהה קבוע, כרטיסים לבנים, כחול --- */
+html[data-layout="classic"] {
+  --ui-sidebar-w: 96px; --ui-sidebar-pad: 18px 10px; --ui-nav-h: 64px; --ui-nav-icon: 21px;
+  --ui-topbar-h: 60px; --ui-page-pad: 24px; --ui-gap: 20px;
+  --ui-radius-panel: 12px; --ui-radius-card: 10px; --ui-radius-control: 8px; --ui-control-h: 34px;
+  --ui-shadow: 0 2px 8px -2px color-mix(in srgb, var(--text) 12%, transparent);
+}
+html[data-layout="classic"] .sidebar { background: #18213a; border-left: 0; }
+html[data-layout="classic"] .nav-item { color: #aab6d3; }
+html[data-layout="classic"] .nav-item:hover:not(.active):not(:disabled) { color: #ffffff; background: #ffffff12; border-color: transparent; }
+html[data-layout="classic"] .nav-item.active { color: #ffffff; background: var(--gold); border-color: transparent; }
+html[data-layout="classic"] .help-button { color: #aab6d3; }
+
+/* --- אלגנטי: סרגל צד שקוף-למחצה, מרווח ושקט, פינות רכות --- */
+html[data-layout="apple"] {
+  --ui-font: "Segoe UI Variable Display", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 92px; --ui-sidebar-pad: 22px 10px; --ui-nav-h: 62px; --ui-nav-icon: 20px;
+  --ui-topbar-h: 56px; --ui-page-pad: 28px; --ui-gap: 24px;
+  --ui-radius-panel: 12px; --ui-radius-card: 10px; --ui-radius-control: 8px; --ui-control-h: 32px;
+  --ui-shadow: 0 1px 1px #0000000a, 0 4px 16px -8px #0000001f;
+  --ui-heading-weight: 600;
+}
+html[data-layout="apple"] .sidebar { background: color-mix(in srgb, var(--panel-2) 72%, transparent); backdrop-filter: blur(24px) saturate(1.6); border-left: 1px solid var(--line-soft); }
+html[data-layout="apple"] .nav-item.active { color: var(--gold); background: color-mix(in srgb, var(--text) 7%, transparent); border-color: transparent; }
+html[data-layout="apple"] .topbar { background: color-mix(in srgb, var(--top) 82%, transparent); backdrop-filter: blur(20px); border-bottom-color: var(--line-soft); }
+
+/* --- משרדי: סרגל עליון צף ומעוגל, דף לבן במרכז --- */
+html[data-layout="office"] {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 80px; --ui-sidebar-pad: 16px 8px; --ui-nav-h: 60px; --ui-nav-icon: 20px;
+  --ui-topbar-h: 54px; --ui-page-pad: 20px; --ui-gap: 18px;
+  --ui-radius-panel: 10px; --ui-radius-card: 8px; --ui-radius-control: 6px; --ui-control-h: 32px;
+  --ui-shadow: 0 1.6px 3.6px #00000014, 0 .3px .9px #0000000f;
+}
+html[data-layout="office"] .topbar { margin: 10px 14px 0; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--ui-shadow); }
+html[data-layout="office"] .sidebar { background: var(--bg); border-left: 0; }
+html[data-layout="office"] .nav-item.active { color: var(--gold); background: var(--panel); border-color: var(--line); box-shadow: var(--ui-shadow); }
+html[data-layout="office"] .content-shell { max-width: 1320px; }
+
+/* --- מודרני: סרגל צד דק, קווים דקים מאוד, צפוף וחד, תיבת חיפוש בסגנון לוח פקודות --- */
+html[data-layout="modern"] {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 62px; --ui-sidebar-pad: 12px 6px; --ui-nav-h: 50px; --ui-nav-icon: 17px;
+  --ui-topbar-h: 48px; --ui-page-pad: 16px; --ui-gap: 12px;
+  --ui-radius-panel: 8px; --ui-radius-card: 6px; --ui-radius-control: 6px; --ui-control-h: 30px;
+  --ui-shadow: none; --ui-border: 1px solid var(--line-soft);
+}
+html[data-layout="modern"] .sidebar { background: var(--bg); border-left: 1px solid var(--line-soft); }
+html[data-layout="modern"] .nav-item small { display: none; }
+html[data-layout="modern"] .nav-item.active { color: var(--text); background: var(--panel-2); border-color: var(--line-soft); }
+html[data-layout="modern"] .topbar { border-bottom-color: var(--line-soft); }
+html[data-layout="modern"] .search-box { background: var(--panel); box-shadow: 0 0 0 1px var(--line-soft); border-color: transparent; }
+html[data-layout="modern"] .content-shell { max-width: none; }
+
+/* =====================================================================
+   5. חמש ערכות העיצוב — משנות רק גאומטריה, לעולם לא צבעים.
+      הבורר html[data-kit][data-kit=…] גובר על הפריסה.
+   ===================================================================== */
+html[data-kit][data-kit="compact"] { --ui-radius-panel: 12px; --ui-radius-card: 8px; --ui-radius-control: 8px; --ui-shadow: 0 1px 2px #0000000d; --ui-border: 1px solid var(--line); }
+html[data-kit][data-kit="tiles"] { --ui-radius-panel: 16px; --ui-radius-card: 12px; --ui-radius-control: 10px; --ui-shadow: 0 1px 2px #0000000a, 0 6px 18px -6px #0000001a; --ui-border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
+html[data-kit][data-kit="tiles"] :is(.library-strip, .page-panel, .quick-panel, .system-panel) { padding: 26px; }
+html[data-kit][data-kit="list"] { --ui-radius-panel: 6px; --ui-radius-card: 4px; --ui-radius-control: 6px; --ui-shadow: none; --ui-border: 1px solid var(--line); }
+html[data-kit][data-kit="list"] .clip-grid { grid-template-columns: 1fr; gap: 0; }
+html[data-kit][data-kit="list"] .clip-card { display: grid; grid-template-columns: 120px 1fr; column-gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+html[data-kit][data-kit="list"] .clip-card .clip-thumb { grid-row: span 2; height: 64px; }
+html[data-kit][data-kit="icons"] { --ui-radius-panel: 20px; --ui-radius-card: 14px; --ui-radius-control: 12px; --ui-shadow: 0 1px 2px color-mix(in srgb, var(--tool) 10%, transparent), 0 4px 14px -6px color-mix(in srgb, var(--tool) 22%, transparent); --ui-border: 1px solid color-mix(in srgb, var(--tool) 20%, var(--line)); }
+html[data-kit][data-kit="icons"] :is(.file-icon, .empty-preview > span, .settings-cards span) { background: color-mix(in srgb, var(--tool) 13%, transparent); color: var(--tool); border-color: transparent; }
+html[data-kit][data-kit="icons"] .nav-item.active { color: var(--tool); background: color-mix(in srgb, var(--tool) 13%, transparent); border-color: transparent; }
+html[data-kit][data-kit="minimal"] { --ui-radius-panel: 0px; --ui-radius-card: 4px; --ui-radius-control: 6px; --ui-shadow: none; --ui-border: 0; }
+html[data-kit][data-kit="minimal"] :is(.panel, .settings-rail, .page-panel) { background: transparent; border-top: 1px solid var(--line); }
+html[data-kit][data-kit="minimal"] .capture-stage { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 8px; }
+html[data-kit][data-kit="minimal"] :is(.ghost, .source-type, .refresh-button) { border-color: transparent; background: color-mix(in srgb, var(--panel-2) 80%, transparent); }
+
+/* =====================================================================
+   6. מסך הבחירה: גלריית פריסות + ערכות (בתוך הגדרות ← עיצוב)
+   ===================================================================== */
+.appearance-picker { display: grid; gap: 22px; margin-bottom: 30px; padding-bottom: 26px; border-bottom: 1px solid var(--line); }
+.appearance-picker h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
+.appearance-picker > section > p { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.layout-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.layout-card { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--text); text-align: right; cursor: default; }
+.layout-card:hover { border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); }
+.layout-card[aria-checked="true"] { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.layout-card b { font-size: 13px; font-weight: 600; }
+.layout-card small { color: var(--muted); font-size: 11px; line-height: 1.35; }
+/* מיניאטורה של החלון: סרגל עליון, סרגל צד מימין, שני כרטיסים */
+.layout-mini { position: relative; height: 84px; border-radius: 6px; overflow: hidden; background: var(--m-bg); border: 1px solid #0000001a; direction: ltr; }
+.layout-mini::before { content: ""; position: absolute; inset: 0 var(--m-side-w) auto 0; height: var(--m-top-h); background: var(--m-top); }
+.layout-mini i { position: absolute; top: 0; right: 0; bottom: 0; width: var(--m-side-w); background: var(--m-side); }
+.layout-mini i::before { content: ""; position: absolute; top: 10px; left: 25%; right: 25%; height: 8px; border-radius: 2px; background: var(--m-accent); }
+.layout-mini em, .layout-mini u { position: absolute; top: calc(var(--m-top-h) + 7px); bottom: 7px; background: var(--m-card); border-radius: var(--m-r); box-shadow: 0 0 0 1px #00000012; }
+.layout-mini em { left: 7px; width: 26%; }
+.layout-mini u { left: calc(26% + 13px); right: calc(var(--m-side-w) + 7px); }
+.layout-mini u::after { content: ""; position: absolute; left: 8px; bottom: 7px; width: 34%; height: 7px; border-radius: 99px; background: var(--m-accent); }
+.kit-switch, .mode-switch { display: flex; flex-wrap: wrap; gap: 6px; }
+.kit-switch button, .mode-switch button { min-height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--text); font-size: 12px; cursor: default; }
+.kit-switch button[aria-checked="true"], .mode-switch button[aria-checked="true"] { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--panel-2)); color: var(--text); font-weight: 600; }
+.kit-switch button small { display: block; color: var(--muted); font-size: 10px; font-weight: 400; }
+.ui-zoom-row { display: flex; align-items: center; gap: 12px; font-size: 12px; }
+.ui-zoom-row input { flex: 0 1 260px; accent-color: var(--gold); }
+.ui-zoom-row output { min-width: 44px; font-variant-numeric: tabular-nums; }

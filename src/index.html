@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; img-src 'self' data: blob:">
   <title>אורום סטודיו — סטודיו הקלטת מסך ווידאו</title>
+  <script src="boot-appearance.js"></script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="responsive.css">
   <link rel="stylesheet" href="qa.css">
@@ -24,6 +25,7 @@
   <link rel="stylesheet" href="wide-layout.css">
   <link rel="stylesheet" href="capture-layouts.css">
   <link rel="stylesheet" href="image-editor.css">
+  <link rel="stylesheet" href="app-design.css">
 </head>
 <body>
   <div class="app-shell">
@@ -43,6 +45,7 @@
               <div id="custom-theme-menu-items"></div>
               <div class="theme-menu-divider"></div>
               <button class="theme-manage-button" id="create-theme-shortcut">＋ יצירת ערכה חדשה</button>
+              <button class="theme-manage-button" id="layouts-shortcut">▦ פריסות וערכות עיצוב</button>
               <button class="theme-manage-button" id="manage-themes-shortcut">✎ ניהול ועריכת ערכות</button>
             </div>
           </div>
@@ -235,6 +238,12 @@
               <aside class="developer-shortcuts-note"><b>קיצורי פיתוח שמורים</b><span><kbd>Ctrl Shift R</kbd> רענון עמוק</span><span><kbd>Ctrl Shift I</kbd> קונסול</span><span><kbd>F12</kbd> קונסול</span></aside>
             </div>
             <div class="preference-section" data-preference-section="appearance">
+              <div class="appearance-picker" id="appearance-picker">
+                <section><h3>פריסת החלון</h3><p>איפה יושבים הסרגלים, כמה צפוף המסך ואיזה גופן. שבע פריסות בהשראת תוכנות שולחן עבודה מוכרות.</p><div class="layout-gallery" id="layout-gallery" role="radiogroup" aria-label="פריסת החלון"></div></section>
+                <section><h3>צבעי הפריסה</h3><p>לכל פריסה זוג צבעים מותאם — בהיר וכהה. אפשר גם להשאיר את ערכת הצבעים שבחרת.</p><div class="mode-switch" id="layout-mode-switch" role="radiogroup" aria-label="צבעי הפריסה"></div></section>
+                <section><h3>ערכת עיצוב</h3><p>צורת הרכיבים בכל המסכים: פינות, ריפוד, מסגרות וצללים. לא משנה צבעים.</p><div class="kit-switch" id="kit-switch" role="radiogroup" aria-label="ערכת עיצוב"></div></section>
+                <section id="ui-zoom-section"><h3>גודל תצוגה</h3><p>הגדלה או הקטנה של כל הממשק.</p><label class="ui-zoom-row"><input type="range" id="ui-zoom" min="75" max="150" step="5" value="100" aria-label="גודל תצוגה"><output id="ui-zoom-output">100%</output><button type="button" class="ghost" id="ui-zoom-reset">איפוס</button></label></section>
+              </div>
               <div class="theme-editor-heading"><div><h2>עורך ערכות נושא</h2><p>בחר ערכת בסיס והתאם את הצבעים. כל שינוי מוצג מיד לפני השמירה.</p></div><span class="draft-badge" id="theme-draft-status">אין שינויים</span></div>
               <div class="theme-library-toolbar"><label><span>ערכה אישית</span><select id="custom-theme-select"><option value="">יצירת ערכה חדשה</option></select></label><button class="gold-button" id="new-custom-theme">＋ חדשה</button><button class="ghost" id="duplicate-custom-theme" disabled>⧉ שכפול</button><button class="danger-button" id="delete-custom-theme" disabled>⌫ מחיקה</button></div>
               <label class="theme-name-field"><span><b>שם הערכה</b><small>השם שיופיע בתפריט הבחירה</small></span><input id="custom-theme-name" maxlength="40" placeholder="לדוגמה: כחול המשרד שלי"></label>
@@ -338,6 +347,7 @@
   <script src="scroll-capture-engine.js"></script>
   <script src="video-timeline-utils.cjs"></script>
   <script src="image-editor.js"></script>
+  <script src="appearance.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

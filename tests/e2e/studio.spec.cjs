@@ -996,4 +996,58 @@ test.describe('Electron production workflow', () => {
     await attachMetrics(testInfo, metrics);
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
+
+  test('window layouts, layout colours and design kits apply, persist and never overflow', async ({}, testInfo) => {
+    test.setTimeout(120_000);
+    await page.locator('.nav-item[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="appearance"]').click();
+    await expect(page.locator('#layout-gallery [role="radio"]')).toHaveCount(7);
+    await expect(page.locator('#kit-switch [role="radio"]')).toHaveCount(6);
+    await page.locator('[data-layout-mode="light"]').click();
+    const switchTimes = [];
+    for (const layout of ['acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'lemaan']) {
+      await page.locator(`[data-layout-choice="${layout}"]`).click();
+      await expect(page.locator('html')).toHaveAttribute('data-layout', layout);
+      // Measured in-page (apply + style recalculation): the hidden QA window paints at ~1 fps, so click latency is not representative.
+      switchTimes.push(await page.evaluate((id) => {
+        const started = performance.now();
+        window.aurumAppearance.applyLayout(id);
+        void getComputedStyle(document.querySelector('.sidebar')).width;
+        return performance.now() - started;
+      }, layout));
+      await expect(page.locator(`[data-layout-choice="${layout}"]`)).toHaveAttribute('aria-checked', 'true');
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme), `${layout} light colours`).toContain('light');
+      for (const target of ['capture', 'library', 'settings']) {
+        await page.locator(`.nav-item[data-page="${target}"]:not([data-action])`).click();
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+        expect(overflow, `${layout}/${target} must not scroll sideways`).toBeLessThanOrEqual(1);
+      }
+      await page.locator('[data-preference-tab="appearance"]').click();
+    }
+    await page.locator('[data-layout-mode="dark"]').click();
+    await page.locator('[data-layout-choice="office"]').click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'office-dark');
+    for (const kit of ['compact', 'tiles', 'list', 'icons', 'minimal']) {
+      await page.locator(`[data-kit-choice="${kit}"]`).click();
+      await expect(page.locator('html')).toHaveAttribute('data-kit', kit);
+    }
+    const panelRadius = await page.locator('#settings-page').evaluate((node) => parseFloat(getComputedStyle(node).borderTopLeftRadius));
+    expect(panelRadius).toBe(0);
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-layout', 'office');
+    await expect(page.locator('html')).toHaveAttribute('data-kit', 'minimal');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'office-dark');
+    // Restore the original look for any later test.
+    await page.evaluate(() => { window.aurumAppearance.applyKit('auto'); window.aurumAppearance.applyMode('keep'); window.aurumAppearance.applyLayout('lemaan'); applyThemeChoice('midnight', true); });
+    await expect(page.locator('html')).toHaveAttribute('data-layout', 'lemaan');
+    const metrics = [
+      metric('Window layouts applied', 7, 'layouts', 7, 'min', 'acrobat, finereader, classic, apple, office, modern, lemaan × capture/library/settings without sideways scroll'),
+      metric('Design kits applied', 5, 'kits', 5, 'min', 'compact, tiles, list, icons, minimal; minimal panel radius 0'),
+      metric('Layout switch response', Math.max(...switchTimes), 'ms', 500, 'max', 'click to data-layout on <html>, slowest of 7'),
+      metric('Appearance persistence after reload', 3, 'attributes', 3, 'min', 'layout, kit and layout dark colours restored before first paint')
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
 });

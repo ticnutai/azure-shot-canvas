@@ -1,8 +1,9 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('screenStudio', {
   browserMode: false,
   qaEnabled: process.env.SCREEN_STUDIO_QA === '1',
+  setUiZoom: (factor) => webFrame.setZoomFactor(Math.max(0.75, Math.min(1.5, Number(factor) || 1))),
   listSources: () => ipcRenderer.invoke('sources:list'),
   getCaptureCapabilities: () => ipcRenderer.invoke('capture:capabilities'),
   prepareCapture: (options) => ipcRenderer.invoke('capture:prepare', options),

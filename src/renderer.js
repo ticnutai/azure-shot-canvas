@@ -488,7 +488,7 @@ function applyThemeChoice(choice, persist = false) {
     document.documentElement.dataset.customThemeId = custom.id;
     for (const [name, value] of Object.entries(custom.values)) document.documentElement.style.setProperty(name, value);
   } else {
-    document.documentElement.dataset.theme = themeDefinitions[choice] ? choice : 'midnight';
+    document.documentElement.dataset.theme = themeDefinitions[choice] || window.aurumAppearance?.isLayoutTheme(choice) ? choice : 'midnight';
     delete document.documentElement.dataset.themeMode;
     delete document.documentElement.dataset.customThemeId;
   }
@@ -514,9 +514,13 @@ function openThemeEditor() {
   $('#custom-theme-select').value = custom?.id || '';
   $('#custom-theme-name').value = custom?.name || '';
   $('#theme-base-select').value = base;
-  document.documentElement.dataset.theme = base;
+  // Layout colour themes live only in CSS: start the draft from the colours on screen instead of resetting to the base.
+  const layoutTheme = !custom && window.aurumAppearance?.isLayoutTheme(savedChoice);
+  const computed = layoutTheme ? getComputedStyle(document.documentElement) : null;
+  const values = layoutTheme ? Object.fromEntries(Object.keys(themeDefinitions.midnight).map((name) => [name, computed.getPropertyValue(name).trim()])) : custom?.values || themeDefinitions[base];
+  if (!layoutTheme) document.documentElement.dataset.theme = base;
   document.documentElement.dataset.themeMode = 'draft';
-  setThemeDraft(custom?.values || themeDefinitions[base], false);
+  setThemeDraft(values, false);
   updateThemeLibraryButtons();
   themeEditorOpen = true;
 }
@@ -1850,6 +1854,7 @@ function showPage(page, navigationAction = null) {
     button.classList.toggle('active', button.dataset.page === page && action === navigationAction);
   });
   $('.content-shell').dataset.activePage = page;
+  document.documentElement.dataset.activePage = page;
   $('.content-shell').dataset.activeNavigation = navigationAction || page;
   $('#theme-menu')?.classList.add('hidden');
   $('#capture-layout-menu')?.classList.add('hidden');
@@ -2204,6 +2209,7 @@ async function initialize() {
   });
   $('#create-theme-shortcut').addEventListener('click', () => openThemeManagement(true));
   $('#manage-themes-shortcut').addEventListener('click', () => openThemeManagement(false));
+  $('#layouts-shortcut')?.addEventListener('click', () => { openThemeManagement(false); $('#appearance-picker')?.scrollIntoView({ block: 'start' }); });
   $('#new-custom-theme').addEventListener('click', () => newThemeDraft($('#theme-base-select').value));
   $('#custom-theme-select').addEventListener('change', (event) => event.target.value ? loadCustomThemeDraft(event.target.value) : newThemeDraft($('#theme-base-select').value));
   $('#duplicate-custom-theme').addEventListener('click', duplicateSelectedTheme);
