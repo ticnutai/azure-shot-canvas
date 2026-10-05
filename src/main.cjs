@@ -1,6 +1,7 @@
 const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, shell, Tray } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
+const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { captureFilePath, developerShortcut } = require('./main-utils.cjs');
@@ -234,6 +235,13 @@ function createWindow() {
     }
   });
   const devUrl = process.env.SCREEN_STUDIO_DEV_URL;
+  // The preload API can open and rename files, so the window must never show any page but the app itself.
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const current = mainWindow.webContents.getURL().split('#')[0];
+    const allowed = devUrl ? url.startsWith(`${devUrl}/`) || url === devUrl : url.split('#')[0] === current;
+    if (!allowed) event.preventDefault();
+  });
   if (devUrl && /^http:\/\/127\.0\.0\.1:\d+$/.test(devUrl)) mainWindow.loadURL(devUrl);
   else mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.on('close', (event) => {
@@ -468,8 +476,9 @@ function runVideoEdit(inputPath, outputPath, options = {}) {
   });
 }
 
-function escapeDrawText(value) {
-  return String(value || '').replaceAll('\\', '\\\\').replaceAll(':', '\\:').replaceAll("'", "\\'").replaceAll('%', '\\%').replaceAll(',', '\\,').replaceAll('\n', ' ');
+// ffmpeg filter option paths: forward slashes, drive colon escaped, inside single quotes.
+function filterPath(value) {
+  return path.resolve(value).replaceAll('\\', '/').replace(/^([A-Za-z]):/, '$1\\:').replaceAll("'", "'\\\\''");
 }
 
 async function detectSilences(inputPath, options = {}) {
@@ -483,7 +492,7 @@ async function detectSilences(inputPath, options = {}) {
 }
 
 async function exportTimeline(inputPath, outputPath, candidate) {
-  const quality = await analyzeMedia(inputPath);
+  const quality = await analyzeMedia(inputPath, { countFrames: false, persist: false });
   const project = normalizeTimelineProject(candidate, quality.durationSeconds);
   const hasAudio = Boolean(quality.audioCodec) && !project.mute;
   const filters = [];
@@ -507,10 +516,18 @@ async function exportTimeline(inputPath, outputPath, candidate) {
     return null;
   };
   const postFilters = [];
-  project.captions.forEach((caption) => {
+  // Captions go through textfile=: quotes inside text='…' cannot be escaped reliably and broke the filter.
+  const captionDirectory = project.captions.length ? await fs.mkdtemp(path.join(os.tmpdir(), 'aurum-captions-')) : null;
+  const captionFiles = [];
+  for (const caption of project.captions) {
+    const captionPath = path.join(captionDirectory, `caption-${captionFiles.length}.txt`);
+    await fs.writeFile(captionPath, String(caption.text || '').replaceAll('\n', ' '), 'utf8');
+    captionFiles.push(captionPath);
+  }
+  project.captions.forEach((caption, index) => {
     const start = sourceToOutput(caption.start); const end = sourceToOutput(caption.end);
     if (start === null || end === null || end <= start) return;
-    postFilters.push(`drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='${escapeDrawText(caption.text)}':fontcolor=white:fontsize=h/24:borderw=3:bordercolor=black@0.8:x=(w-text_w)*${caption.x}:y=(h-text_h)*${caption.y}:enable='between(t,${start},${end})'`);
+    postFilters.push(`drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':textfile='${filterPath(captionFiles[index])}':fontcolor=white:fontsize=h/24:borderw=3:bordercolor=black@0.8:x=(w-text_w)*${caption.x}:y=(h-text_h)*${caption.y}:enable='between(t,${start},${end})'`);
   });
   project.zooms.forEach((zoom) => {
     const start = sourceToOutput(zoom.start); const end = sourceToOutput(zoom.end);
@@ -532,7 +549,8 @@ async function exportTimeline(inputPath, outputPath, candidate) {
   args.push('-c:v', 'libx264', '-preset', preset.preset, '-crf', String(preset.crf), '-pix_fmt', 'yuv420p');
   if (audioLabel) args.push('-c:a', 'aac', '-b:a', '192k');
   args.push('-movflags', '+faststart', outputPath);
-  const result = await runHidden('ffmpeg', args, { timeoutMs: 300_000 });
+  const timeoutMs = Math.max(300_000, Math.round(outputDuration * 4000));
+  const result = await runHidden('ffmpeg', args, { timeoutMs }).finally(() => captionDirectory && fs.rm(captionDirectory, { recursive: true, force: true }));
   if (!result.ok) throw new Error(result.error || 'ייצוא ה-Timeline נכשל');
   const outputQuality = await analyzeMedia(outputPath);
   return { path: outputPath, duration: outputDuration, quality: outputQuality, project };
@@ -546,17 +564,35 @@ function runThumbnailFfmpeg(inputPath, outputPath) {
   });
 }
 
+// Library reloads are frequent; without this every screenshot was decoded at full size on each load.
+const thumbnailMemory = new Map();
+
 async function thumbnailFor(item) {
+  const memoryKey = `${item.path}|${item.modified}|${item.size}`;
+  if (thumbnailMemory.has(memoryKey)) return thumbnailMemory.get(memoryKey);
+  const dataUrl = await createThumbnail(item);
+  if (dataUrl) {
+    thumbnailMemory.set(memoryKey, dataUrl);
+    if (thumbnailMemory.size > 400) thumbnailMemory.delete(thumbnailMemory.keys().next().value);
+  }
+  return dataUrl;
+}
+
+async function createThumbnail(item) {
   try {
-    if (item.extension === 'png') {
-      const image = nativeImage.createFromPath(item.path);
-      if (image.isEmpty()) return null;
-      return `data:image/jpeg;base64,${image.resize({ width: 480, quality: 'good' }).toJPEG(82).toString('base64')}`;
-    }
     const cacheDirectory = path.join(app.getPath('userData'), 'library-thumbnails');
     await fs.mkdir(cacheDirectory, { recursive: true });
     const cacheKey = crypto.createHash('sha1').update(`${item.path}|${item.modified}|${item.size}`).digest('hex');
     const thumbnailPath = path.join(cacheDirectory, `${cacheKey}.jpg`);
+    if (item.extension === 'png') {
+      const cached = await fs.readFile(thumbnailPath).catch(() => null);
+      if (cached) return `data:image/jpeg;base64,${cached.toString('base64')}`;
+      const image = nativeImage.createFromPath(item.path);
+      if (image.isEmpty()) return null;
+      const jpeg = image.resize({ width: 480, quality: 'good' }).toJPEG(82);
+      await fs.writeFile(thumbnailPath, jpeg).catch(() => {});
+      return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+    }
     try { await fs.access(thumbnailPath); }
     catch {
       if (!thumbnailJobs.has(thumbnailPath)) thumbnailJobs.set(thumbnailPath, (async () => {
@@ -591,7 +627,28 @@ async function listLibrary() {
   return Promise.all(sorted.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item) })));
 }
 
+// Only the app's own pages may call the main process: a foreign page that slipped into a window
+// would otherwise reach file, clipboard and ffmpeg handlers through the preload bridge.
+function isTrustedSender(event) {
+  const url = event.senderFrame?.url || '';
+  const devUrl = process.env.SCREEN_STUDIO_DEV_URL;
+  if (devUrl && (url === devUrl || url.startsWith(`${devUrl}/`))) return true;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'file:') return false;
+    const filePath = path.normalize(decodeURIComponent(parsed.pathname).replace(/^\/([A-Za-z]:)/, '$1'));
+    return path.dirname(filePath).toLowerCase() === path.normalize(__dirname).toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 function registerIpc() {
+  const handle = ipcMain.handle.bind(ipcMain);
+  ipcMain.handle = (channel, listener) => handle(channel, (event, ...args) => {
+    if (!isTrustedSender(event)) throw new Error('בקשה ממקור לא מורשה נחסמה');
+    return listener(event, ...args);
+  });
   ipcMain.handle('sources:list', getSources);
   ipcMain.handle('capture:capabilities', () => getEncoderCapabilities());
   ipcMain.handle('capture:prepare', (_event, options) => {
@@ -703,8 +760,9 @@ function registerIpc() {
     return { point, displayId: String(display.id), bounds: display.bounds };
   });
   ipcMain.handle('library:list', listLibrary);
-  ipcMain.handle('library:open', async (_event, filePath) => shell.openPath(filePath));
-  ipcMain.handle('library:show', async (_event, filePath) => shell.showItemInFolder(filePath));
+  const openableLibraryFile = /\.(png|webm|mp4|m4a)$/i;
+  ipcMain.handle('library:open', async (_event, filePath) => shell.openPath(await assertLibraryFile(filePath, openableLibraryFile)));
+  ipcMain.handle('library:show', async (_event, filePath) => shell.showItemInFolder(await assertLibraryFile(filePath, openableLibraryFile)));
   ipcMain.handle('library:rename', async (_event, filePath, requestedName) => {
     const directory = await ensureOutputDirectory();
     const targetPath = renamedLibraryPath(filePath, directory, requestedName);
@@ -776,8 +834,9 @@ function registerIpc() {
     const size = image.getSize();
     const scale = Math.min(1, 900 / Math.max(size.width, 1), 700 / Math.max(size.height, 1));
     const pinWindow = new BrowserWindow({ show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1', width: Math.max(260, Math.round(size.width * scale)), height: Math.max(180, Math.round(size.height * scale)), frame: false, resizable: true, alwaysOnTop: true, backgroundColor: '#111111', webPreferences: { contextIsolation: true, sandbox: true } });
-    await pinWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px}img{width:100%;height:100%;object-fit:contain;display:block}</style><img draggable="false" src="${dataUrl}">`)}`);
+    await pinWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;-webkit-app-region:drag}img{width:100%;height:100%;object-fit:contain;display:block}button{position:fixed;top:8px;left:8px;width:28px;height:28px;border:0;border-radius:50%;background:#000a;color:#fff;font:16px Segoe UI;cursor:pointer;opacity:0;transition:opacity .15s;-webkit-app-region:no-drag}body:hover button{opacity:1}</style><img draggable="false" src="${dataUrl}"><button title="סגירה (Esc)" onclick="window.close()">×</button>`)}`);
     pinWindow.setAlwaysOnTop(true, 'floating');
+    pinWindow.webContents.on('before-input-event', (_inputEvent, input) => { if (input.type === 'keyDown' && input.key === 'Escape') pinWindow.close(); });
     return { pinned: true, bounds: pinWindow.getBounds() };
   });
   ipcMain.handle('video:edit', async (_event, filePath, options) => {
@@ -791,14 +850,14 @@ function registerIpc() {
   });
   ipcMain.handle('video:timeline-load', async (_event, filePath) => {
     const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
-    const quality = await analyzeMedia(resolved);
+    const quality = await analyzeMedia(resolved, { countFrames: false, persist: false });
     const project = await readJson(`${resolved}.timeline.json`);
     const cursorSamples = await readJson(`${resolved}.cursor.json`) || [];
     return { project: normalizeTimelineProject(project || {}, quality.durationSeconds), cursorSamples, quality };
   });
   ipcMain.handle('video:timeline-save', async (_event, filePath, candidate) => {
     const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
-    const quality = await analyzeMedia(resolved);
+    const quality = await analyzeMedia(resolved, { countFrames: false, persist: false });
     const project = normalizeTimelineProject(candidate, quality.durationSeconds);
     const projectPath = `${resolved}.timeline.json`;
     await fs.writeFile(projectPath, JSON.stringify(project, null, 2), 'utf8');
@@ -992,7 +1051,14 @@ function createTray() {
   tray.on('double-click', () => showMainWindow());
 }
 
+// A second copy would run crash recovery on the first copy's live recording and delete its segments.
+// QA and live-reload dev runs restart the process back-to-back, so they skip the lock.
+const singleInstance = process.env.SCREEN_STUDIO_QA === '1' || Boolean(process.env.SCREEN_STUDIO_DEV_URL) || app.requestSingleInstanceLock();
+if (!singleInstance) app.quit();
+else app.on('second-instance', () => { showMainWindow(); mainWindow?.focus(); });
+
 app.whenReady().then(async () => {
+  if (!singleInstance) return;
   await ensureOutputDirectory();
   await recoverInterruptedRecordings();
   await loadQuickbarPreferences();

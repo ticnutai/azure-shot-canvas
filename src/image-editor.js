@@ -80,7 +80,13 @@
   async function save(modeToSave = 'overwrite') {
     if (!engine || !sourcePath) return;
     $('#editor-save-state').textContent = 'שומר…';
-    const result = await api.saveEditorImage({ sourcePath, mode: modeToSave === 'copy' ? 'copy' : 'overwrite', dataUrl: engine.exportDataUrl(), project: engine.serializeProject(sourcePath) });
+    let result;
+    try {
+      result = await api.saveEditorImage({ sourcePath, mode: modeToSave === 'copy' ? 'copy' : 'overwrite', dataUrl: engine.exportDataUrl(), project: engine.serializeProject(sourcePath) });
+    } catch (error) {
+      $('#editor-save-state').textContent = `השמירה נכשלה: ${error?.message || 'שגיאה לא ידועה'}`;
+      return;
+    }
     sourcePath = result.path;
     $('#editor-file-name').textContent = result.name;
     setDirty(false);
@@ -102,7 +108,7 @@
     engine?.dispose(); engine = null; sourcePath = null;
   }
 
-  window.aurumEditor = { open: openEditor, close: closeEditor, isOpen: () => !shell.classList.contains('hidden'), stats: () => engine?.stats() };
+  window.aurumEditor = { open: openEditor, close: closeEditor, isOpen: () => !shell.classList.contains('hidden'), stats: () => engine?.stats(), objects: () => engine?.annotationsJson() || [] };
   $$('[data-editor-tool]').forEach((button) => button.addEventListener('click', () => selectTool(button.dataset.editorTool)));
   $$('[data-editor-mode]').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.editorMode)));
   $('#editor-close').addEventListener('click', () => closeEditor());
@@ -118,7 +124,7 @@
   }, true);
   $('#editor-save').addEventListener('click', () => save());
   $('#editor-save-copy').addEventListener('click', () => save('copy'));
-  $('#editor-copy').addEventListener('click', async () => { await api.copyEditorImage(engine.exportDataUrl()); $('#editor-save-state').textContent = 'התמונה הועתקה ללוח'; });
+  $('#editor-copy').addEventListener('click', () => copyToClipboard());
   $('#editor-undo').addEventListener('click', () => engine.undo()); $('#editor-redo').addEventListener('click', () => engine.redo());
   const setManualZoom = (zoom) => { $('#editor-workspace').dataset.manualZoom = 'true'; engine.setZoom(zoom); };
   const fitEditor = () => { $('#editor-workspace').dataset.manualZoom = 'false'; engine.fitToViewport(); };
@@ -140,21 +146,41 @@
   $('#editor-opacity').addEventListener('input', (event) => { $('#editor-opacity-output').textContent = `${event.target.value}%`; engine.setStyle({ opacity: Number(event.target.value) / 100 }); });
   $('#editor-font-size').addEventListener('input', (event) => { $('#editor-font-output').textContent = event.target.value; engine.setStyle({ fontSize: Number(event.target.value) }); });
   $('#editor-text').addEventListener('input', (event) => engine.setStyle({ text: event.target.value }));
-  $('#editor-overlay-file').addEventListener('change', (event) => { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => engine.addOverlay(reader.result); reader.readAsDataURL(file); event.target.value = ''; });
+  const addImageFile = (file) => { const reader = new FileReader(); reader.onload = () => engine?.addOverlay(reader.result); reader.readAsDataURL(file); };
+  $('#editor-overlay-file').addEventListener('change', (event) => { const file = event.target.files[0]; if (!file) return; addImageFile(file); event.target.value = ''; });
+  const copyToClipboard = async () => { await api.copyEditorImage(engine.exportDataUrl()); $('#editor-save-state').textContent = 'התמונה הועתקה ללוח'; };
+  // Ctrl+V: an image on the system clipboard becomes a layer; otherwise paste the last copied shapes.
+  document.addEventListener('paste', (event) => {
+    if (!engine || shell.classList.contains('hidden') || /input|textarea/i.test(event.target.tagName) || engine.isEditingText()) return;
+    const file = [...(event.clipboardData?.files || [])].find((item) => item.type.startsWith('image/'));
+    event.preventDefault();
+    if (file) addImageFile(file); else engine.pasteCopied();
+  });
   window.addEventListener('resize', () => { if (engine) engine.setViewportSize($('#editor-workspace').clientWidth - 50, $('#editor-workspace').clientHeight - 50); });
   document.addEventListener('keydown', (event) => {
     if (!engine || shell.classList.contains('hidden')) return;
     const targetIsInput = /input|textarea/i.test(event.target.tagName);
+    if (targetIsInput && event.ctrlKey && (event.code === 'KeyZ' || event.code === 'KeyY')) return;
     if (event.ctrlKey && event.code === 'KeyZ') { event.preventDefault(); return event.shiftKey ? engine.redo() : engine.undo(); }
     if (event.ctrlKey && event.code === 'KeyY') { event.preventDefault(); return engine.redo(); }
     if (event.ctrlKey && event.code === 'KeyS') { event.preventDefault(); return save(); }
     if (event.ctrlKey && (event.code === 'Equal' || event.code === 'NumpadAdd')) { event.preventDefault(); return setManualZoom(engine.stats().zoom * 1.2); }
     if (event.ctrlKey && (event.code === 'Minus' || event.code === 'NumpadSubtract')) { event.preventDefault(); return setManualZoom(engine.stats().zoom / 1.2); }
     if (event.ctrlKey && (event.code === 'Digit0' || event.code === 'Numpad0')) { event.preventDefault(); return fitEditor(); }
-    if (targetIsInput) return;
+    if (targetIsInput || engine.isEditingText()) return;
+    if (event.ctrlKey && event.code === 'KeyA') { event.preventDefault(); return engine.selectAll(); }
+    if (event.ctrlKey && event.code === 'KeyD') { event.preventDefault(); return engine.duplicateSelected(); }
+    if (event.ctrlKey && event.code === 'KeyC') { event.preventDefault(); return engine.hasSelection() ? engine.copySelected() : copyToClipboard(); }
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    const arrows = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (arrows[event.key] && engine.hasSelection()) {
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 1;
+      return engine.nudgeSelected(arrows[event.key][0] * step, arrows[event.key][1] * step);
+    }
     if (event.key === 'Delete' || event.key === 'Backspace') engine.deleteSelected();
     if (event.key === 'Escape') selectTool('select');
-    const shortcuts = { KeyV: 'select', KeyA: 'arrow', KeyL: 'line', KeyR: 'rect', KeyO: 'ellipse', KeyP: 'polygon', KeyD: 'pen', KeyT: 'text' };
+    const shortcuts = { KeyV: 'select', KeyA: 'arrow', KeyL: 'line', KeyR: 'rect', KeyO: 'ellipse', KeyP: 'polygon', KeyD: 'pen', KeyH: 'highlighter', KeyT: 'text', KeyN: 'counter', KeyB: 'blur', KeyC: 'crop' };
     if (shortcuts[event.code]) selectTool(shortcuts[event.code]);
   });
 })();

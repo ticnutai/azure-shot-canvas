@@ -1,6 +1,6 @@
 import {
   ActiveSelection, Canvas, Circle, Ellipse, FabricImage, Group, IText, Line,
-  PencilBrush, Polygon, Polyline, Rect, Shadow, Textbox, Triangle, util
+  Path, PencilBrush, Polygon, Polyline, Rect, Shadow, Textbox, Triangle, util
 } from 'fabric';
 
 const CUSTOM_PROPERTIES = ['dataRole', 'toolType', 'secureRedaction'];
@@ -34,7 +34,8 @@ function arrowGroup(x1, y1, x2, y2, options, doubleHead = false) {
 
 class AurumImageEditorEngine {
   constructor(canvasElement, hooks = {}) {
-    this.canvas = new Canvas(canvasElement, { preserveObjectStacking: true, selection: true, fireRightClick: true, stopContextMenu: true });
+    // Screenshots are already in device pixels; retina scaling would double a 4K canvas's backing store for no gain.
+    this.canvas = new Canvas(canvasElement, { preserveObjectStacking: true, selection: true, fireRightClick: true, stopContextMenu: true, enableRetinaScaling: false });
     this.hooks = hooks;
     this.tool = 'select';
     this.style = { stroke: '#ef3340', fill: 'transparent', strokeWidth: 6, opacity: 1, fontSize: 42 };
@@ -69,17 +70,30 @@ class AurumImageEditorEngine {
       }
       this.pushHistory();
     });
+    this.canvas.on('text:editing:exited', ({ target }) => {
+      if (target && !target.text.trim()) this.canvas.remove(target);
+      this.pushHistory();
+    });
     this.canvas.on('mouse:down', (event) => this.pointerDown(event));
     this.canvas.on('mouse:move', (event) => this.pointerMove(event));
     this.canvas.on('mouse:up', (event) => this.pointerUp(event));
     this.canvas.upperCanvasEl.addEventListener('dblclick', () => { if (this.tool === 'polygon') this.finishPolygon(); });
   }
 
+  colorOf(object) {
+    if (object.toolType === 'callout') return object.backgroundColor;
+    if (object instanceof Textbox) return object.fill;
+    if (object.toolType === 'counter') return object.getObjects()[0]?.fill;
+    if (object.toolType?.includes('arrow')) return object.getObjects()[0]?.stroke;
+    if (object.toolType === 'magnify') return object.getObjects()[1]?.stroke;
+    return object.stroke;
+  }
+
   emitSelection() {
     const object = this.canvas.getActiveObject();
     this.hooks.onSelection?.(object ? {
       type: object.toolType || object.type,
-      stroke: object.stroke || this.style.stroke,
+      stroke: this.colorOf(object) || this.style.stroke,
       fill: object.fill || this.style.fill,
       opacity: object.opacity ?? 1,
       strokeWidth: object.strokeWidth || this.style.strokeWidth,
@@ -154,22 +168,50 @@ class AurumImageEditorEngine {
 
   zoomBy(factor) { this.setZoom(this.zoom * factor); }
 
+  applyStyle(object, patch) {
+    const kind = object.toolType || object.type;
+    if (patch.opacity !== undefined) object.set('opacity', Number(patch.opacity));
+    if (object instanceof Textbox) {
+      if (patch.stroke !== undefined) object.set(kind === 'callout' ? 'backgroundColor' : 'fill', patch.stroke);
+      if (patch.fontSize !== undefined) object.set('fontSize', Number(patch.fontSize));
+      if (patch.text !== undefined) object.set('text', patch.text);
+    } else if (kind === 'counter') {
+      if (patch.stroke !== undefined) object.getObjects()[0].set('fill', patch.stroke);
+      object.dirty = true;
+    } else if (kind === 'arrow' || kind === 'double-arrow') {
+      const [line, ...heads] = object.getObjects();
+      if (patch.stroke !== undefined) { line.set('stroke', patch.stroke); heads.forEach((head) => head.set('fill', patch.stroke)); }
+      if (patch.strokeWidth !== undefined) {
+        const width = Number(patch.strokeWidth);
+        const headSize = Math.max(10, width * 4);
+        line.set('strokeWidth', width);
+        heads.forEach((head) => head.set({ width: headSize, height: headSize }));
+      }
+      object.dirty = true;
+    } else if (kind === 'magnify') {
+      const border = object.getObjects()[1];
+      if (patch.stroke !== undefined) border?.set('stroke', patch.stroke);
+      if (patch.strokeWidth !== undefined) border?.set('strokeWidth', Number(patch.strokeWidth));
+      object.dirty = true;
+    } else if (!(object instanceof FabricImage) && !(object instanceof Group) && !object.secureRedaction) {
+      if (patch.stroke !== undefined) object.set('stroke', patch.stroke);
+      if (patch.fill !== undefined && !(object instanceof Path) && !(object instanceof Line)) object.set('fill', patch.fill);
+      if (patch.strokeWidth !== undefined) object.set('strokeWidth', Number(patch.strokeWidth));
+    }
+    object.setCoords();
+  }
+
   setStyle(patch) {
     Object.assign(this.style, patch);
+    if (this.canvas.isDrawingMode) this.setTool(this.tool);
     const active = this.canvas.getActiveObject();
     if (!active) return;
-    const apply = (object) => {
-      if (patch.stroke !== undefined && object.stroke !== undefined) object.set('stroke', patch.stroke);
-      if (patch.fill !== undefined && object.fill !== undefined && object.toolType !== 'arrow') object.set('fill', patch.fill);
-      if (patch.strokeWidth !== undefined && object.strokeWidth !== undefined) object.set('strokeWidth', Number(patch.strokeWidth));
-      if (patch.opacity !== undefined) object.set('opacity', Number(patch.opacity));
-      if (patch.fontSize !== undefined && object.fontSize !== undefined) object.set('fontSize', Number(patch.fontSize));
-      if (patch.text !== undefined && object.text !== undefined) object.set('text', patch.text);
-      object.setCoords();
-    };
-    if (active.type === 'activeSelection') active.getObjects().forEach(apply); else if (active.type === 'group' && active.toolType?.includes('arrow')) active.getObjects().forEach(apply); else apply(active);
+    const targets = active instanceof ActiveSelection ? active.getObjects() : [active];
+    targets.forEach((object) => this.applyStyle(object, patch));
     this.canvas.requestRenderAll();
-    this.pushHistory();
+    // Sliders fire many input events; one history entry per gesture keeps undo usable.
+    clearTimeout(this.styleHistoryTimer);
+    this.styleHistoryTimer = setTimeout(() => this.pushHistory(), 350);
   }
 
   setTool(tool) {
@@ -217,19 +259,35 @@ class AurumImageEditorEngine {
 
   pointerMove(event) {
     if (!this.drawing) return;
-    const point = this.scenePoint(event);
     const { start, object } = this.drawing;
-    if (object.type === 'line') object.set({ x2: point.x, y2: point.y });
+    const point = this.constrainPoint(start, this.scenePoint(event), event.e?.shiftKey, object instanceof Line);
+    this.drawing.end = point;
+    if (object instanceof Line) object.set({ x2: point.x, y2: point.y });
     else {
       const left = Math.min(start.x, point.x);
       const top = Math.min(start.y, point.y);
       const width = Math.max(1, Math.abs(point.x - start.x));
       const height = Math.max(1, Math.abs(point.y - start.y));
-      if (object.type === 'ellipse') object.set({ left, top, rx: width / 2, ry: height / 2 });
+      if (object instanceof Ellipse) object.set({ left, top, rx: width / 2, ry: height / 2 });
       else object.set({ left, top, width, height });
     }
     object.setCoords();
     this.canvas.requestRenderAll();
+  }
+
+  // Shift keeps lines on 45° steps and boxes square, like other professional editors.
+  constrainPoint(start, point, enabled, isLine) {
+    if (!enabled) return point;
+    const dx = point.x - start.x;
+    const dy = point.y - start.y;
+    if (isLine) {
+      const step = Math.PI / 4;
+      const angle = Math.round(Math.atan2(dy, dx) / step) * step;
+      const length = Math.hypot(dx, dy);
+      return { x: start.x + Math.cos(angle) * length, y: start.y + Math.sin(angle) * length };
+    }
+    const size = Math.max(Math.abs(dx), Math.abs(dy));
+    return { x: start.x + Math.sign(dx || 1) * size, y: start.y + Math.sign(dy || 1) * size };
   }
 
   async pointerUp(event) {
@@ -239,7 +297,7 @@ class AurumImageEditorEngine {
     }
     if (!this.drawing) return;
     const { start, object } = this.drawing;
-    const end = this.scenePoint(event);
+    const end = this.drawing.end || this.scenePoint(event);
     this.drawing = null;
     if (Math.hypot(end.x - start.x, end.y - start.y) < 4) { this.canvas.remove(object); return; }
     if (['arrow', 'double-arrow'].includes(object.toolType)) {
@@ -318,10 +376,25 @@ class AurumImageEditorEngine {
       tiny.getContext('2d').drawImage(this.backgroundImageElement, left, top, width, height, 0, 0, tiny.width, tiny.height);
       context.imageSmoothingEnabled = false;
       context.drawImage(tiny, 0, 0, width, height);
+    } else if (mode === 'blur') {
+      // A plain blur fades to transparent at the edges, which let the original text show through.
+      // Blur a padded copy over a coarse pixelated base so every output pixel is opaque and obscured.
+      const pad = 28;
+      const tiny = document.createElement('canvas');
+      tiny.width = Math.max(1, Math.round(width / 10));
+      tiny.height = Math.max(1, Math.round(height / 10));
+      tiny.getContext('2d').drawImage(this.backgroundImageElement, left, top, width, height, 0, 0, tiny.width, tiny.height);
+      const padded = document.createElement('canvas');
+      padded.width = width + pad * 2;
+      padded.height = height + pad * 2;
+      const paddedContext = padded.getContext('2d');
+      paddedContext.drawImage(tiny, 0, 0, padded.width, padded.height);
+      paddedContext.filter = 'blur(14px)';
+      paddedContext.drawImage(padded, 0, 0);
+      paddedContext.filter = 'none';
+      context.drawImage(padded, pad, pad, width, height, 0, 0, width, height);
     } else {
-      if (mode === 'blur') context.filter = 'blur(14px)';
       context.drawImage(this.backgroundImageElement, left, top, width, height, 0, 0, width, height);
-      context.filter = 'none';
     }
     return { dataUrl: output.toDataURL('image/png'), left, top, width, height };
   }
@@ -347,12 +420,16 @@ class AurumImageEditorEngine {
     const region = this.cropCanvasRegion(rect);
     const oldBackground = this.backgroundObject;
     const annotations = this.canvas.getObjects().filter((object) => object !== oldBackground);
+    // Detach first: re-adding objects that are still on the canvas duplicates them.
+    this.canvas.discardActiveObject();
+    if (annotations.length) this.canvas.remove(...annotations);
     const key = this.rememberBackground(region.dataUrl);
     await this.setBackground(key);
     annotations.forEach((object) => {
       object.set({ left: object.left - region.left, top: object.top - region.top });
-      if (object.left + object.getScaledWidth() < 0 || object.top + object.getScaledHeight() < 0 || object.left > region.width || object.top > region.height) this.canvas.remove(object);
-      else { this.canvas.add(object); object.setCoords(); }
+      object.setCoords();
+      const bounds = object.getBoundingRect();
+      if (bounds.left + bounds.width >= 0 && bounds.top + bounds.height >= 0 && bounds.left <= region.width && bounds.top <= region.height) this.canvas.add(object);
     });
     this.canvas.moveObjectTo(this.backgroundObject, 0);
     this.fitToViewport();
@@ -369,7 +446,8 @@ class AurumImageEditorEngine {
   }
 
   annotationsJson() {
-    return this.canvas.getObjects().filter((object) => object !== this.backgroundObject).map((object) => object.toObject(CUSTOM_PROPERTIES));
+    // canvas.toObject realizes multi-selection transforms; per-object toObject would store selection-relative positions.
+    return this.canvas.toObject(CUSTOM_PROPERTIES).objects.filter((object) => object.dataRole !== 'background');
   }
 
   snapshot() { return JSON.stringify({ backgroundKey: this.currentBackgroundKey, objects: this.annotationsJson(), counter: this.counter }); }
@@ -425,6 +503,55 @@ class AurumImageEditorEngine {
     this.pushHistory();
   }
 
+  isEditingText() { return Boolean(this.canvas.getActiveObject()?.isEditing); }
+
+  selectAll() {
+    const objects = this.canvas.getObjects().filter((object) => object !== this.backgroundObject && object.selectable !== false);
+    if (!objects.length) return false;
+    this.setTool('select');
+    this.canvas.discardActiveObject();
+    this.canvas.setActiveObject(objects.length === 1 ? objects[0] : new ActiveSelection(objects, { canvas: this.canvas }));
+    this.canvas.requestRenderAll();
+    return true;
+  }
+
+  async copySelected() {
+    const active = this.canvas.getActiveObject();
+    if (!active) return false;
+    this.clipboardObject = await active.clone(CUSTOM_PROPERTIES);
+    return true;
+  }
+
+  async pasteCopied() {
+    if (!this.clipboardObject) return false;
+    const clone = await this.clipboardObject.clone(CUSTOM_PROPERTIES);
+    this.canvas.discardActiveObject();
+    clone.set({ left: clone.left + 24, top: clone.top + 24 });
+    if (clone instanceof ActiveSelection) {
+      clone.canvas = this.canvas;
+      clone.forEachObject((object) => this.canvas.add(object));
+      clone.setCoords();
+    } else this.canvas.add(clone);
+    this.clipboardObject.set({ left: this.clipboardObject.left + 24, top: this.clipboardObject.top + 24 });
+    this.canvas.setActiveObject(clone);
+    this.canvas.requestRenderAll();
+    this.pushHistory();
+    return true;
+  }
+
+  nudgeSelected(dx, dy) {
+    const active = this.canvas.getActiveObject();
+    if (!active || active.isEditing) return false;
+    active.set({ left: active.left + dx, top: active.top + dy });
+    active.setCoords();
+    this.canvas.requestRenderAll();
+    clearTimeout(this.nudgeHistoryTimer);
+    this.nudgeHistoryTimer = setTimeout(() => this.pushHistory(), 350);
+    return true;
+  }
+
+  hasSelection() { return Boolean(this.canvas.getActiveObject()); }
+
   moveLayer(direction) {
     const active = this.canvas.getActiveObject();
     if (!active) return;
@@ -467,7 +594,7 @@ class AurumImageEditorEngine {
 
   stats() {
     const objects = this.canvas.getObjects().filter((object) => object !== this.backgroundObject);
-    return { width: this.canvas.width, height: this.canvas.height, objects: objects.length, secureRedactions: objects.filter((object) => object.secureRedaction).length, history: this.history.length, zoom: this.zoom };
+    return { width: this.canvas.width, height: this.canvas.height, objects: objects.length, secureRedactions: objects.filter((object) => object.secureRedaction).length, history: this.history.length, zoom: this.zoom, tool: this.tool };
   }
 
   dispose() { this.canvas.dispose(); }

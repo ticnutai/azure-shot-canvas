@@ -133,6 +133,10 @@ function shortcutEventMatches(event, binding) {
 function handleFocusedShortcutEvent(event) {
   const match = Object.entries(state.shortcuts).find(([, binding]) => binding?.scope === 'focused' && shortcutEventMatches(event, binding));
   if (!match) return false;
+  // Plain-key shortcuts must never steal letters while the user types or works in the image editor.
+  const plainKey = !(match[1].modifiers || []).some((modifier) => modifier === 'Ctrl' || modifier === 'Alt' || modifier === 'Meta');
+  const typing = event.target?.closest?.('input, textarea, select, [contenteditable="true"]');
+  if (plainKey && (typing || window.aurumEditor?.isOpen())) return false;
   const [action, binding] = match;
   event.preventDefault();
   if (binding.kind !== 'double') {
@@ -786,7 +790,8 @@ function restoreLivePreview() {
 function escapeHtml(text) {
   const node = document.createElement('span');
   node.textContent = text;
-  return node.innerHTML;
+  // innerHTML leaves quotes as-is, which truncated values inside value="…" attributes.
+  return node.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
 }
 
 async function ensureDevicePermission(kind) {
@@ -849,7 +854,7 @@ async function acquireInputs(includeRecordingInputs) {
       state.cursorInfo = info;
       if (state.recorder && state.startedAt && info?.bounds?.width && info?.bounds?.height) {
         const previous = state.cursorSamples.at(-1);
-        const at = (Date.now() - state.startedAt) / 1000;
+        const at = recordingElapsedMs() / 1000;
         if (!previous || at - previous.at >= 0.1) state.cursorSamples.push({ at, x: (info.point.x - info.bounds.x) / info.bounds.width, y: (info.point.y - info.bounds.y) / info.bounds.height });
       }
     }).catch(() => {}), 40);
@@ -1229,9 +1234,21 @@ async function beginScrollingCapture() {
     } else if (transition.kind === 'unmatched') {
       status.textContent = 'לא נמצאה חפיפה — גלול לאט יותר ובצע צעדים קטנים';
     } else if (appended && Date.now() - lastMovementAt > 3_500) {
-      finish().catch((error) => showToast(`צילום הגלילה נכשל: ${error.message}`, 8000));
+      finish().catch(failScrollCapture);
     }
   };
+
+  function failScrollCapture(error) {
+    clearInterval(interval);
+    clearTimeout(maximumTimer);
+    stopInputStreams();
+    state.scrollCapture = null;
+    state.busy = false;
+    bar.classList.add('hidden');
+    document.documentElement.dataset.scrollCapture = 'failed';
+    showToast(`צילום הגלילה נכשל: ${error.message}`, 8000);
+    restoreLivePreview();
+  }
 
   const finish = async () => {
     if (finishing) return;
@@ -1252,26 +1269,20 @@ async function beginScrollingCapture() {
     stopInputStreams();
     state.scrollCapture = null;
     state.busy = false;
-    await handleSavedScreenshot(result);
+    runAfterScreenshot(result);
   };
 
   state.scrollCapture = { finish };
-  $('#finish-scroll-capture').onclick = () => finish().catch((error) => {
-    stopInputStreams();
-    state.scrollCapture = null;
-    state.busy = false;
-    bar.classList.add('hidden');
-    showToast(`צילום הגלילה נכשל: ${error.message}`, 8000);
-    restoreLivePreview();
-  });
+  $('#finish-scroll-capture').onclick = () => finish().catch(failScrollCapture);
   sample();
   interval = setInterval(sample, 300);
-  maximumTimer = setTimeout(() => finish().catch(() => {}), 90_000);
+  maximumTimer = setTimeout(() => finish().catch(failScrollCapture), 90_000);
   status.textContent = 'עבור למקור וגלול לאט כלפי מטה; העצירה אוטומטית בסוף';
   showToast('צילום גלילה התחיל — גלול לאט; בסיום לחץ על סיום ושמירה', 7000);
 }
 
 async function beginCapture(kind, forcedScope = null) {
+  if (state.finalizing) return showToast('ההקלטה הקודמת עדיין נשמרת — אפשר להתחיל שוב בעוד רגע');
   if (state.busy || state.recorder) return;
   if (!state.selectedSource) return showToast('יש לבחור מסך או חלון תחילה');
   state.busy = true;
@@ -1297,6 +1308,7 @@ async function beginCapture(kind, forcedScope = null) {
     if (kind === 'screenshot') await saveScreenshot();
     else await startRecording();
   } catch (error) {
+    if (state.recorder && state.recorder.state === 'inactive') { state.recorder = null; state.recordingSession = null; }
     stopInputStreams();
     setStatus('שגיאה', 'error');
     showToast(`לא ניתן להתחיל צילום: ${error.message}`, 7000);
@@ -1311,7 +1323,13 @@ async function saveScreenshot() {
   const blob = await new Promise((resolve) => recordingCanvas.toBlob(resolve, 'image/png'));
   const result = await api.saveScreenshot(await blob.arrayBuffer());
   stopInputStreams();
-  await handleSavedScreenshot(result);
+  // The file is safe on disk: free the capture now, so library refresh, OCR and automations never block the next shot.
+  state.busy = false;
+  runAfterScreenshot(result);
+}
+
+function runAfterScreenshot(result) {
+  handleSavedScreenshot(result).catch((error) => showToast(`הצילום נשמר, אבל פעולת ההמשך נכשלה: ${error.message}`, 8000));
 }
 
 async function createMixedAudioTrack() {
@@ -1350,7 +1368,8 @@ function startIsolatedAudioRecorders() {
       if (!event.data.size || !state.recordingSession) return;
       state.audioAppendQueue = state.audioAppendQueue
         .then(() => event.data.arrayBuffer())
-        .then((bytes) => api.appendRecordingAudio(state.recordingSession.id, kind, bytes));
+        .then((bytes) => api.appendRecordingAudio(state.recordingSession.id, kind, bytes))
+        .catch((error) => { state.recordingWriteError ||= error; });
     });
     recorder.start(1000);
     state.audioRecorders.push(recorder);
@@ -1381,7 +1400,7 @@ function startRecordingHealthMonitor() {
         showToast('זוהתה תקיעת מצלמה — התצוגה הופעלה מחדש וההקלטה ממשיכה', 7000);
       }
       if (!cameraStalled) state.cameraStallNotified = false;
-      const health = await api.recordingHeartbeat(state.recordingSession.id, { cameraStalled, recorderState: state.recorder.state, elapsedMs: Date.now() - state.startedAt });
+      const health = await api.recordingHeartbeat(state.recordingSession.id, { cameraStalled, recorderState: state.recorder.state, elapsedMs: recordingElapsedMs() });
       $('#recording-segments').textContent = `מקטע ${health.segments}`;
       document.documentElement.dataset.recordingSegments = String(health.segments);
       document.documentElement.dataset.cameraHealth = cameraStalled ? 'recovering' : 'healthy';
@@ -1402,8 +1421,9 @@ async function startRecording() {
   if (mixedTrack) canvasStream.addTrack(mixedTrack);
   state.outputStream = canvasStream;
   const mimeType = recorderMimeType();
-  state.recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: preset.bitrate, audioBitsPerSecond: 192_000 });
+  // Open the file session first: if it fails (disk full) no half-started recorder is left behind.
   state.recordingSession = await api.beginRecordingFile({ mimeType, fps: preset.fps, targetHeight: state.targetHeight, segmentChunkTarget: api.qaEnabled ? 3 : 30 });
+  state.recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: preset.bitrate, audioBitsPerSecond: 192_000 });
   state.recordingAppendQueue = Promise.resolve();
   state.recordingWriteError = null;
   state.recordingBytes = 0;
@@ -1429,6 +1449,8 @@ async function startRecording() {
   drawFrame();
   state.drawTimer = setInterval(drawFrame, Math.max(8, Math.round(1000 / preset.fps)));
   state.startedAt = Date.now();
+  state.pausedAt = 0;
+  state.pausedMs = 0;
   startRecordingHealthMonitor();
   state.chapterMarkers = [];
   api.setQuickbarRecordingState(true).catch(() => {});
@@ -1437,7 +1459,7 @@ async function startRecording() {
   $('#recording-bar').classList.remove('hidden');
   $('#record-button span').textContent = 'עצור הקלטה';
   $('#record-button').dataset.recording = 'true';
-  state.timer = setInterval(() => { $('#recording-time').textContent = formatTime(Date.now() - state.startedAt); }, 500);
+  state.timer = setInterval(() => { $('#recording-time').textContent = formatTime(recordingElapsedMs()); }, 500);
   setStatus('מקליט', 'error');
   showToast('ההקלטה התחילה — קול המחשב והמיקרופון הפעילים מסונכרנים יחד');
 }
@@ -1452,15 +1474,19 @@ async function finalizeRecording() {
   $('#record-button span').textContent = 'התחל הקלטה';
   $('#record-button').dataset.recording = 'false';
   setStatus('שומר וממיר…', 'busy');
-  const recorder = state.recorder;
   state.recorder = null;
+  // Saving/converting can take minutes; block a new capture until this session is fully closed.
+  state.finalizing = true;
+  const session = state.recordingSession;
   api.setQuickbarRecordingState(false).catch(() => {});
   try {
     await stopIsolatedAudioRecorders();
     await state.recordingAppendQueue;
-    if (state.recordingWriteError) throw state.recordingWriteError;
-    const result = await api.finishRecordingFile(state.recordingSession.id, $('#convert-mp4').checked, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples });
+    const writeError = state.recordingWriteError;
+    // Even after a write error, close the session so the written segments are joined and kept.
+    const result = await api.finishRecordingFile(session.id, $('#convert-mp4').checked, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples });
     state.recordingSession = null;
+    if (writeError) showToast(`חלק מההקלטה לא נכתב לדיסק (${writeError.message}). מה שנשמר נשמר כאן: ${result.path}`, 10000);
     document.documentElement.dataset.lastSavedPath = result.path;
     stopInputStreams();
     const isolatedAudio = result.audioTracks?.length ? ` · ${result.audioTracks.length} ערוצי שמע נפרדים` : '';
@@ -1476,6 +1502,9 @@ async function finalizeRecording() {
     setStatus('שגיאת שמירה', 'error');
     showToast(`שמירת ההקלטה נכשלה: ${error.message}`, 9000);
     restoreLivePreview();
+  } finally {
+    if (state.recordingSession === session) state.recordingSession = null;
+    state.finalizing = false;
   }
 }
 
@@ -1498,6 +1527,13 @@ async function refreshCaptureCapabilities() {
   return capabilities;
 }
 
+// Time inside the saved file: paused spans are excluded, as MediaRecorder excludes them.
+function recordingElapsedMs() {
+  if (!state.startedAt) return 0;
+  const pausedNow = state.pausedAt ? Date.now() - state.pausedAt : 0;
+  return Math.max(0, Date.now() - state.startedAt - (state.pausedMs || 0) - pausedNow);
+}
+
 function stopRecording() {
   if (state.recorder && state.recorder.state !== 'inactive') state.recorder.stop();
 }
@@ -1507,11 +1543,14 @@ function togglePause() {
   const button = $('#pause-recording');
   if (state.recorder.state === 'recording') {
     state.recorder.pause();
+    state.pausedAt = Date.now();
     state.audioRecorders.forEach((recorder) => { if (recorder.state === 'recording') recorder.pause(); });
     button.textContent = 'המשך';
     setStatus('מושהה', 'busy');
   } else if (state.recorder.state === 'paused') {
     state.recorder.resume();
+    if (state.pausedAt) state.pausedMs += Date.now() - state.pausedAt;
+    state.pausedAt = 0;
     state.audioRecorders.forEach((recorder) => { if (recorder.state === 'paused') recorder.resume(); });
     button.textContent = 'השהיה';
     setStatus('מקליט', 'error');
@@ -1712,7 +1751,7 @@ async function openVideoEditor(item) {
   $('#video-mute').checked = false;
   $('#video-volume').value = '100';
   $('#video-volume-output').textContent = '100%';
-  $('#video-editor-preview').src = `file:///${item.path.replaceAll('\\', '/')}`;
+  $('#video-editor-preview').src = `file:///${item.path.replaceAll('\\', '/').split('/').map(encodeURIComponent).join('/').replace(/^([A-Za-z])%3A/, '$1:')}`;
   $('.timeline-editor').dataset.timelineReady = 'false';
   selectedTimelineItem = null;
   const loaded = await api.loadVideoTimeline(item.path);
@@ -2000,7 +2039,7 @@ async function initialize() {
   $('#recording-pause').addEventListener('click', togglePause);
   $('#recording-chapter').addEventListener('click', () => {
     if (!state.recorder) return;
-    const at = Math.max(0, (Date.now() - state.startedAt) / 1000);
+    const at = Math.max(0, recordingElapsedMs() / 1000);
     state.chapterMarkers.push({ at, label: `פרק ${state.chapterMarkers.length + 1}` });
     showToast(`סימון פרק ${state.chapterMarkers.length} נוסף ב־${formatTime(at * 1000)}`);
   });

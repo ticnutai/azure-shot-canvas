@@ -58,6 +58,8 @@ test.describe('Electron production workflow', () => {
   });
 
   test('startup, sources, responsive UI and navigation', async ({}, testInfo) => {
+    // Covers themes, layouts, shortcuts and two reloads; it outgrew the 90s default.
+    test.setTimeout(240_000);
     const metrics = [metric('Cold app ready', testInfo.startupMs, 'ms', 10_000, 'max', 'Electron launch to appReady, including parallel in-app QA execution')];
     await expect(page.locator('#app-version')).toHaveText('v0.7.1');
     await expect(page.locator('html')).toHaveAttribute('data-app-version', '0.7.1');
@@ -690,9 +692,26 @@ test.describe('Electron production workflow', () => {
     await expect.poll(() => page.evaluate(() => window.aurumEditor.stats().objects)).toBeGreaterThan(objectCount);
     await page.locator('#editor-overlay-file').setInputFiles(sourcePath);
     await expect.poll(() => page.evaluate(() => window.aurumEditor.stats().objects)).toBeGreaterThan(objectCount + 1);
+    // Recoloring must reach every part of composite marks: arrowheads, text and counters.
+    await page.locator('[data-editor-tool="select"]').click();
+    await page.keyboard.press('Control+A');
+    await expect.poll(() => page.evaluate(() => window.aurumEditor.stats().tool)).toBe('select');
+    await page.locator('#editor-stroke').evaluate((input) => { input.value = '#12b886'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+    await page.locator('#editor-fill-none').click();
+    const recolored = await page.evaluate(() => window.aurumEditor.objects());
+    const arrow = recolored.find((object) => object.toolType === 'arrow');
+    expect(arrow.objects.map((part) => part.stroke || part.fill)).toEqual(['#12b886', '#12b886']);
+    expect(arrow.objects[1].fill).toBe('#12b886');
+    expect(recolored.find((object) => object.toolType === 'text').fill).toBe('#12b886');
+    expect(recolored.find((object) => object.toolType === 'callout').backgroundColor).toBe('#12b886');
+    expect(recolored.find((object) => object.toolType === 'counter').objects[0].fill).toBe('#12b886');
+    expect(recolored.find((object) => object.secureRedaction).fill).toBe('#000000');
+    await page.keyboard.press('Escape');
     const initialCanvasWidth = await page.evaluate(() => window.aurumEditor.stats().width);
+    const objectsBeforeCrop = await page.evaluate(() => window.aurumEditor.stats().objects);
     await dragTool('crop', .03, .03, .96, .94);
     await expect.poll(() => page.evaluate(() => window.aurumEditor.stats().width)).toBeLessThan(initialCanvasWidth);
+    expect(await page.evaluate(() => window.aurumEditor.stats().objects)).toBeLessThanOrEqual(objectsBeforeCrop);
     await page.locator('#editor-undo').click();
     await expect.poll(() => page.evaluate(() => window.aurumEditor.stats().width)).toBe(initialCanvasWidth);
     const beforeUndo = await page.evaluate(() => window.aurumEditor.stats().objects);
@@ -744,6 +763,7 @@ test.describe('Electron production workflow', () => {
 
   test('microphone, camera, pause/resume and MP4 media integrity', async ({}, testInfo) => {
     await setCaptureDefaults(page, 'record', 'full');
+    await page.locator('#open-capture-settings').click();
     await page.locator('[data-settings-tab="audio"]').dispatchEvent('click');
     await setCheckbox(page, '#system-audio', false);
     await setCheckbox(page, '#microphone', true);
@@ -754,6 +774,7 @@ test.describe('Electron production workflow', () => {
     const videoDevices = await page.locator('#camera-device option').count();
     expect(audioDevices).toBeGreaterThan(1);
     expect(videoDevices).toBeGreaterThan(1);
+    await page.locator('#close-capture-settings').click();
 
     const before = new Set(await fs.readdir(outputDir));
     const started = performance.now();
@@ -820,9 +841,11 @@ test.describe('Electron production workflow', () => {
   test('interrupted recording is recovered automatically after restart', async ({}, testInfo) => {
     test.setTimeout(90_000);
     await setCaptureDefaults(page, 'record', 'full');
+    await page.locator('#open-capture-settings').click();
     await page.locator('[data-settings-tab="audio"]').click();
     await setCheckbox(page, '#system-audio', false);
     await setCheckbox(page, '#microphone', true);
+    await page.locator('#close-capture-settings').click();
     await page.locator('.nav-item[data-page="capture"]:not([data-action])').click();
     await page.locator('#record-button').click();
     await expect(page.locator('#recording-bar')).toBeVisible();

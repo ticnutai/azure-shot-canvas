@@ -94,12 +94,21 @@ function qualitySummary(probe) {
   };
 }
 
-async function analyzeMedia(filePath) {
-  const result = await runHidden('ffprobe', ['-v', 'error', '-show_format', '-show_streams', '-count_frames', '-of', 'json', filePath], { timeoutMs: 30_000 });
-  if (!result.ok) throw new Error(`בדיקת המדיה נכשלה: ${result.error}`);
-  const probe = JSON.parse(result.stdout);
+// Header-only probe is near-instant; frame counting decodes the whole file, so its timeout scales with duration.
+async function analyzeMedia(filePath, { countFrames = true, persist = true } = {}) {
+  const probeArgs = ['-v', 'error', '-show_format', '-show_streams', '-of', 'json', filePath];
+  const quick = await runHidden('ffprobe', probeArgs, { timeoutMs: 30_000 });
+  if (!quick.ok) throw new Error(`בדיקת המדיה נכשלה: ${quick.error}`);
+  let probe = JSON.parse(quick.stdout);
+  const headerDuration = Number(probe.format?.duration) || 0;
+  if (countFrames || !headerDuration) {
+    const timeoutMs = Math.min(15 * 60_000, Math.max(30_000, headerDuration * 250 + 15_000));
+    const counted = await runHidden('ffprobe', ['-count_frames', ...probeArgs], { timeoutMs });
+    if (counted.ok) probe = JSON.parse(counted.stdout);
+    else if (!headerDuration) throw new Error(`בדיקת המדיה נכשלה: ${counted.error}`);
+  }
   const quality = { ...qualitySummary(probe), analyzedAt: new Date().toISOString() };
-  await fs.writeFile(`${filePath}.quality.json`, JSON.stringify(quality, null, 2), 'utf8');
+  if (persist) await fs.writeFile(`${filePath}.quality.json`, JSON.stringify(quality, null, 2), 'utf8');
   return quality;
 }
 
