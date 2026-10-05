@@ -279,10 +279,10 @@ test.describe('Electron production workflow', () => {
     await page.keyboard.press('F8');
     await expect(openLibraryRow.locator('[data-shortcut-action]')).toHaveText('פעמיים F8');
     await openLibraryRow.locator('[data-shortcut-interval]').selectOption('650');
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F8' }));
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith('index.html')).webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F8' }));
     await page.waitForTimeout(360);
     await expect(page.locator('#settings-page')).toHaveClass(/active/);
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F8' }));
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith('index.html')).webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F8' }));
     await expect(page.locator('#library-page')).toHaveClass(/active/);
     await page.locator('.sidebar .nav-item[data-page="settings"]').click();
     await page.locator('[data-preference-tab="shortcuts"]').click();
@@ -376,7 +376,7 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#qa-metrics-body')).toContainText('-300 ms');
     await expect(page.locator('#qa-console')).toContainText('Saved QA console fixture');
     await expect(page.locator('#run-qa')).toBeDisabled();
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.send('qa:output', 'QA stream probe'));
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith('index.html')).webContents.send('qa:output', 'QA stream probe'));
     await expect(page.locator('#qa-console')).toContainText('QA stream probe');
     await page.locator('#copy-qa-console').click();
     await expect(page.locator('#copy-qa-console')).toHaveText('✓ הועתק');
@@ -425,6 +425,9 @@ test.describe('Electron production workflow', () => {
     // Click mode closes on its own once the pointer leaves: the bar can never take focus, so no blur ever arrives.
     await quickbarPage.locator('#edge-handle').click();
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'true');
+    // Wait for the window to finish growing: if it grows under the pointer afterwards, a real mouseenter rightly keeps it open.
+    await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).getBounds().width)).toBe(356);
+    await quickbarPage.waitForTimeout(300);
     await quickbarPage.locator('#quickbar').dispatchEvent('mouseleave');
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'false', { timeout: 5000 });
 
@@ -452,6 +455,11 @@ test.describe('Electron production workflow', () => {
     await quickbarPage.locator('[data-action="screenshot"]').click();
     const screenshotPath = await waitForNewFile(outputDir, '.png', before, 45_000);
     expect((await pngDimensions(screenshotPath)).width).toBeGreaterThan(0);
+    // The capture shows its card on the bar; the ▦ button returns to the action buttons.
+    await expect(quickbarPage.locator('html')).toHaveAttribute('data-view', 'capture');
+    await quickbarPage.locator('#show-actions').click();
+    await expect(quickbarPage.locator('html')).toHaveAttribute('data-view', 'actions');
+    await expect(quickbarPage.locator('.recent-item')).toHaveCount(1);
 
     await quickbarPage.locator('[data-action="openLibrary"]').click();
     await expect(page.locator('#library-page')).toHaveClass(/active/);
@@ -469,7 +477,7 @@ test.describe('Electron production workflow', () => {
     await setCaptureDefaults(page, 'screenshot', 'full');
     let before = new Set(await fs.readdir(outputDir));
     let started = performance.now();
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: '1', modifiers: ['control', 'shift'] }));
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith('index.html')).webContents.sendInputEvent({ type: 'keyDown', keyCode: '1', modifiers: ['control', 'shift'] }));
     await expect(page.locator('#region-modal')).toBeHidden();
     let filePath = await waitForNewFile(outputDir, '.png', before);
     samples.push(performance.now() - started);
@@ -965,7 +973,7 @@ test.describe('Electron production workflow', () => {
     const navigationMs = performance.now() - libraryStarted;
 
     await app.evaluate(({ BrowserWindow }) => {
-      const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed() && !candidate.webContents.isDevToolsOpened());
+      const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed() && !candidate.webContents.isDevToolsOpened() && candidate.webContents.getURL().endsWith('index.html'));
       if (!window) throw new Error('Screen Studio BrowserWindow was not found');
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'I', modifiers: ['control', 'shift'] });
     });
@@ -981,7 +989,7 @@ test.describe('Electron production workflow', () => {
     const reloadStarted = performance.now();
     const navigated = page.waitForEvent('framenavigated', { timeout: 10_000 });
     await app.evaluate(({ BrowserWindow }) => {
-      const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
+      const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed() && candidate.webContents.getURL().endsWith('index.html'));
       if (!window) throw new Error('Screen Studio BrowserWindow was not found');
       window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'R', modifiers: ['control', 'shift'] });
     });
@@ -1042,6 +1050,92 @@ test.describe('Electron production workflow', () => {
     const metrics = [
       metric('Live preview toggle', 4, 'assertions', 4, 'min', 'off stops the stream, capture works while off, choice survives reload, on restores the preview'),
       metric('Studio window hidden from capture', 2, 'states', 2, 'min', 'content protection follows the setting on and off')
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
+  test('post-capture card appears above all apps with working actions, recent strip and auto-hide', async ({}, testInfo) => {
+    test.setTimeout(180_000);
+    await page.locator('[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="general"]').click();
+    await setCheckbox(page, '#quickbar-enabled', false);
+    await setCheckbox(page, '#capture-preview-enabled', true);
+    await page.locator('#capture-preview-timeout').selectOption('0');
+    await setCaptureDefaults(page, 'screenshot', 'full');
+    await page.locator('#after-screenshot-action').selectOption('save').catch(() => {});
+    const quickbarPage = async () => {
+      await expect.poll(() => app.windows().filter((candidate) => candidate.url().includes('quickbar.html')).length).toBe(1);
+      return app.windows().find((candidate) => candidate.url().includes('quickbar.html'));
+    };
+    const capture = async () => {
+      const before = new Set(await fs.readdir(outputDir));
+      const started = performance.now();
+      await page.locator('#record-button').click();
+      const file = await waitForNewFile(outputDir, '.png', before, 30_000);
+      return { file, started };
+    };
+
+    const first = await capture();
+    const card = await quickbarPage();
+    await expect(card.locator('html')).toHaveAttribute('data-view', 'capture');
+    await expect(card.locator('body')).toHaveAttribute('data-expanded', 'true');
+    await expect(card.locator('#capture-name')).toHaveText(path.basename(first.file));
+    // Measured inside the app (file saved → card received it): test polling intervals are not part of the user's wait.
+    const savedAt = Number(await page.locator('html').getAttribute('data-last-saved-at'));
+    const shownAt = Number(await card.locator('html').getAttribute('data-card-shown-at'));
+    const cardMs = shownAt - savedAt;
+    console.log('CARD_MS', cardMs);
+    await expect(card.locator('#capture-thumb')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
+
+    await app.evaluate(({ clipboard }) => clipboard.clear());
+    await card.locator('[data-capture-action="copy"]').click();
+    await expect.poll(() => app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty())).toBe(true);
+    const pinWindows = () => app.windows().filter((candidate) => candidate.url().startsWith('data:text/html'));
+    const pinsBefore = pinWindows().length;
+    await card.locator('[data-capture-action="pin"]').click();
+    await expect.poll(() => pinWindows().length).toBe(pinsBefore + 1);
+    for (const pinned of pinWindows()) await pinned.close().catch(() => {});
+
+    const second = await capture();
+    await expect(card.locator('#capture-name')).toHaveText(path.basename(second.file));
+    await expect(card.locator('.recent-item')).toHaveCount(2);
+    await card.locator('.recent-item').nth(1).click();
+    await expect(card.locator('#capture-name')).toHaveText(path.basename(first.file));
+    await card.locator('[data-capture-action="edit"]').click();
+    await expect(page.locator('#image-editor-shell')).toHaveAttribute('data-editor-ready', 'true');
+    await expect(page.locator('#editor-file-name')).toHaveText(path.basename(first.file));
+    await page.evaluate(() => window.aurumEditor.close(true));
+
+    // Auto-hide after the chosen time.
+    await page.locator('.nav-item[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="general"]').click();
+    await page.locator('#capture-preview-timeout').selectOption('4');
+    await setCaptureDefaults(page, 'screenshot', 'full');
+    // The pointer must be away from the card: hovering it rightly keeps it open.
+    await card.mouse.move(3000, 3000);
+    await capture();
+    await expect(card.locator('body')).toHaveAttribute('data-expanded', 'true');
+    await expect(card.locator('body')).toHaveAttribute('data-expanded', 'false', { timeout: 8000 });
+
+    // Switched off: a capture leaves the card closed.
+    await page.locator('.nav-item[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="general"]').click();
+    await setCheckbox(page, '#capture-preview-enabled', false);
+    await setCaptureDefaults(page, 'screenshot', 'full');
+    await capture();
+    await page.waitForTimeout(1500);
+    await expect(card.locator('body')).toHaveAttribute('data-expanded', 'false');
+    await page.locator('.nav-item[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="general"]').click();
+    await setCheckbox(page, '#capture-preview-enabled', true);
+    await page.locator('#capture-preview-timeout').selectOption('6');
+    await page.locator('.nav-item[data-page="capture"]:not([data-action])').click();
+
+    const metrics = [
+      metric('Capture card response', cardMs, 'ms', 1000, 'max', 'file saved to card with thumbnail on screen, quickbar switched off'),
+      metric('Capture card actions', 4, 'actions', 4, 'min', 'copy to clipboard, pin window, recent-strip selection, open in editor'),
+      metric('Capture card auto-hide and off switch', 2, 'states', 2, 'min', 'hides after 4 s; stays closed when disabled')
     ];
     await attachMetrics(testInfo, metrics);
     expect(metrics.every((item) => item.pass)).toBeTruthy();

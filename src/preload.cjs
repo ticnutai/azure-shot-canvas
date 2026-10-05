@@ -57,5 +57,8 @@ contextBridge.exposeInMainWorld('screenStudio', {
   openQaReport: () => ipcRenderer.invoke('qa:open-report'),
   onQaOutput: (callback) => ipcRenderer.on('qa:output', (_event, text) => callback(text)),
   onShortcut: (callback) => ipcRenderer.on('shortcut', (_event, action, meta) => callback(action, meta)),
-  onNavigate: (callback) => ipcRenderer.on('app:navigate', (_event, page) => callback(page))
+  onNavigate: (callback) => ipcRenderer.on('app:navigate', (_event, page) => callback(page)),
+  showCapturePreview: (filePath) => ipcRenderer.invoke('capture:preview', filePath),
+  onOpenEditor: (callback) => ipcRenderer.on('app:open-editor', (_event, filePath) => callback(filePath)),
+  onLibraryChanged: (callback) => ipcRenderer.on('app:library-changed', () => callback())
 });

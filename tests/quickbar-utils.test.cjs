@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DEFAULT_QUICKBAR_PREFERENCES, normalizeQuickbarPreferences, quickbarBounds, shouldHideMainWindowOnClose } = require('../src/quickbar-utils.cjs');
+const { DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds, shouldHideMainWindowOnClose } = require('../src/quickbar-utils.cjs');
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
-  assert.deepEqual(normalized, { enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
+  assert.deepEqual(normalized, { enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6 });
   assert.deepEqual(normalizeQuickbarPreferences({ enabled: false, edge: 'bottom' }, normalized), { ...normalized, enabled: false, pinned: false });
   assert.deepEqual(normalizeQuickbarPreferences({}), DEFAULT_QUICKBAR_PREFERENCES);
 });
@@ -34,4 +34,30 @@ test('closing the main window keeps the quickbar alive only in normal desktop mo
   assert.equal(shouldHideMainWindowOnClose(enabled, { headless: true }), false);
   assert.equal(shouldHideMainWindowOnClose(enabled, { quitting: true }), false);
   assert.equal(shouldHideMainWindowOnClose({ enabled: false }), false);
+});
+
+test('capture card preferences accept only known timeouts and can be switched off', () => {
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 10 }).captureTimeout, 10);
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 0 }).captureTimeout, 0);
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 7 }).captureTimeout, 6);
+  assert.equal(normalizeQuickbarPreferences({ capturePreview: false }).capturePreview, false);
+});
+
+test('capture card and recent strip get taller bounds that still fit the work area', () => {
+  const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
+  assert.equal(quickbarBounds(workArea, { edge: 'right' }, true).height, 194);
+  assert.equal(quickbarBounds(workArea, { edge: 'right' }, true, { hasRecent: true }).height, 268);
+  assert.equal(quickbarBounds(workArea, { edge: 'right' }, true, { view: 'capture' }).height, 382);
+  assert.equal(quickbarBounds({ x: 0, y: 0, width: 400, height: 300 }, { edge: 'right' }, true, { view: 'capture' }).height, 300);
+});
+
+test('recent captures are newest first, unique per file and capped', () => {
+  let list = [];
+  for (let index = 0; index < 8; index += 1) list = addRecentCapture(list, { path: `C:\\a\\${index}.png` });
+  assert.equal(list.length, 6);
+  assert.equal(list[0].path, 'C:\\a\\7.png');
+  list = addRecentCapture(list, { path: 'c:\\A\\5.PNG', name: 'again' });
+  assert.equal(list.length, 6);
+  assert.equal(list[0].name, 'again');
+  assert.equal(list.filter((entry) => entry.path.toLowerCase() === 'c:\\a\\5.png').length, 1);
 });

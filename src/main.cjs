@@ -12,7 +12,7 @@ const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatch
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
-const { DEFAULT_QUICKBAR_PREFERENCES, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
 const { normalizeTimelineProject } = require('./video-timeline-utils.cjs');
 const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
@@ -38,6 +38,9 @@ let quickbarWindow = null;
 let quickbarExpanded = false;
 let quickbarPreferences = { ...DEFAULT_QUICKBAR_PREFERENCES };
 let quickbarCursorTimer = null;
+// Post-capture card: which view the bar shows and the recent captures it lists (newest first).
+let quickbarView = 'actions';
+let recentCaptures = [];
 let isQuitting = false;
 const privateShareServer = new PrivateShareServer();
 
@@ -64,13 +67,20 @@ function quickbarDisplay() {
   return quickbarPreferences.display === 'primary' ? screen.getPrimaryDisplay() : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
 }
 function quickbarBounds(expanded = quickbarExpanded) {
-  return calculateQuickbarBounds(quickbarDisplay().workArea, quickbarPreferences, expanded);
+  return calculateQuickbarBounds(quickbarDisplay().workArea, quickbarPreferences, expanded, { view: quickbarView, hasRecent: recentCaptures.length > 0 });
 }
 function positionQuickbar(expanded = quickbarExpanded) {
   if (!quickbarWindow || quickbarWindow.isDestroyed()) return;
   quickbarExpanded = Boolean(expanded || quickbarPreferences.pinned);
+  if (!quickbarExpanded) quickbarView = 'actions';
   quickbarWindow.setBounds(quickbarBounds(quickbarExpanded), false);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
+  // With the bar switched off, the window only exists to show the capture card: no edge tab once it closes.
+  const canShow = process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1';
+  if (!quickbarPreferences.enabled) {
+    if (quickbarExpanded) { if (canShow) quickbarWindow.showInactive(); }
+    else quickbarWindow.hide();
+  } else if (canShow && !quickbarWindow.isVisible()) quickbarWindow.showInactive();
 }
 function updateQuickbarCursorTracking() {
   clearInterval(quickbarCursorTimer);
@@ -81,8 +91,8 @@ function updateQuickbarCursorTracking() {
   }, 800);
   quickbarCursorTimer.unref?.();
 }
-async function createQuickbarWindow() {
-  if (!quickbarPreferences.enabled || quickbarWindow) return quickbarWindow;
+async function createQuickbarWindow({ forCapture = false } = {}) {
+  if ((!quickbarPreferences.enabled && !forCapture) || quickbarWindow) return quickbarWindow;
   quickbarExpanded = Boolean(quickbarPreferences.pinned);
   quickbarWindow = new BrowserWindow({
     ...quickbarBounds(quickbarExpanded), show: false, frame: false, transparent: true, resizable: false, movable: false,
@@ -95,15 +105,18 @@ async function createQuickbarWindow() {
   quickbarWindow.setFocusable(false);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
   quickbarWindow.on('closed', () => { quickbarWindow = null; });
-  if (process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') quickbarWindow.showInactive();
+  if (quickbarPreferences.enabled && process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') quickbarWindow.showInactive();
   quickbarWindow.setContentProtection(true);
   quickbarWindow.webContents.send('quickbar:recording-state', Boolean(recordingSessions.size));
   updateQuickbarCursorTracking();
   return quickbarWindow;
 }
 async function applyQuickbarPreferences(patch = {}) {
+  const wasEnabled = quickbarPreferences.enabled;
   await saveQuickbarPreferences(patch);
-  if (!quickbarPreferences.enabled) { clearInterval(quickbarCursorTimer); quickbarCursorTimer = null; quickbarWindow?.destroy(); quickbarWindow = null; quickbarExpanded = false; }
+  // Switching the bar off closes its window; other setting changes while it is off keep the capture card's window.
+  if (!quickbarPreferences.enabled && wasEnabled) { clearInterval(quickbarCursorTimer); quickbarCursorTimer = null; quickbarWindow?.destroy(); quickbarWindow = null; quickbarExpanded = false; quickbarView = 'actions'; }
+  else if (!quickbarPreferences.enabled) { quickbarWindow?.webContents.send('quickbar:preferences', quickbarPreferences); }
   else {
     await createQuickbarWindow();
     updateQuickbarCursorTracking();
@@ -112,6 +125,85 @@ async function applyQuickbarPreferences(patch = {}) {
     quickbarWindow?.webContents.send('quickbar:preferences', quickbarPreferences);
   }
   return quickbarPreferences;
+}
+
+// One implementation for library actions, used by automations (workflow:action) and the capture card.
+async function runLibraryAction(filePath, action, options = {}) {
+  const resolved = await assertLibraryFile(filePath);
+  if (action === 'copy') {
+    if (/\.png$/i.test(resolved)) clipboard.writeImage(nativeImage.createFromPath(resolved));
+    else clipboard.writeText(resolved);
+    return { action, path: resolved };
+  }
+  if (action === 'ocr') {
+    if (!/\.png$/i.test(resolved)) return { action, skipped: true, reason: 'OCR מיועד לתמונה' };
+    const result = await runOcr(resolved, { tessdataDirectory: await ensureOcrLanguageData() });
+    await updateMetadata(resolved, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
+    return { action, characters: result.text.length };
+  }
+  if (action === 'client-copy') {
+    const client = String(options.client || '').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '').slice(0, 60);
+    if (!client) return { action, skipped: true, reason: 'לא הוגדר שם לקוח' };
+    const clientDirectory = path.join(await ensureOutputDirectory(), 'לקוחות', client);
+    await fs.mkdir(clientDirectory, { recursive: true });
+    const target = path.join(clientDirectory, path.basename(resolved));
+    await fs.copyFile(resolved, target);
+    return { action, path: target };
+  }
+  if (action === 'share') { const share = await privateShareServer.share(resolved, 30); clipboard.writeText(share.url); return { action, ...share }; }
+  if (action === 'open-folder') { shell.showItemInFolder(resolved); return { action, path: resolved }; }
+  if (action === 'pin') return { action, ...(await pinImageWindow(resolved)) };
+  return { action, renderer: true, path: resolved };
+}
+
+async function pinImageWindow(resolved) {
+  if (!/\.png$/i.test(resolved)) throw new Error('אפשר להצמיד רק תמונה');
+  const bytes = await fs.readFile(resolved);
+  const dataUrl = `data:image/png;base64,${bytes.toString('base64')}`;
+  const image = nativeImage.createFromBuffer(bytes);
+  const size = image.getSize();
+  const scale = Math.min(1, 900 / Math.max(size.width, 1), 700 / Math.max(size.height, 1));
+  const pinWindow = new BrowserWindow({ show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1', width: Math.max(260, Math.round(size.width * scale)), height: Math.max(180, Math.round(size.height * scale)), frame: false, resizable: true, alwaysOnTop: true, backgroundColor: '#111111', webPreferences: { contextIsolation: true, sandbox: true } });
+  await pinWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;-webkit-app-region:drag}img{width:100%;height:100%;object-fit:contain;display:block}button{position:fixed;top:8px;left:8px;width:28px;height:28px;border:0;border-radius:50%;background:#000a;color:#fff;font:16px Segoe UI;cursor:pointer;opacity:0;transition:opacity .15s;-webkit-app-region:no-drag}body:hover button{opacity:1}</style><img draggable="false" src="${dataUrl}"><button title="סגירה (Esc)" onclick="window.close()">×</button>`)}`);
+  pinWindow.setAlwaysOnTop(true, 'floating');
+  pinWindow.webContents.on('before-input-event', (_inputEvent, input) => { if (input.type === 'keyDown' && input.key === 'Escape') pinWindow.close(); });
+  return { pinned: true, bounds: pinWindow.getBounds() };
+}
+
+// Shows the post-capture card on the floating bar (created on demand even if the bar itself is switched off).
+async function showCapturePreview(filePath) {
+  const resolved = await assertLibraryFile(filePath);
+  const stat = await fs.stat(resolved);
+  const extension = path.extname(resolved).slice(1).toLowerCase();
+  const thumbnail = await thumbnailFor({ path: resolved, extension, modified: stat.mtimeMs, size: stat.size });
+  const kind = extension === 'png' ? 'image' : 'video';
+  const durationSeconds = kind === 'video' ? (await readJson(`${resolved}.quality.json`))?.durationSeconds || null : null;
+  recentCaptures = addRecentCapture(recentCaptures, { path: resolved, name: path.basename(resolved), kind, size: stat.size, durationSeconds, thumbnail, at: Date.now() });
+  if (!quickbarPreferences.capturePreview) return { shown: false, recent: recentCaptures.length };
+  await createQuickbarWindow({ forCapture: true });
+  quickbarView = 'capture';
+  positionQuickbar(true);
+  // Recordings need longer to notice than a screenshot: never hide their card in under 10 seconds.
+  const timeout = quickbarPreferences.captureTimeout && kind === 'video' ? Math.max(10, quickbarPreferences.captureTimeout) : quickbarPreferences.captureTimeout;
+  quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: true, timeout });
+  return { shown: true, recent: recentCaptures.length };
+}
+
+async function runCaptureCardAction(filePath, action) {
+  const resolved = await assertLibraryFile(filePath);
+  if (action === 'edit') {
+    showMainWindow();
+    mainWindow?.focus();
+    mainWindow?.webContents.send('app:open-editor', resolved);
+  } else if (action === 'trash') {
+    await shell.trashItem(resolved);
+    for (const sidecar of [projectPathFor(resolved), `${resolved}.meta.json`]) await shell.trashItem(sidecar).catch(() => {});
+    recentCaptures = recentCaptures.filter((entry) => entry.path !== resolved);
+    mainWindow?.webContents.send('app:library-changed');
+    quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: false });
+    if (!recentCaptures.length) positionQuickbar(false);
+  } else await runLibraryAction(resolved, action);
+  return { action, path: resolved };
 }
 
 async function assertLibraryFile(filePath, extensions = /\.(png|webm|mp4)$/i) {
@@ -866,19 +958,7 @@ function registerIpc() {
     }
     return `data:image/png;base64,${(await fs.readFile(outputPath)).toString('base64')}`;
   });
-  ipcMain.handle('library:pin', async (_event, filePath) => {
-    const resolved = await assertLibraryFile(filePath, /\.png$/i);
-    const bytes = await fs.readFile(resolved);
-    const dataUrl = `data:image/png;base64,${bytes.toString('base64')}`;
-    const image = nativeImage.createFromBuffer(bytes);
-    const size = image.getSize();
-    const scale = Math.min(1, 900 / Math.max(size.width, 1), 700 / Math.max(size.height, 1));
-    const pinWindow = new BrowserWindow({ show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1', width: Math.max(260, Math.round(size.width * scale)), height: Math.max(180, Math.round(size.height * scale)), frame: false, resizable: true, alwaysOnTop: true, backgroundColor: '#111111', webPreferences: { contextIsolation: true, sandbox: true } });
-    await pinWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;-webkit-app-region:drag}img{width:100%;height:100%;object-fit:contain;display:block}button{position:fixed;top:8px;left:8px;width:28px;height:28px;border:0;border-radius:50%;background:#000a;color:#fff;font:16px Segoe UI;cursor:pointer;opacity:0;transition:opacity .15s;-webkit-app-region:no-drag}body:hover button{opacity:1}</style><img draggable="false" src="${dataUrl}"><button title="סגירה (Esc)" onclick="window.close()">×</button>`)}`);
-    pinWindow.setAlwaysOnTop(true, 'floating');
-    pinWindow.webContents.on('before-input-event', (_inputEvent, input) => { if (input.type === 'keyDown' && input.key === 'Escape') pinWindow.close(); });
-    return { pinned: true, bounds: pinWindow.getBounds() };
-  });
+  ipcMain.handle('library:pin', async (_event, filePath) => pinImageWindow(await assertLibraryFile(filePath, /\.png$/i)));
   ipcMain.handle('video:edit', async (_event, filePath, options) => {
     const directory = path.resolve(await ensureOutputDirectory());
     const resolved = path.resolve(filePath);
@@ -913,30 +993,7 @@ function registerIpc() {
   ipcMain.handle('video:detect-silence', async (_event, filePath, options) => detectSilences(await assertLibraryFile(filePath, /\.(webm|mp4)$/i), options));
   ipcMain.handle('workflow:action', async (_event, filePath, action, options = {}) => {
     if (!WORKFLOW_ACTIONS.has(action)) throw new Error('פעולת אוטומציה אינה מוכרת');
-    const resolved = await assertLibraryFile(filePath);
-    if (action === 'copy') {
-      if (/\.png$/i.test(resolved)) clipboard.writeImage(nativeImage.createFromPath(resolved));
-      else clipboard.writeText(resolved);
-      return { action, path: resolved };
-    }
-    if (action === 'ocr') {
-      if (!/\.png$/i.test(resolved)) return { action, skipped: true, reason: 'OCR מיועד לתמונה' };
-      const result = await runOcr(resolved, { tessdataDirectory: await ensureOcrLanguageData() });
-      await updateMetadata(resolved, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
-      return { action, characters: result.text.length };
-    }
-    if (action === 'client-copy') {
-      const client = String(options.client || '').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '').slice(0, 60);
-      if (!client) return { action, skipped: true, reason: 'לא הוגדר שם לקוח' };
-      const clientDirectory = path.join(await ensureOutputDirectory(), 'לקוחות', client);
-      await fs.mkdir(clientDirectory, { recursive: true });
-      const target = path.join(clientDirectory, path.basename(resolved));
-      await fs.copyFile(resolved, target);
-      return { action, path: target };
-    }
-    if (action === 'share') { const share = await privateShareServer.share(resolved, 30); clipboard.writeText(share.url); return { action, ...share }; }
-    if (action === 'open-folder') { shell.showItemInFolder(resolved); return { action, path: resolved }; }
-    return { action, renderer: true, path: resolved };
+    return runLibraryAction(filePath, action, options);
   });
   ipcMain.handle('editor:load', async (_event, filePath) => {
     const sourcePath = assertEditableImagePath(filePath, await ensureOutputDirectory());
@@ -977,7 +1034,23 @@ function registerIpc() {
     app.setLoginItemSettings({ openAtLogin: Boolean(enabled), path: process.execPath });
     return app.getLoginItemSettings().openAtLogin;
   });
-  ipcMain.handle('quickbar:get-state', () => ({ preferences: quickbarPreferences, expanded: quickbarExpanded, recording: Boolean(recordingSessions.size) }));
+  ipcMain.handle('quickbar:get-state', () => ({ preferences: quickbarPreferences, expanded: quickbarExpanded, recording: Boolean(recordingSessions.size), view: quickbarView, captures: recentCaptures }));
+  ipcMain.handle('capture:preview', (_event, filePath) => showCapturePreview(filePath));
+  ipcMain.handle('quickbar:capture-action', (_event, filePath, action) => {
+    if (!['edit', 'copy', 'pin', 'open-folder', 'trash'].includes(action)) throw new Error('פעולה לא מוכרת בכרטיס הצילום');
+    return runCaptureCardAction(filePath, action);
+  });
+  ipcMain.handle('quickbar:set-view', (_event, view) => { quickbarView = view === 'capture' && recentCaptures.length ? 'capture' : 'actions'; positionQuickbar(quickbarExpanded); return quickbarView; });
+  // Drag a capture out of the card straight into another program (must run synchronously during dragstart).
+  ipcMain.on('quickbar:start-drag', async (event, filePath) => {
+    if (!isTrustedSender(event)) return;
+    try {
+      const resolved = await assertLibraryFile(filePath);
+      const entry = recentCaptures.find((item) => item.path === resolved);
+      const icon = entry?.thumbnail ? nativeImage.createFromDataURL(entry.thumbnail).resize({ width: 96 }) : nativeImage.createFromPath(resolved).resize({ width: 96 });
+      event.sender.startDrag({ file: resolved, icon });
+    } catch {}
+  });
   ipcMain.handle('quickbar:get-preferences', () => quickbarPreferences);
   ipcMain.handle('quickbar:set-preferences', (_event, patch) => applyQuickbarPreferences(patch));
   ipcMain.handle('quickbar:set-expanded', (_event, expanded) => { positionQuickbar(Boolean(expanded)); return { expanded: quickbarExpanded, bounds: quickbarWindow?.getBounds() || null }; });
@@ -1128,6 +1201,8 @@ app.whenReady().then(async () => {
   createWindow();
   createTray();
   await createQuickbarWindow();
+  // Prepare the capture card's window in the background, so the first capture after start shows its card at once.
+  if (quickbarPreferences.capturePreview) setTimeout(() => createQuickbarWindow({ forCapture: true }).catch(() => {}), 2500).unref?.();
   screen.on('display-metrics-changed', () => positionQuickbar());
   screen.on('display-removed', () => positionQuickbar());
   const devParentPid = Number(process.env.SCREEN_STUDIO_DEV_PARENT_PID);

@@ -1150,8 +1150,10 @@ function chooseRegion() {
 
 async function handleSavedScreenshot(result) {
   document.documentElement.dataset.lastSavedPath = result.path;
+  document.documentElement.dataset.lastSavedAt = String(Date.now());
+  // One notice per capture: the floating card when it is shown, otherwise the in-app toast.
+  showCaptureCard(result.path, ['quick', 'professional'].includes(state.afterScreenshotAction)).then((card) => { if (!card?.shown) showToast(`התמונה נשמרה: ${result.path}`); });
   setStatus('התמונה נשמרה');
-  showToast(`התמונה נשמרה: ${result.path}`);
   await loadLibrary().catch(() => {});
   restoreLivePreview();
   const completed = new Set();
@@ -1187,6 +1189,20 @@ function addWorkflow(template = 'blank') {
   saveWorkflows();
 }
 
+// One way to open a capture for editing — used by automations and by the post-capture card.
+async function openInEditor(filePath) {
+  if (/\.png$/i.test(filePath)) return window.aurumEditor?.open(filePath, 'professional');
+  if (!state.libraryItems.some((entry) => entry.path === filePath)) await loadLibrary().catch(() => {});
+  const item = state.libraryItems.find((entry) => entry.path === filePath) || { path: filePath, name: filePath.split(/[\\/]/).at(-1) };
+  return openVideoEditor(item);
+}
+
+// The floating card above all apps: skipped when the editor is about to open anyway (no two surfaces for one capture).
+function showCaptureCard(filePath, opensEditor = false) {
+  if (opensEditor || !api.showCapturePreview) return Promise.resolve({ shown: false });
+  return api.showCapturePreview(filePath).catch(() => ({ shown: false }));
+}
+
 async function runWorkflows(trigger, filePath, completed = new Set()) {
   const rules = workflowDefinitions.filter((workflow) => workflow.enabled && workflow.trigger === trigger);
   if (!rules.length) return [];
@@ -1197,7 +1213,7 @@ async function runWorkflows(trigger, filePath, completed = new Set()) {
     for (const action of workflow.actions) {
       if (completed.has(action)) { workflowExecutionLog.push(`  ↷ ${workflowActionLabels[action]} — דולג כדי למנוע כפילות`); continue; }
       let result;
-      if (action === 'open-editor') { if (/\.png$/i.test(filePath)) await window.aurumEditor?.open(filePath, 'professional'); else { const item = state.libraryItems.find((entry) => entry.path === filePath) || { path: filePath, name: filePath.split(/[\\/]/).at(-1) }; await openVideoEditor(item); } result = { renderer: true }; }
+      if (action === 'open-editor') { await openInEditor(filePath); result = { renderer: true }; }
       else result = await api.runWorkflowAction(filePath, action, { client: workflow.client });
       completed.add(action); results.push({ workflow: workflow.name, action, result });
       workflowExecutionLog.push(`  ✓ ${workflowActionLabels[action]}${result?.skipped ? ` — ${result.reason}` : ''}`);
@@ -1530,6 +1546,7 @@ async function finalizeRecording() {
     else if (result.conversionError) showToast(`ה-WebM נשמר. המרת MP4 נכשלה: ${result.conversionError}`, 9000);
     else showToast(`ההקלטה נשמרה: ${result.path}`, 7000);
     setStatus('ההקלטה נשמרה');
+    showCaptureCard(result.path);
     loadLibrary().catch(() => {});
     runWorkflows('recording', result.path).catch((error) => showToast(`אוטומציה נכשלה: ${error.message}`, 8000));
     restoreLivePreview();
@@ -2176,7 +2193,12 @@ async function initialize() {
     $('#quickbar-display').value = preferences.display;
     $('#quickbar-pinned').checked = preferences.pinned;
     $$('#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
+    $('#capture-preview-enabled').checked = preferences.capturePreview;
+    $('#capture-preview-timeout').value = String(preferences.captureTimeout);
+    $('#capture-preview-timeout').disabled = !preferences.capturePreview;
   };
+  $('#capture-preview-enabled').addEventListener('change', (event) => updateQuickbar({ capturePreview: event.target.checked }));
+  $('#capture-preview-timeout').addEventListener('change', (event) => updateQuickbar({ captureTimeout: Number(event.target.value) }));
   $('#quickbar-enabled').addEventListener('change', (event) => updateQuickbar({ enabled: event.target.checked }));
   $('#quickbar-edge').addEventListener('change', (event) => updateQuickbar({ edge: event.target.value }));
   $('#quickbar-activation').addEventListener('change', (event) => updateQuickbar({ activation: event.target.value }));
@@ -2357,11 +2379,14 @@ async function initialize() {
     executeShortcutAction(action).catch((error) => showToast(`הפעלת הקיצור נכשלה: ${error.message}`));
   });
   api.onNavigate((page) => showPage(page));
+  api.onOpenEditor?.((filePath) => openInEditor(filePath).catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
+  api.onLibraryChanged?.(() => loadLibrary().catch(() => {}));
   document.documentElement.dataset.appReady = 'true';
   setTimeout(() => Promise.all([
     api.getOutput().then((value) => { $('#output-path').textContent = value; }), api.getAutostart().then((enabled) => { $('#autostart-app').checked = enabled; }), api.getQuickbarPreferences().then((preferences) => {
       $('#quickbar-enabled').checked = preferences.enabled; $('#quickbar-edge').value = preferences.edge; $('#quickbar-activation').value = preferences.activation; $('#quickbar-display').value = preferences.display; $('#quickbar-pinned').checked = preferences.pinned;
       $$('#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
+      $('#capture-preview-enabled').checked = preferences.capturePreview; $('#capture-preview-timeout').value = String(preferences.captureTimeout); $('#capture-preview-timeout').disabled = !preferences.capturePreview;
     }),
     refreshSources(), loadLibrary(), refreshStorageStatus()
   ]).catch((error) => {
