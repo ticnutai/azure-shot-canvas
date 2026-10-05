@@ -2,6 +2,7 @@ const { _electron: electron } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { version: appVersion } = require('../package.json');
 
 async function main() {
   const executablePath = process.env.SCREEN_STUDIO_VERIFY_EXECUTABLE || path.join(process.env.LOCALAPPDATA, 'Programs', 'hebrew-screen-studio', 'אולפן צילום מסך.exe');
@@ -143,7 +144,7 @@ async function main() {
     }));
     result.errors = errors;
     const passed = result.filters === 3 && result.sorts === 5 && result.views === 3 && result.quickActions === 3
-      && result.versionBadge.text === 'v0.7.1' && result.versionBadge.visible && result.versionBadge.left <= 12 && result.versionBadge.bottomGap <= 10 && result.versionBadge.fontSize <= 9
+      && result.versionBadge.text === `v${appVersion}` && result.versionBadge.visible && result.versionBadge.left <= 12 && result.versionBadge.bottomGap <= 10 && result.versionBadge.fontSize <= 9
       && result.removedChrome.profile === 0 && result.removedChrome.sidebarLogo === 0 && result.removedChrome.firstSidebarItemTop <= 30
       && result.captureLayouts.defaultLayout === 'clean' && result.captureLayouts.dashboardCards === 0 && !result.captureLayouts.railInitiallyVisible
       && result.captureLayouts.dialogVisible && result.captureLayouts.professionalRailVisible && result.captureLayouts.focusLibraryHidden

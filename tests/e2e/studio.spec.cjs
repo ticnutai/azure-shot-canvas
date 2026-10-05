@@ -4,6 +4,7 @@ const path = require('node:path');
 const { closeStudio, launchStudio } = require('../helpers/electron-app.cjs');
 const { audioLevels, pngDimensions, probe } = require('../helpers/media.cjs');
 const { metric, summarize } = require('../helpers/metrics.cjs');
+const { version: appVersion } = require('../../package.json');
 
 async function attachMetrics(testInfo, metrics) {
   await testInfo.attach('metrics', { body: Buffer.from(JSON.stringify(metrics)), contentType: 'application/json' });
@@ -61,8 +62,8 @@ test.describe('Electron production workflow', () => {
     // Covers themes, layouts, shortcuts and two reloads; it outgrew the 90s default.
     test.setTimeout(240_000);
     const metrics = [metric('Cold app ready', testInfo.startupMs, 'ms', 10_000, 'max', 'Electron launch to appReady, including parallel in-app QA execution')];
-    await expect(page.locator('#app-version')).toHaveText('v0.7.1');
-    await expect(page.locator('html')).toHaveAttribute('data-app-version', '0.7.1');
+    await expect(page.locator('#app-version')).toHaveText(`v${appVersion}`);
+    await expect(page.locator('html')).toHaveAttribute('data-app-version', appVersion);
     const versionBadge = await page.locator('#app-version').evaluate((node) => {
       const rect = node.getBoundingClientRect();
       return { left: rect.left, bottomGap: innerHeight - rect.bottom, fontSize: Number.parseFloat(getComputedStyle(node).fontSize), visible: getComputedStyle(node).display !== 'none' };
@@ -71,7 +72,7 @@ test.describe('Electron production workflow', () => {
     expect(versionBadge.left).toBeLessThanOrEqual(12);
     expect(versionBadge.bottomGap).toBeLessThanOrEqual(10);
     expect(versionBadge.fontSize).toBeLessThanOrEqual(9);
-    metrics.push(metric('Always-visible version badge', 6, 'assertions', 6, 'min', `v0.7.1; left=${versionBadge.left}px bottom=${versionBadge.bottomGap}px font=${versionBadge.fontSize}px`));
+    metrics.push(metric('Always-visible version badge', 6, 'assertions', 6, 'min', `v${appVersion}; left=${versionBadge.left}px bottom=${versionBadge.bottomGap}px font=${versionBadge.fontSize}px`));
     await expect(page.locator('.profile-button')).toHaveCount(0);
     await expect(page.locator('.logo-mark')).toHaveCount(0);
     const firstSidebarItemTop = await page.locator('.sidebar nav .nav-item').first().evaluate((node) => node.getBoundingClientRect().top);
