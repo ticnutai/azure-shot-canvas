@@ -3,7 +3,7 @@
   .topbar { grid-template-columns: 1fr 320px 1fr; }
   .content-shell { grid-template-columns: minmax(0, 1fr); }
   .main-column { grid-column: 1; grid-row: 1; }
-  .settings-rail { grid-column: 1; grid-row: 2; min-height: auto; }
+  
   .source-grid { grid-template-columns: repeat(4, minmax(110px, 1fr)); }
 }
 

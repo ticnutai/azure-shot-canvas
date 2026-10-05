@@ -52,6 +52,30 @@ test.describe.serial('visual baseline', () => {
   };
   const shot = async (name) => { await settle(); await expect(page).toHaveScreenshot(`${name}.png`, { mask: masks() }); };
 
+  test('image editor in a narrow window keeps every control on screen', async () => {
+    const win = await app.browserWindow(page);
+    await page.evaluate(() => { window.aurumAppearance.applyKit('auto'); window.aurumAppearance.applyLayout('lemaan'); applyThemeChoice('midnight', true); });
+    await win.evaluate((w) => w.setSize(1000, 720));
+    await page.waitForTimeout(300);
+    await page.evaluate((file) => window.aurumEditor.open(file, 'professional'), path.join(outputDir, 'visual-fixture.png'));
+    await expect(page.locator('#image-editor-shell')).toHaveAttribute('data-editor-ready', 'true');
+    const layout = await page.evaluate(() => {
+      const shell = document.querySelector('#image-editor-shell').getBoundingClientRect();
+      const tools = document.querySelector('.editor-tools').getBoundingClientRect();
+      const save = document.querySelector('#editor-save').getBoundingClientRect();
+      return { overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth, toolsLeft: tools.left, saveLeft: save.left, saveRight: save.right, shellRight: shell.right, undo: document.querySelector('#editor-undo').getBoundingClientRect().width };
+    });
+    expect(layout.overflow).toBeLessThanOrEqual(1);
+    expect(layout.toolsLeft).toBeGreaterThanOrEqual(0);
+    expect(layout.saveLeft).toBeGreaterThanOrEqual(0);
+    expect(layout.saveRight).toBeLessThanOrEqual(layout.shellRight);
+    expect(layout.undo).toBeGreaterThan(0);
+    await shot('narrow-image-editor');
+    await page.evaluate(() => window.aurumEditor.close(true));
+    await win.evaluate((w) => w.setSize(1366, 860));
+    await page.waitForTimeout(300);
+  });
+
   for (const look of LOOKS) {
     test(`all screens — ${look.name}`, async () => {
       await page.evaluate((value) => {

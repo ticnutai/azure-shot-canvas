@@ -60,11 +60,16 @@ npm install
 - **ערכת עיצוב** (`data-kit`): לפי הפריסה, קומפקטי, אריחים, רשימה, אייקונים, מינימלי — רק פינות, ריפוד, מסגרות וצללים.
 - **גודל תצוגה**: 75%–150% לכל הממשק.
 
+לפני כל שינוי עיצוב: מצלמים בסיס, משנים, ומשווים — 41 צילומים (10 מסכים × 4 מראות + העורך בחלון צר) חייבים להיות זהים לפיקסל, אלא אם השינוי מכוון.
+
 הבחירה נשמרת במחשב ומוחלת לפני הציור הראשון (`src/boot-appearance.js`), כך שאין הבזק של צבע לא נכון. כל הכללים נמצאים ב-`src/app-design.css` ומבוססים על משתנים — פריסה או ערכה חדשה מוסיפות רק ערכי משתנים.
 
 ```powershell
 node scripts/design-shots.cjs        # צילום כל הפריסות (בהיר/כהה) וכל הערכות אל artifacts/design-shots
 node scripts/benchmark.cjs           # מדידת מהירות הפעולות העיקריות אל artifacts/benchmark/latest.json
+node scripts/css-dedupe.cjs          # איתור הגדרות עיצוב שלעולם לא חלות (נדרסות בכלל זהה מאוחר יותר); --apply מסיר אותן
+npx playwright test -c playwright.visual.config.cjs --update-snapshots   # צילומי בסיס של כל המסכים (נשמרים מקומית)
+npx playwright test -c playwright.visual.config.cjs                      # השוואה מדויקת לפיקסל מול הבסיס
 ```
 ## בדיקות ובניית מתקין
 

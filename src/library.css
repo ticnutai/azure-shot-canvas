@@ -1,4 +1,4 @@
-.library-toolbar { display: grid; grid-template-columns: minmax(220px,1fr) auto auto; gap: 10px; margin: 20px 0 8px; }
+.library-toolbar { display: grid; gap: 10px; margin: 20px 0 8px; }
 .library-toolbar label { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--panel-2); border-radius: 13px; padding: 7px 11px; color: var(--muted); font-size: 9px; }
 .library-toolbar input,.library-toolbar select { border: 0; outline: 0; background: transparent; color: var(--text); min-width: 140px; }
 .library-toolbar input { width: 100%; }
@@ -19,7 +19,7 @@
 .video-edit-fields label { color:var(--muted); font-size:9px; }
 .video-edit-fields input[type="number"] { width:100%; margin-top:5px; padding:9px; border:1px solid var(--line); border-radius:10px; background:var(--panel-2); color:var(--text); }
 .recording-bar small { color:var(--muted); min-width:58px; direction:ltr; }
-.recording-bar .recording-tool { background:var(--panel-2); color:var(--text); border:1px solid var(--line); min-width:36px; padding:8px; }
+.recording-bar .recording-tool { min-width:36px; }
 .recording-bar .recording-tool.off { opacity:.45; text-decoration:line-through; }
 .rename-editor { display: flex; gap: 6px; margin-top: 7px; }
 .rename-editor input { min-width: 220px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 9px; padding: 7px 9px; }
