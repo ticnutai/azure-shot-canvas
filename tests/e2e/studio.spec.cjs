@@ -1210,6 +1210,45 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('automatic edit after recording: silences removed and mouse zoom prepared for the video editor', async ({}, testInfo) => {
+    test.setTimeout(150_000);
+    await setCaptureDefaults(page, 'record', 'full');
+    await page.locator('#open-capture-settings').click();
+    await page.locator('[data-settings-tab="video"]').click();
+    await setCheckbox(page, '#auto-zoom', true);
+    await page.locator('[data-settings-tab="audio"]').click();
+    await setCheckbox(page, '#auto-silence', true);
+    await setCheckbox(page, '#microphone', true);
+    await page.locator('#close-capture-settings').click();
+    const before = new Set(await fs.readdir(outputDir));
+    await page.locator('#record-button').click();
+    await expect(page.locator('#recording-bar')).toBeVisible();
+    await page.waitForTimeout(3500);
+    await page.locator('#stop-recording').click();
+    const mp4Path = await waitForNewFile(outputDir, '.mp4', before, 60_000);
+    const timelinePath = `${mp4Path}.timeline.json`;
+    await expect.poll(() => fs.access(timelinePath).then(() => true, () => false), { timeout: 30_000 }).toBe(true);
+    const project = JSON.parse(await fs.readFile(timelinePath, 'utf8'));
+    expect(project.clips.length).toBeGreaterThan(0);
+    expect(project.zooms.length).toBeGreaterThan(0);
+    const clipped = project.clips.reduce((sum, clip) => sum + clip.end - clip.start, 0);
+    expect(clipped).toBeLessThanOrEqual(project.duration + 0.01);
+    // The video editor opens the prepared project as is.
+    const loaded = await page.evaluate((file) => window.screenStudio.loadVideoTimeline(file), mp4Path);
+    expect(loaded.project.zooms.length).toBe(project.zooms.length);
+    await page.locator('#open-capture-settings').click();
+    await page.locator('[data-settings-tab="video"]').click();
+    await setCheckbox(page, '#auto-zoom', false);
+    await page.locator('[data-settings-tab="audio"]').click();
+    await setCheckbox(page, '#auto-silence', false);
+    await page.locator('#close-capture-settings').click();
+    const metrics = [
+      metric('Automatic edit prepared', project.zooms.length + project.clips.length, 'items', 2, 'min', `${project.clips.length} clips (silences removed: ${(project.duration - clipped).toFixed(2)} s), ${project.zooms.length} mouse zooms`)
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
   test('smart redact finds e-mail, phone and card numbers with real OCR and blacks them out', async ({}, testInfo) => {
     test.setTimeout(150_000);
     const dataUrl = await page.evaluate(() => {

@@ -13,7 +13,7 @@ const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFo
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
 const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
-const { normalizeTimelineProject } = require('./video-timeline-utils.cjs');
+const { clipsWithoutSilence, cursorZooms, normalizeTimelineProject } = require('./video-timeline-utils.cjs');
 const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
 
@@ -883,6 +883,18 @@ function registerIpc() {
       const cursorSamples = details.cursorSamples.slice(0, 36_000).map((sample) => ({ at: Math.max(0, Number(sample.at) || 0), x: Math.max(0, Math.min(1, Number(sample.x) || 0)), y: Math.max(0, Math.min(1, Number(sample.y) || 0)) }));
       await fs.writeFile(`${result.path}.cursor.json`, JSON.stringify(cursorSamples), 'utf8');
       result.cursorSamples = cursorSamples.length;
+    }
+    // Automatic edit: the same silence detection and mouse zoom the video editor buttons use, saved as its project.
+    if (details.autoSilence || details.autoZoom) {
+      const duration = result.quality?.durationSeconds || 0;
+      const project = normalizeTimelineProject({}, duration);
+      const silences = details.autoSilence ? await detectSilences(result.path).catch(() => []) : [];
+      if (silences.length) project.clips = clipsWithoutSilence(duration, silences);
+      const samples = details.autoZoom ? (await readJson(`${result.path}.cursor.json`)) || [] : [];
+      if (samples.length) project.zooms = cursorZooms(samples, duration);
+      const prepared = normalizeTimelineProject(project, duration);
+      await fs.writeFile(`${result.path}.timeline.json`, JSON.stringify(prepared, null, 2), 'utf8');
+      result.timelinePrepared = { removedSilences: silences.length, zooms: prepared.zooms.length };
     }
     return result;
   });

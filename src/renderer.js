@@ -360,23 +360,28 @@ function applyRecentPreferences(filter = state.recentFilter, sort = state.recent
   }
 }
 
-function applyImageFinishPreferences(patch = {}, persist = true) {
-  if ('autoBeautify' in patch) state.autoBeautify = Boolean(patch.autoBeautify);
-  if ('autoRedact' in patch) state.autoRedact = Boolean(patch.autoRedact);
+// Automatic finishing switches (image and recording), stored per user. One table, one code path.
+const AUTOMATIC_SWITCHES = {
+  autoBeautify: { control: '#auto-beautify', key: 'aurum-auto-beautify' },
+  autoRedact: { control: '#auto-redact', key: 'aurum-auto-redact' },
+  autoSilence: { control: '#auto-silence', key: 'aurum-auto-silence' },
+  autoZoom: { control: '#auto-zoom', key: 'aurum-auto-zoom' }
+};
+
+function applyAutomaticSwitches(patch = {}, persist = true) {
+  for (const [name, { control, key }] of Object.entries(AUTOMATIC_SWITCHES)) {
+    if (name in patch) state[name] = Boolean(patch[name]);
+    if ($(control)) $(control).checked = Boolean(state[name]);
+    if (persist && name in patch) localStorage.setItem(key, state[name] ? 'on' : 'off');
+  }
   if (window.aurumImageFinish?.backgrounds.includes(patch.autoBeautifyStyle)) state.autoBeautifyStyle = patch.autoBeautifyStyle;
   state.autoBeautifyStyle ||= 'ocean';
-  if ($('#auto-beautify')) $('#auto-beautify').checked = Boolean(state.autoBeautify);
+  if (persist && patch.autoBeautifyStyle) localStorage.setItem('aurum-auto-beautify-style', state.autoBeautifyStyle);
   if ($('#auto-beautify-style')) { $('#auto-beautify-style').value = state.autoBeautifyStyle; $('#auto-beautify-style').disabled = !state.autoBeautify; }
-  if ($('#auto-redact')) $('#auto-redact').checked = Boolean(state.autoRedact);
-  if (persist) {
-    localStorage.setItem('aurum-auto-beautify', state.autoBeautify ? 'on' : 'off');
-    localStorage.setItem('aurum-auto-beautify-style', state.autoBeautifyStyle);
-    localStorage.setItem('aurum-auto-redact', state.autoRedact ? 'on' : 'off');
-  }
 }
 
 function restoreUserPreferences() {
-  applyImageFinishPreferences({ autoBeautify: localStorage.getItem('aurum-auto-beautify') === 'on', autoRedact: localStorage.getItem('aurum-auto-redact') === 'on', autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean' }, false);
+  applyAutomaticSwitches({ ...Object.fromEntries(Object.entries(AUTOMATIC_SWITCHES).map(([name, { key }]) => [name, localStorage.getItem(key) === 'on'])), autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean' }, false);
   setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') !== 'off', false);
   setCaptureExclusion(localStorage.getItem('aurum-exclude-studio-window') !== 'off', false);
   applyCaptureLayout(localStorage.getItem('aurum-capture-layout') || 'clean', false);
@@ -901,7 +906,7 @@ async function acquireInputs(includeRecordingInputs) {
   await waitForVideo(displayVideo);
   setPreviewState('ready');
   $('#selected-source-label').textContent = `${includeRecordingInputs ? 'מקליט' : 'מצלם'} — ${state.selectedSource.name}`;
-  if (includeRecordingInputs && $('#cursor-highlight')?.checked) {
+  if (includeRecordingInputs && ($('#cursor-highlight')?.checked || state.autoZoom)) {
     state.cursorTimer = setInterval(() => api.getCursorPosition().then((info) => {
       state.cursorInfo = info;
       if (state.recorder && state.startedAt && info?.bounds?.width && info?.bounds?.height) {
@@ -1570,7 +1575,8 @@ async function finalizeRecording() {
     await state.recordingAppendQueue;
     const writeError = state.recordingWriteError;
     // Even after a write error, close the session so the written segments are joined and kept.
-    const result = await api.finishRecordingFile(session.id, $('#convert-mp4').checked, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples });
+    const result = await api.finishRecordingFile(session.id, $('#convert-mp4').checked, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples, autoSilence: Boolean(state.autoSilence), autoZoom: Boolean(state.autoZoom) });
+    if (result.timelinePrepared) showToast(`עריכה אוטומטית מוכנה: ${result.timelinePrepared.removedSilences} קטעים שקטים הוסרו, ${result.timelinePrepared.zooms} הגדלות — פתחו בעורך הווידאו לייצוא`, 9000);
     state.recordingSession = null;
     if (writeError) showToast(`חלק מההקלטה לא נכתב לדיסק (${writeError.message}). מה שנשמר נשמר כאן: ${result.path}`, 10000);
     document.documentElement.dataset.lastSavedPath = result.path;
@@ -2120,9 +2126,8 @@ async function initialize() {
   $('#preview-zoom').addEventListener('input', (event) => applyVisualCapturePreferences({ previewZoom: event.target.value }));
   $('#toggle-safe-area').addEventListener('click', () => applyVisualCapturePreferences({ safeArea: !state.safeArea }));
   $('#live-preview-toggle')?.addEventListener('click', () => setLivePreviewEnabled(!state.livePreviewEnabled));
-  $('#auto-beautify')?.addEventListener('change', (event) => applyImageFinishPreferences({ autoBeautify: event.target.checked }));
-  $('#auto-beautify-style')?.addEventListener('change', (event) => applyImageFinishPreferences({ autoBeautifyStyle: event.target.value }));
-  $('#auto-redact')?.addEventListener('change', (event) => applyImageFinishPreferences({ autoRedact: event.target.checked }));
+  for (const [name, { control }] of Object.entries(AUTOMATIC_SWITCHES)) $(control)?.addEventListener('change', (event) => applyAutomaticSwitches({ [name]: event.target.checked }));
+  $('#auto-beautify-style')?.addEventListener('change', (event) => applyAutomaticSwitches({ autoBeautifyStyle: event.target.value }));
   $('#live-preview-enabled')?.addEventListener('change', (event) => setLivePreviewEnabled(event.target.checked));
   $('#exclude-studio-window')?.addEventListener('change', (event) => setCaptureExclusion(event.target.checked));
   $('#camera-position').addEventListener('change', (event) => applyVisualCapturePreferences({ cameraPosition: event.target.value }));

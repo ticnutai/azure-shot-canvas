@@ -74,7 +74,7 @@
             <label class="field-row"><span><b>מיקום המצלמה</b></span><select id="camera-position"><option value="bottom-right">ימין למטה</option><option value="bottom-left">שמאל למטה</option><option value="top-right">ימין למעלה</option><option value="top-left">שמאל למעלה</option></select></label>
             <label class="range-field"><span><b>גודל המצלמה</b><output id="camera-size-output">20%</output></span><input id="camera-size" type="range" min="12" max="35" value="20"></label>
             <label class="switch-row"><span><b>הדגשת סמן</b><small>הילה ברורה סביב העכבר בהקלטה</small></span><input type="checkbox" id="cursor-highlight" checked><i></i></label>
-            <label class="switch-row unavailable" title="מתוכנן לשלב הבא"><span><b>זום אוטומטי לקליקים</b><small>בקרוב — לא מופעל עדיין</small></span><input type="checkbox" disabled><i></i></label>
+            <label class="switch-row"><span><b>זום אוטומטי לפי העכבר</b><small>אחרי ההקלטה נשמרת עריכה מוכנה עם הגדלה לאן שהעכבר הלך — פותחים בעורך הווידאו ומייצאים</small></span><input type="checkbox" id="auto-zoom"><i></i></label>
           </section>
 
           <section class="settings-section" data-settings-section="audio">
@@ -84,7 +84,7 @@
             <label class="range-field"><span><b>עוצמת מיקרופון</b><output id="mic-volume-output">100%</output></span><input id="mic-volume" type="range" min="0" max="150" value="100"></label>
             <label class="range-field"><span><b>עוצמת קול המחשב</b><output id="system-volume-output">90%</output></span><input id="system-volume" type="range" min="0" max="150" value="90"></label>
             <label class="switch-row"><span><b>סינון רעשים</b><small>הפחתת רעשי רקע בזמן ההקלטה</small></span><input type="checkbox" id="noise-suppression" checked><i></i></label>
-            <label class="switch-row unavailable"><span><b>הסרת שתיקות</b><small>בקרוב — בעריכה אוטומטית</small></span><input type="checkbox" disabled><i></i></label>
+            <label class="switch-row"><span><b>הסרת שתיקות</b><small>אחרי ההקלטה נשמרת עריכה מוכנה בלי הקטעים השקטים — פותחים בעורך הווידאו ומייצאים</small></span><input type="checkbox" id="auto-silence"><i></i></label>
           </section>
 
           <section class="settings-section" data-settings-section="image">
