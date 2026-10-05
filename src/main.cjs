@@ -354,11 +354,29 @@ async function recoverInterruptedRecordings() {
     await fs.rm(journalPath, { force: true }).catch(() => {});
     try { await fs.access(recoveredPath); recovered.push(recoveredPath); } catch {}
   }
+  for (const file of recovered) await remuxWebm(file);
   recoveredRecordings = recovered;
   return recovered;
 }
 
+// MediaRecorder writes WebM with no duration and no seek index, so players show no length and seek slowly.
+// A stream copy into a fresh container adds both in seconds, without re-encoding.
+async function remuxWebm(webmPath) {
+  const stat = await fs.stat(webmPath).catch(() => null);
+  if (!stat?.size) return false;
+  const temporaryPath = `${webmPath}.remuxing`;
+  const timeoutMs = Math.min(10 * 60_000, Math.max(60_000, Math.round(stat.size / 20_000)));
+  const result = await runHidden('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-fflags', '+genpts', '-i', webmPath, '-map', '0', '-c', 'copy', '-cues_to_front', '1', '-f', 'webm', temporaryPath], { timeoutMs });
+  if (!result.ok) {
+    await fs.rm(temporaryPath, { force: true }).catch(() => {});
+    return false;
+  }
+  await fs.rename(temporaryPath, webmPath);
+  return true;
+}
+
 async function convertRecording(webmPath, convertToMp4) {
+  await remuxWebm(webmPath);
   if (!convertToMp4) {
     const quality = await analyzeMedia(webmPath).catch((error) => ({ valid: false, error: error.message }));
     return { path: webmPath, webmPath, converted: false, quality };
