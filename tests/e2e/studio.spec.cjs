@@ -652,7 +652,7 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#library-page')).toHaveClass(/active/);
     await page.locator('.sidebar .nav-item[data-action="edit"]').click();
     await expect(page.locator('#image-editor-shell')).toBeVisible();
-    await expect(page.locator('[data-editor-tool]')).toHaveCount(18);
+    await expect(page.locator('[data-editor-tool]')).toHaveCount(19);
     await page.locator('button[data-editor-mode="professional"]').click();
     const canvas = page.locator('#image-editor-shell .upper-canvas');
     await expect(canvas).toBeVisible();
@@ -1088,6 +1088,63 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('spotlight dims only outside the area and beautified export makes a new framed image', async ({}, testInfo) => {
+    test.setTimeout(120_000);
+    const dataUrl = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 800;
+      canvas.height = 500;
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#d0d0d0';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png');
+    });
+    const imagePath = path.join(outputDir, 'spotlight-fixture.png');
+    await fs.writeFile(imagePath, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    await page.evaluate((file) => window.aurumEditor.open(file, 'professional'), imagePath);
+    await expect(page.locator('#image-editor-shell')).toHaveAttribute('data-editor-ready', 'true');
+    await page.locator('button[data-editor-mode="professional"]').click();
+    const box = await page.locator('#image-editor-shell .upper-canvas').boundingBox();
+    await page.locator('[data-editor-tool="spotlight"]').click();
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.4);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => window.aurumEditor.objects().filter((object) => object.toolType === 'spotlight').length)).toBe(1);
+    // Sample the flattened export: a corner must be darkened, the centre of the spotlight must keep the original grey.
+    const pixels = await page.evaluate(async () => {
+      const image = new Image();
+      image.src = window.aurumEditor.exportDataUrl();
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d');
+      context.drawImage(image, 0, 0);
+      return { corner: context.getImageData(20, 20, 1, 1).data[0], centre: context.getImageData(400, 250, 1, 1).data[0] };
+    });
+    expect(pixels.centre).toBeGreaterThan(200);
+    expect(pixels.corner).toBeLessThan(120);
+    await page.locator('#editor-undo').click();
+    await page.locator('#editor-redo').click();
+    const restored = await page.evaluate(() => window.aurumEditor.objects().find((object) => object.toolType === 'spotlight'));
+    expect(restored.lockMovementX && restored.lockMovementY).toBeTruthy();
+    await page.locator('#editor-beautify-style').selectOption('sunset');
+    await page.locator('#editor-beautify').click();
+    await expect.poll(() => page.locator('#image-editor-shell').getAttribute('data-beautified-path'), { timeout: 20_000 }).toBeTruthy();
+    const beautifiedPath = await page.locator('#image-editor-shell').getAttribute('data-beautified-path');
+    const framed = await pngDimensions(beautifiedPath);
+    expect(framed.width).toBeGreaterThan(800);
+    expect(framed.height).toBeGreaterThan(500);
+    expect((await pngDimensions(imagePath)).width).toBe(800);
+    await page.evaluate(() => window.aurumEditor.close(true));
+    const metrics = [
+      metric('Spotlight dimming', pixels.centre - pixels.corner, 'levels', 80, 'min', `centre=${pixels.centre}, corner=${pixels.corner}; lock survives undo/redo`),
+      metric('Beautified export size', framed.width, 'px', 801, 'min', `${framed.width}×${framed.height} from 800×500, original untouched`)
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
   test('window layouts, layout colours and design kits apply, persist and never overflow', async ({}, testInfo) => {
     test.setTimeout(120_000);
     await page.locator('.nav-item[data-page="settings"]').click();

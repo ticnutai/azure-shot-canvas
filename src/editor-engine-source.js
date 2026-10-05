@@ -3,7 +3,8 @@ import {
   Path, PencilBrush, Polygon, Polyline, Rect, Shadow, Textbox, Triangle, util
 } from 'fabric';
 
-const CUSTOM_PROPERTIES = ['dataRole', 'toolType', 'secureRedaction'];
+// Lock flags are listed so a spotlight stays fixed in place after undo/redo restores it from JSON.
+const CUSTOM_PROPERTIES = ['dataRole', 'toolType', 'secureRedaction', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'hasControls'];
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function loadDomImage(dataUrl) {
@@ -188,6 +189,8 @@ class AurumImageEditorEngine {
         heads.forEach((head) => head.set({ width: headSize, height: headSize }));
       }
       object.dirty = true;
+    } else if (kind === 'spotlight') {
+      // Only opacity applies: recolouring or 'no fill' would make the dimming disappear.
     } else if (kind === 'magnify') {
       const border = object.getObjects()[1];
       if (patch.stroke !== undefined) border?.set('stroke', patch.stroke);
@@ -248,7 +251,7 @@ class AurumImageEditorEngine {
     if (this.tool === 'pan') return;
     const options = this.baseOptions({ left: point.x, top: point.y, originX: 'left', originY: 'top' });
     let object;
-    if (['rect', 'redact', 'blur', 'pixelate', 'crop', 'magnify'].includes(this.tool)) object = new Rect({ ...options, width: 1, height: 1, fill: this.tool === 'redact' ? '#000000' : this.tool === 'rect' ? this.style.fill : '#ffffff22', strokeDashArray: ['blur', 'pixelate', 'crop', 'magnify'].includes(this.tool) ? [12, 8] : null });
+    if (['rect', 'redact', 'blur', 'pixelate', 'crop', 'magnify', 'spotlight'].includes(this.tool)) object = new Rect({ ...options, width: 1, height: 1, fill: this.tool === 'redact' ? '#000000' : this.tool === 'rect' ? this.style.fill : '#ffffff22', strokeDashArray: ['blur', 'pixelate', 'crop', 'magnify', 'spotlight'].includes(this.tool) ? [12, 8] : null });
     else if (this.tool === 'ellipse') object = new Ellipse({ ...options, rx: 1, ry: 1 });
     else if (['line', 'arrow', 'double-arrow'].includes(this.tool)) object = new Line([point.x, point.y, point.x, point.y], this.baseOptions({ fill: undefined }));
     if (!object) return;
@@ -312,6 +315,9 @@ class AurumImageEditorEngine {
     } else if (object.toolType === 'magnify') {
       this.canvas.remove(object);
       await this.addMagnifier(object);
+    } else if (object.toolType === 'spotlight') {
+      this.canvas.remove(object);
+      this.addSpotlight(object);
     } else if (object.toolType === 'redact') {
       object.set({ fill: '#000000', stroke: '#000000', secureRedaction: true, strokeDashArray: null });
     }
@@ -404,6 +410,24 @@ class AurumImageEditorEngine {
     const image = await FabricImage.fromURL(region.dataUrl);
     image.set({ left: region.left, top: region.top, originX: 'left', originY: 'top', toolType: mode, objectCaching: false });
     this.canvas.add(image);
+  }
+
+  // Dims everything outside the chosen area: one even-odd path = full-canvas rectangle with a rounded hole.
+  addSpotlight(rect) {
+    const width = this.canvas.width;
+    const height = this.canvas.height;
+    const x = rect.left;
+    const y = rect.top;
+    const w = rect.width * (rect.scaleX || 1);
+    const h = rect.height * (rect.scaleY || 1);
+    const r = Math.min(16, w / 4, h / 4);
+    const hole = `M ${x + r} ${y} H ${x + w - r} Q ${x + w} ${y} ${x + w} ${y + r} V ${y + h - r} Q ${x + w} ${y + h} ${x + w - r} ${y + h} H ${x + r} Q ${x} ${y + h} ${x} ${y + h - r} V ${y + r} Q ${x} ${y} ${x + r} ${y} Z`;
+    const spotlight = new Path(`M 0 0 H ${width} V ${height} H 0 Z ${hole}`, {
+      left: 0, top: 0, originX: 'left', originY: 'top', fill: 'rgba(0, 0, 0, 0.55)', fillRule: 'evenodd', stroke: null, objectCaching: false,
+      lockMovementX: true, lockMovementY: true, lockScalingX: true, lockScalingY: true, lockRotation: true, hasControls: false
+    });
+    spotlight.toolType = 'spotlight';
+    this.canvas.add(spotlight);
   }
 
   async addMagnifier(rect) {
