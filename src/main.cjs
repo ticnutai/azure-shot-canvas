@@ -652,7 +652,10 @@ async function listLibrary() {
 // Only the app's own pages may call the main process: a foreign page that slipped into a window
 // would otherwise reach file, clipboard and ffmpeg handlers through the preload bridge.
 function isTrustedSender(event) {
-  const url = event.senderFrame?.url || '';
+  return isAppUrl(event.senderFrame?.url);
+}
+
+function isAppUrl(url = '') {
   const devUrl = process.env.SCREEN_STUDIO_DEV_URL;
   if (devUrl && (url === devUrl || url.startsWith(`${devUrl}/`))) return true;
   try {
@@ -1100,6 +1103,10 @@ app.whenReady().then(async () => {
   await recoverInterruptedRecordings();
   await loadQuickbarPreferences();
   registerIpc();
+  // Deny every permission except the three the app uses, and only for its own pages.
+  const allowedPermissions = new Set(['media', 'display-capture', 'fullscreen']);
+  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback, details) => callback(allowedPermissions.has(permission) && isAppUrl(details.requestingUrl)));
+  session.defaultSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => allowedPermissions.has(permission) && (String(requestingOrigin).startsWith('file://') || isAppUrl(requestingOrigin)));
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     try {
       if (!pendingCapture) return callback({});

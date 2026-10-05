@@ -1037,6 +1037,8 @@ test.describe('Electron production workflow', () => {
     await expect.poll(contentProtected).toBe(false);
     await page.locator('#exclude-studio-window').check();
     await expect.poll(contentProtected).toBe(true);
+    // Only media, display-capture and fullscreen are granted; anything else is refused.
+    expect(await page.evaluate(() => Notification.requestPermission())).toBe('denied');
     const metrics = [
       metric('Live preview toggle', 4, 'assertions', 4, 'min', 'off stops the stream, capture works while off, choice survives reload, on restores the preview'),
       metric('Studio window hidden from capture', 2, 'states', 2, 'min', 'content protection follows the setting on and off')
