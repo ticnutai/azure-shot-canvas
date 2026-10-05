@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 async function launchStudio(testName, options = {}) {
-  const outputDir = await fs.mkdtemp(path.join(os.tmpdir(), `screen-studio-${testName}-`));
+  const outputDir = options.outputDir || await fs.mkdtemp(path.join(os.tmpdir(), `screen-studio-${testName}-`));
   const qaReportDir = path.join(outputDir, 'qa-report');
   await fs.mkdir(qaReportDir, { recursive: true });
   const previous = qaFixture('2026-08-11T10:00:00.000Z', 1500, 1920);
@@ -22,6 +22,7 @@ async function launchStudio(testName, options = {}) {
       ...process.env,
       SCREEN_STUDIO_OUTPUT_DIR: outputDir,
       SCREEN_STUDIO_QA_REPORT_DIR: qaReportDir,
+      SCREEN_STUDIO_USER_DATA_DIR: path.join(outputDir, 'electron-user-data'),
       SCREEN_STUDIO_QA: '1'
     },
     timeout: 30_000

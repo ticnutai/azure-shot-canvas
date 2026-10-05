@@ -40,7 +40,12 @@
     $('#editor-canvas-wrap').replaceChildren(canvas);
     engine = new window.AurumImageEditorEngine(canvas, {
       onHistory: ({ canUndo, canRedo }) => { $('#editor-undo').disabled = !canUndo; $('#editor-redo').disabled = !canRedo; setDirty(true); },
-      onZoom: (zoom) => { $('#editor-zoom').textContent = `${Math.round(zoom * 100)}%`; },
+      onZoom: (zoom) => {
+        const percent = Math.round(zoom * 100);
+        $('#editor-zoom').textContent = `${percent}%`;
+        $('#editor-zoom-range').value = String(Math.max(5, Math.min(400, percent)));
+        shell.dataset.editorZoom = String(percent);
+      },
       onSelection: (selection) => {
         if (!selection) return;
         if (selection.stroke && /^#[0-9a-f]{6}$/i.test(selection.stroke)) $('#editor-stroke').value = selection.stroke;
@@ -58,6 +63,7 @@
   async function openEditor(filePath, requestedMode = 'quick') {
     const payload = await api.loadEditorImage(filePath);
     shell.classList.remove('hidden');
+    shell.dataset.editorReady = 'false';
     document.documentElement.dataset.editorOpen = 'true';
     document.querySelectorAll('.sidebar .nav-item').forEach((button) => button.classList.toggle('active', button.dataset.action === 'edit'));
     setMode(requestedMode);
@@ -68,6 +74,7 @@
     selectTool('select');
     setDirty(false);
     updateStats();
+    shell.dataset.editorReady = 'true';
   }
 
   async function save(modeToSave = 'overwrite') {
@@ -83,6 +90,7 @@
   function closeEditor(force = false) {
     if (dirty && !force && !confirm('יש שינויים שטרם נשמרו. לסגור את העורך?')) return;
     shell.classList.add('hidden');
+    shell.dataset.editorReady = 'false';
     document.documentElement.dataset.editorOpen = 'false';
     const content = document.querySelector('.content-shell');
     const activePage = content?.dataset.activePage || 'capture';
@@ -112,7 +120,17 @@
   $('#editor-save-copy').addEventListener('click', () => save('copy'));
   $('#editor-copy').addEventListener('click', async () => { await api.copyEditorImage(engine.exportDataUrl()); $('#editor-save-state').textContent = 'התמונה הועתקה ללוח'; });
   $('#editor-undo').addEventListener('click', () => engine.undo()); $('#editor-redo').addEventListener('click', () => engine.redo());
-  $('#editor-fit').addEventListener('click', () => engine.fitToViewport()); $('#editor-zoom-in').addEventListener('click', () => engine.zoomBy(1.2)); $('#editor-zoom-out').addEventListener('click', () => engine.zoomBy(1 / 1.2));
+  const setManualZoom = (zoom) => { $('#editor-workspace').dataset.manualZoom = 'true'; engine.setZoom(zoom); };
+  const fitEditor = () => { $('#editor-workspace').dataset.manualZoom = 'false'; engine.fitToViewport(); };
+  $('#editor-fit').addEventListener('click', fitEditor);
+  $('#editor-zoom-in').addEventListener('click', () => setManualZoom(engine.stats().zoom * 1.2));
+  $('#editor-zoom-out').addEventListener('click', () => setManualZoom(engine.stats().zoom / 1.2));
+  $('#editor-zoom-range').addEventListener('input', (event) => setManualZoom(Number(event.target.value) / 100));
+  $('#editor-workspace').addEventListener('wheel', (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    setManualZoom(engine.stats().zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12));
+  }, { passive: false });
   $('#editor-delete').addEventListener('click', () => engine.deleteSelected()); $('#editor-duplicate').addEventListener('click', () => engine.duplicateSelected());
   $('#editor-snap').addEventListener('change', (event) => engine.setSnap(event.target.checked));
   $('[data-editor-layer="front"]').addEventListener('click', () => engine.moveLayer('front')); $('[data-editor-layer="back"]').addEventListener('click', () => engine.moveLayer('back'));
@@ -130,6 +148,9 @@
     if (event.ctrlKey && event.code === 'KeyZ') { event.preventDefault(); return event.shiftKey ? engine.redo() : engine.undo(); }
     if (event.ctrlKey && event.code === 'KeyY') { event.preventDefault(); return engine.redo(); }
     if (event.ctrlKey && event.code === 'KeyS') { event.preventDefault(); return save(); }
+    if (event.ctrlKey && (event.code === 'Equal' || event.code === 'NumpadAdd')) { event.preventDefault(); return setManualZoom(engine.stats().zoom * 1.2); }
+    if (event.ctrlKey && (event.code === 'Minus' || event.code === 'NumpadSubtract')) { event.preventDefault(); return setManualZoom(engine.stats().zoom / 1.2); }
+    if (event.ctrlKey && (event.code === 'Digit0' || event.code === 'Numpad0')) { event.preventDefault(); return fitEditor(); }
     if (targetIsInput) return;
     if (event.key === 'Delete' || event.key === 'Backspace') engine.deleteSelected();
     if (event.key === 'Escape') selectTool('select');

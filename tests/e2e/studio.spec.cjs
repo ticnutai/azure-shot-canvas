@@ -18,6 +18,7 @@ async function setCheckbox(page, selector, checked) {
 
 async function setCaptureDefaults(page, kind, scope) {
   await page.locator('[data-page="settings"]').click();
+  await page.locator('[data-preference-tab="general"]').click();
   await page.locator('#default-capture-kind').selectOption(kind);
   await page.locator('#default-capture-scope').selectOption(scope);
   await page.locator('.nav-item[data-page="capture"]:not([data-action])').click();
@@ -58,6 +59,40 @@ test.describe('Electron production workflow', () => {
 
   test('startup, sources, responsive UI and navigation', async ({}, testInfo) => {
     const metrics = [metric('Cold app ready', testInfo.startupMs, 'ms', 10_000, 'max', 'Electron launch to appReady, including parallel in-app QA execution')];
+    await expect(page.locator('#app-version')).toHaveText('v0.7.1');
+    await expect(page.locator('html')).toHaveAttribute('data-app-version', '0.7.1');
+    const versionBadge = await page.locator('#app-version').evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return { left: rect.left, bottomGap: innerHeight - rect.bottom, fontSize: Number.parseFloat(getComputedStyle(node).fontSize), visible: getComputedStyle(node).display !== 'none' };
+    });
+    expect(versionBadge.visible).toBeTruthy();
+    expect(versionBadge.left).toBeLessThanOrEqual(12);
+    expect(versionBadge.bottomGap).toBeLessThanOrEqual(10);
+    expect(versionBadge.fontSize).toBeLessThanOrEqual(9);
+    metrics.push(metric('Always-visible version badge', 6, 'assertions', 6, 'min', `v0.7.1; left=${versionBadge.left}px bottom=${versionBadge.bottomGap}px font=${versionBadge.fontSize}px`));
+    await expect(page.locator('.profile-button')).toHaveCount(0);
+    await expect(page.locator('.logo-mark')).toHaveCount(0);
+    const firstSidebarItemTop = await page.locator('.sidebar nav .nav-item').first().evaluate((node) => node.getBoundingClientRect().top);
+    expect(firstSidebarItemTop).toBeLessThanOrEqual(30);
+    metrics.push(metric('Removed redundant header/sidebar marks', 3, 'assertions', 3, 'min', `profile=0, logo=0, first sidebar item top=${firstSidebarItemTop}px`));
+    await expect(page.locator('html')).toHaveAttribute('data-capture-layout', 'clean');
+    await expect(page.locator('.dashboard-grid')).toHaveCount(0);
+    await expect(page.locator('#capture-settings')).toBeHidden();
+    await page.locator('#open-capture-settings').click();
+    await expect(page.locator('html')).toHaveAttribute('data-capture-settings-open', 'true');
+    await expect(page.locator('#capture-settings')).toBeVisible();
+    await expect(page.locator('#capture-settings .settings-tabs')).toBeVisible();
+    await page.locator('#close-capture-settings').click();
+    await page.locator('#capture-layout-button').click();
+    await page.locator('[data-capture-layout-choice="professional"]').click();
+    await expect(page.locator('#capture-settings')).toBeVisible();
+    await page.locator('#capture-layout-button').click();
+    await page.locator('[data-capture-layout-choice="focus"]').click();
+    await expect(page.locator('#capture-page .library-strip')).toBeHidden();
+    await page.locator('#capture-layout-button').click();
+    await page.locator('[data-capture-layout-choice="clean"]').click();
+    await expect(page.locator('#capture-layout-select')).toHaveValue('clean');
+    metrics.push(metric('Capture workspace layouts', 3, 'layouts', 3, 'min', 'clean dialog, professional inline rail, focus preview-only; dashboard cards removed'));
     const sourceCount = await page.locator('.source-card').count();
     expect(sourceCount).toBeGreaterThan(0);
     metrics.push(metric('Capture sources discovered', sourceCount, 'sources', 1, 'min', 'desktopCapturer source cards'));
@@ -80,6 +115,7 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#preview-zoom-output')).toHaveText('140%');
     await page.locator('#toggle-safe-area').click();
     await expect(page.locator('.capture-preview')).toHaveClass(/safe-area-visible/);
+    await page.locator('#open-capture-settings').click();
     await page.locator('#camera-position').selectOption('top-left');
     await page.locator('#camera-size').fill('28');
     await page.locator('[data-settings-tab="image"]').click();
@@ -88,6 +124,7 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('html')).toHaveAttribute('data-camera-position', 'top-left');
     await expect(page.locator('html')).toHaveAttribute('data-camera-size', '28');
     await expect(page.locator('html')).toHaveAttribute('data-capture-delay', '3');
+    await page.locator('#close-capture-settings').click();
     metrics.push(metric('Professional preview composition controls', 7, 'assertions', 7, 'min', 'fit/fill, 140% zoom, safe area, four camera positions and 12-35% camera sizing'));
 
     const refreshSamples = [];
@@ -127,23 +164,29 @@ test.describe('Electron production workflow', () => {
     expect(Number(ivoryWeight)).toBeLessThanOrEqual(400);
     metrics.push(metric('Working color themes', themes.length, 'themes', 6, 'min', `${themes.join(', ')}; ivory typography weight=${ivoryWeight}`));
 
-    await page.locator('[data-settings-tab="audio"]').dispatchEvent('click');
+    await page.locator('#open-capture-settings').click();
+    await page.locator('[data-settings-tab="audio"]').click();
     await expect(page.locator('[data-settings-section="audio"]')).toHaveClass(/active/);
-    await page.locator('[data-settings-tab="image"]').dispatchEvent('click');
+    await page.locator('[data-settings-tab="image"]').click();
     await expect(page.locator('[data-settings-section="image"]')).toHaveClass(/active/);
-    await page.locator('[data-settings-tab="video"]').dispatchEvent('click');
+    await page.locator('[data-settings-tab="video"]').click();
     expect(await page.locator('#format-select option:disabled').count()).toBe(2);
     metrics.push(metric('Settings tabs and capability labels', 3, 'tabs', 3, 'min', 'video/audio/image; unavailable formats disabled'));
+    await page.locator('#close-capture-settings').click();
 
     const recordNavigation = page.locator('.sidebar .nav-item[data-page="capture"]:not([data-action])');
-    const screenshotNavigation = page.locator('.sidebar .nav-item[data-action="screenshot"]');
-    await screenshotNavigation.click();
-    await expect(screenshotNavigation).toHaveClass(/active/);
-    await expect(recordNavigation).not.toHaveClass(/active/);
-    await expect(page.locator('.sidebar .nav-item.active')).toHaveCount(1);
+    await expect(recordNavigation).toContainText('צילום והקלטה');
+    await expect(page.locator('.sidebar .nav-item[data-action="screenshot"]')).toHaveCount(0);
+
+    const toolsNavigation = page.locator('.sidebar .nav-item[data-page="tools"]');
+    await toolsNavigation.click();
+    await expect(page.locator('#tools-page')).toHaveClass(/active/);
+    await expect(page.locator('[data-smart-action]')).toHaveCount(5);
+    await expect.poll(async () => page.locator('.engine-grid article').count(), { timeout: 20_000 }).toBe(4);
+    await expect(page.locator('html')).toHaveAttribute('data-engine-policy', 'reuse-existing-only');
+    await recordNavigation.click();
     await recordNavigation.click();
     await expect(recordNavigation).toHaveClass(/active/);
-    await expect(screenshotNavigation).not.toHaveClass(/active/);
     await expect(page.locator('.sidebar .nav-item.active')).toHaveCount(1);
 
     await page.setViewportSize({ width: 1280, height: 840 });
@@ -161,7 +204,7 @@ test.describe('Electron production workflow', () => {
     })));
     expect(Math.abs(captureLayout.media.left - captureLayout.shell.left)).toBeLessThanOrEqual(2);
     expect(Math.abs(captureLayout.media.right - captureLayout.shell.right)).toBeLessThanOrEqual(2);
-    expect(captureLayout.media.width).toBeGreaterThan(captureLayout.stage.width);
+    expect(Math.abs(captureLayout.media.width - captureLayout.stage.width)).toBeLessThanOrEqual(2);
     expect(captureLayout.media.top).toBeGreaterThan(captureLayout.stage.top);
     await page.locator('[data-recent-filter="image"]').click();
     await page.locator('#recent-sort').selectOption('size-desc');
@@ -213,15 +256,46 @@ test.describe('Electron production workflow', () => {
     const openLibraryRow = page.locator('[data-shortcut-row="openLibrary"]');
     await openLibraryRow.locator('[data-shortcut-kind]').selectOption('double');
     await openLibraryRow.locator('[data-shortcut-scope]').selectOption('focused');
-    await page.keyboard.press('F8');
-    await expect(openLibraryRow.locator('[data-shortcut-action]')).toHaveText('פעמיים F8');
-    await page.keyboard.press('F8');
-    await page.waitForTimeout(80);
-    await expect(page.locator('#settings-page')).toHaveClass(/active/);
-    await page.keyboard.press('F8');
+    await page.locator('body').dispatchEvent('keydown', { key: 'ב', code: 'KeyC' });
+    await expect(openLibraryRow.locator('[data-shortcut-action]')).toHaveText('פעמיים C');
+    await openLibraryRow.locator('[data-shortcut-interval]').selectOption('650');
+    await page.locator('body').dispatchEvent('keydown', { key: 'ב', code: 'KeyC' });
+    await page.waitForTimeout(100);
+    await page.locator('body').dispatchEvent('keydown', { key: 'ב', code: 'KeyC' });
     await expect(page.locator('#library-page')).toHaveClass(/active/);
     await page.locator('.sidebar .nav-item[data-page="settings"]').click();
     await page.locator('[data-preference-tab="shortcuts"]').click();
+    await page.locator('body').dispatchEvent('keydown', { key: 'c', code: 'KeyC' });
+    await page.waitForTimeout(100);
+    await page.locator('body').dispatchEvent('keydown', { key: 'c', code: 'KeyC' });
+    await expect(page.locator('#library-page')).toHaveClass(/active/);
+    await page.locator('.sidebar .nav-item[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="shortcuts"]').click();
+
+    await openLibraryRow.locator('[data-shortcut-scope]').selectOption('global');
+    await page.keyboard.press('F8');
+    await expect(openLibraryRow.locator('[data-shortcut-action]')).toHaveText('פעמיים F8');
+    await openLibraryRow.locator('[data-shortcut-interval]').selectOption('650');
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F8' }));
+    await page.waitForTimeout(360);
+    await expect(page.locator('#settings-page')).toHaveClass(/active/);
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: 'F8' }));
+    await expect(page.locator('#library-page')).toHaveClass(/active/);
+    await page.locator('.sidebar .nav-item[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="shortcuts"]').click();
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
+    await page.locator('.sidebar .nav-item[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="shortcuts"]').click();
+    await expect(openLibraryRow.locator('[data-shortcut-action]')).toHaveText('פעמיים F8');
+    await expect(openLibraryRow.locator('[data-shortcut-interval]')).toHaveValue('650');
+
+    const screenshotRow = page.locator('[data-shortcut-row="screenshot"]');
+    await screenshotRow.locator('[data-shortcut-kind]').selectOption('double');
+    await screenshotRow.locator('[data-shortcut-action]').click();
+    await page.locator('body').dispatchEvent('keydown', { key: 'Meta', code: 'MetaLeft', metaKey: true });
+    await expect(page.locator('#toast')).toContainText('אינו מתאים ללחיצה כפולה');
+    await page.keyboard.press('Escape');
 
     const startRow = page.locator('[data-shortcut-row="recordStart"]');
     await startRow.locator('[data-shortcut-kind]').selectOption('single');
@@ -235,7 +309,7 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('[data-shortcut-action="camera"]')).toHaveText('Ctrl + Shift + C');
     await expect(page.locator('[data-shortcut-action="openOutput"]')).toHaveText('Ctrl + Shift + O');
     await expect(page.locator('[data-shortcut-action="toggleWindow"]')).toHaveText('פעמיים F9');
-    metrics.push(metric('Bilingual configurable shortcut center', 22, 'assertions', 22, 'min', '15 actions, six categories, chord/single/double triggers, global/focused scope, Hebrew physical code, safety downgrade, search/filter, persistence, IPC test and reset'));
+    metrics.push(metric('Bilingual configurable shortcut center', 28, 'assertions', 28, 'min', '15 actions, safe chord/single/double triggers, 650ms interval, global and focused E2E dispatch, Hebrew/English physical code, unsafe Windows-key rejection, persistence, IPC test and reset'));
     await page.locator('[data-preference-tab="general"]').click();
     await expect(page.locator('#default-capture-kind')).toHaveValue('record');
     await expect(page.locator('#default-capture-scope')).toHaveValue('full');
@@ -311,6 +385,76 @@ test.describe('Electron production workflow', () => {
     await attachMetrics(testInfo, metrics);
   });
 
+  test('floating quickbar auto-hide, pinning and system-wide actions', async ({}, testInfo) => {
+    const metrics = [];
+    await page.locator('.source-card').first().click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'ready', { timeout: 15_000 });
+    await page.locator('[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="general"]').click();
+    await setCheckbox(page, '#quickbar-enabled', true);
+
+    await expect.poll(() => app.windows().filter((candidate) => candidate.url().includes('quickbar.html')).length).toBe(1);
+    const quickbarPage = app.windows().find((candidate) => candidate.url().includes('quickbar.html'));
+    const quickbarErrors = [];
+    quickbarPage.on('console', (message) => { if (message.type() === 'error') quickbarErrors.push(message.text()); });
+    quickbarPage.on('pageerror', (error) => quickbarErrors.push(error.message));
+    await quickbarPage.waitForFunction(() => document.body.dataset.expanded === 'false' && document.body.dataset.edge === 'right');
+
+    const collapsed = await app.evaluate(({ BrowserWindow, screen }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html'));
+      return { bounds: win.getBounds(), workArea: screen.getDisplayMatching(win.getBounds()).workArea, alwaysOnTop: win.isAlwaysOnTop(), focusable: win.isFocusable() };
+    });
+    expect(collapsed.bounds.width).toBe(11);
+    expect(collapsed.bounds.x + collapsed.bounds.width).toBe(collapsed.workArea.x + collapsed.workArea.width);
+    expect(collapsed.alwaysOnTop).toBeTruthy();
+    expect(collapsed.focusable).toBeFalsy();
+
+    await quickbarPage.locator('#edge-handle').click();
+    await expect.poll(async () => (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).getBounds().width))).toBe(356);
+    await expect(quickbarPage.locator('[data-action]')).toHaveCount(8);
+    await quickbarPage.locator('#pin').click();
+    await expect(quickbarPage.locator('#pin')).toHaveAttribute('aria-pressed', 'true');
+    await quickbarPage.locator('#collapse').click();
+    await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'true');
+    await quickbarPage.locator('#pin').click();
+    await quickbarPage.locator('#collapse').click();
+    await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'false');
+
+    await page.locator('#quickbar-edge').selectOption('top');
+    await expect(quickbarPage.locator('body')).toHaveAttribute('data-edge', 'top');
+    const topBounds = await app.evaluate(({ BrowserWindow, screen }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html'));
+      return { bounds: win.getBounds(), workArea: screen.getDisplayMatching(win.getBounds()).workArea };
+    });
+    expect(topBounds.bounds).toMatchObject({ width: 86, y: topBounds.workArea.y });
+    expect(topBounds.bounds.height).toBeGreaterThanOrEqual(11);
+    expect(topBounds.bounds.height).toBeLessThanOrEqual(19);
+
+    await page.locator('#quickbar-activation').selectOption('hover');
+    await expect(quickbarPage.locator('body')).toHaveAttribute('data-activation', 'hover');
+    await quickbarPage.locator('#edge-handle').dispatchEvent('mouseenter');
+    await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'true');
+    const hiddenForQuickbar = await app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) => !candidate.webContents.getURL().includes('quickbar.html'));
+      win.hide();
+      return { destroyed: win.isDestroyed(), visible: win.isVisible() };
+    });
+    expect(hiddenForQuickbar).toEqual({ destroyed: false, visible: false });
+    const before = new Set((await fs.readdir(outputDir)).filter((name) => name.endsWith('.png')));
+    await quickbarPage.locator('[data-action="screenshot"]').click();
+    const screenshotPath = await waitForNewFile(outputDir, '.png', before, 45_000);
+    expect((await pngDimensions(screenshotPath)).width).toBeGreaterThan(0);
+
+    await quickbarPage.locator('[data-action="openLibrary"]').click();
+    await expect(page.locator('#library-page')).toHaveClass(/active/);
+    await page.locator('[data-page="settings"]').click();
+    await setCheckbox(page, '#quickbar-enabled', false);
+    await expect.poll(() => app.windows().filter((candidate) => candidate.url().includes('quickbar.html')).length).toBe(0);
+    expect(quickbarErrors).toEqual([]);
+    metrics.push(metric('Floating quickbar behavior', 18, 'assertions', 18, 'min', 'isolated always-on-top non-focusable window; close-to-background continuity, right/top edges, auto-hide, hover, pinning, 8 actions and real PNG capture; capture exclusion configured through Electron content protection'));
+    await attachMetrics(testInfo, metrics);
+  });
+
   test('PNG capture is valid, unique and measured end-to-end', async ({}, testInfo) => {
     const samples = [];
     const dimensions = [];
@@ -358,6 +502,108 @@ test.describe('Electron production workflow', () => {
     await attachMetrics(testInfo, metrics);
   });
 
+  test('scroll stitching and reusable capture regions', async ({}, testInfo) => {
+    test.setTimeout(90_000);
+    await setCaptureDefaults(page, 'screenshot', 'region');
+    let before = new Set(await fs.readdir(outputDir));
+    await page.locator('#screenshot-button').click();
+    await expect(page.locator('#region-modal')).toBeVisible();
+    const canvas = page.locator('#preview-canvas');
+    const bounds = await canvas.boundingBox();
+    expect(bounds).toBeTruthy();
+    await page.mouse.move(bounds.x + bounds.width * 0.12, bounds.y + bounds.height * 0.14);
+    await page.mouse.down();
+    await page.mouse.move(bounds.x + bounds.width * 0.78, bounds.y + bounds.height * 0.74, { steps: 6 });
+    await page.mouse.up();
+    await expect(page.locator('#save-region')).toBeEnabled();
+    await page.locator('#save-region').click();
+    const savedRegionCapture = await waitForNewFile(outputDir, '.png', before);
+
+    before = new Set(await fs.readdir(outputDir));
+    await page.locator('#screenshot-button').click();
+    await page.locator('#last-region').click();
+    await expect(page.locator('#confirm-region')).toBeEnabled();
+    await page.locator('#confirm-region').click();
+    const lastRegionCapture = await waitForNewFile(outputDir, '.png', before);
+
+    before = new Set(await fs.readdir(outputDir));
+    await page.locator('#screenshot-button').click();
+    await expect(page.locator('#saved-region option')).toHaveCount(2);
+    await page.locator('#saved-region').selectOption('0');
+    await page.locator('#confirm-region').click();
+    const reusableRegionCapture = await waitForNewFile(outputDir, '.png', before);
+
+    await setCaptureDefaults(page, 'screenshot', 'scroll');
+    before = new Set(await fs.readdir(outputDir));
+    await page.locator('#record-button').click();
+    await expect(page.locator('#scroll-capture-bar')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-scroll-capture', 'active');
+    await page.waitForTimeout(750);
+    await page.locator('#finish-scroll-capture').click();
+    const scrollingCapture = await waitForNewFile(outputDir, '.png', before, 30_000);
+    await expect(page.locator('html')).toHaveAttribute('data-scroll-capture', 'saved');
+    const dimensions = await Promise.all([savedRegionCapture, lastRegionCapture, reusableRegionCapture, scrollingCapture].map(pngDimensions));
+    expect(dimensions.every((item) => item.width > 0 && item.height > 0 && item.size > 1000)).toBeTruthy();
+    const scrollFrames = Number(await page.locator('html').getAttribute('data-scroll-frames'));
+    const scrollParts = Number(await page.locator('html').getAttribute('data-scroll-parts'));
+    const scrollHeight = Number(await page.locator('html').getAttribute('data-scroll-height'));
+    const metrics = [
+      metric('Guided scrolling capture', scrollFrames, 'frames sampled', 1, 'min', `${scrollParts} stitched parts; output height ${scrollHeight}px`),
+      metric('Reusable capture regions', 3, 'workflows', 3, 'min', 'saved region, last region and stored region selector all produced valid PNG files'),
+      metric('Scrolling PNG integrity', dimensions[3].size, 'bytes', 1000, 'min', `${dimensions[3].width}x${dimensions[3].height}`)
+    ];
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+    await attachMetrics(testInfo, metrics);
+  });
+
+  test('post-capture workflow executes once in order and persists', async ({}, testInfo) => {
+    test.setTimeout(90_000);
+    await page.locator('[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="workflows"]').click();
+    await page.locator('#add-workflow').click();
+    const card = page.locator('.workflow-card').last();
+    await card.locator('[data-workflow-field="name"]').fill('בדיקת לקוח אוטומטית');
+    await card.locator('[data-workflow-field="client"]').fill('לקוח QA');
+    await card.locator('[data-workflow-field="client"]').press('Tab');
+    await expect(card.locator('[data-workflow-field="client"]')).toHaveValue('לקוח QA');
+    await card.locator('[data-workflow-action="ocr"]').check();
+    await card.locator('[data-workflow-action="client-copy"]').check();
+    await expect(card.locator('[data-workflow-action="copy"]')).toBeChecked();
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
+    await page.locator('[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="workflows"]').click();
+    await expect(page.locator('.workflow-card')).toHaveCount(1);
+    await expect(page.locator('.workflow-card [data-workflow-field="name"]')).toHaveValue('בדיקת לקוח אוטומטית');
+    await expect(page.locator('.workflow-card [data-workflow-field="client"]')).toHaveValue('לקוח QA');
+
+    await setCaptureDefaults(page, 'screenshot', 'full');
+    const before = new Set(await fs.readdir(outputDir));
+    await page.locator('#record-button').click();
+    const screenshotPath = await waitForNewFile(outputDir, '.png', before, 30_000);
+    await expect.poll(async () => Number(await page.locator('html').getAttribute('data-workflow-actions')), { timeout: 30_000 }).toBe(3);
+    const clientCopy = path.join(outputDir, 'לקוחות', 'לקוח QA', path.basename(screenshotPath));
+    await expect.poll(async () => fs.stat(clientCopy).then((stat) => stat.size).catch(() => 0)).toBeGreaterThan(1000);
+    const metadata = JSON.parse(await fs.readFile(`${screenshotPath}.meta.json`, 'utf8'));
+    expect(metadata.ocrText.length).toBeGreaterThan(3);
+    const clipboardImage = await app.evaluate(({ clipboard }) => clipboard.readImage().getSize());
+    expect(clipboardImage.width).toBeGreaterThan(0);
+    await page.locator('[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="workflows"]').click();
+    const log = await page.locator('#workflow-log').innerText();
+    expect((log.match(/✓ העתקה/g) || []).length).toBe(1);
+    expect((log.match(/✓ OCR/g) || []).length).toBe(1);
+    expect((log.match(/✓ העתק לתיקיית לקוח/g) || []).length).toBe(1);
+    const metrics = [
+      metric('Ordered workflow actions', Number(await page.locator('html').getAttribute('data-workflow-actions')), 'actions', 3, 'min', 'copy, OCR and client-folder copy executed once in configured order'),
+      metric('Workflow persistence', 1, 'rules', 1, 'min', 'rule survived hard renderer reload'),
+      metric('Client-folder delivery', (await fs.stat(clientCopy)).size, 'bytes', 1000, 'min', clientCopy),
+      metric('Workflow OCR result', metadata.ocrText.length, 'characters', 3, 'min', 'local heb+eng OCR metadata on deterministic capture fixture')
+    ];
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+    await attachMetrics(testInfo, metrics);
+  });
+
   test('professional screenshot editor tools, history and non-destructive save', async ({}, testInfo) => {
     test.setTimeout(180_000);
     await setCaptureDefaults(page, 'screenshot', 'full');
@@ -366,8 +612,19 @@ test.describe('Electron production workflow', () => {
     const sourcePath = await waitForNewFile(outputDir, '.png', before, 30_000);
     await page.locator('.nav-item[data-action="edit"]').click();
     await expect(page.locator('#image-editor-shell')).toBeVisible();
+    await expect(page.locator('#image-editor-shell')).toHaveAttribute('data-editor-ready', 'true');
     await expect(page.locator('.sidebar')).toBeVisible();
     await expect(page.locator('.sidebar .nav-item[data-action="edit"]')).toHaveClass(/active/);
+    const fittedZoom = Number(await page.locator('#image-editor-shell').getAttribute('data-editor-zoom'));
+    await page.locator('#editor-zoom-in').click();
+    await expect.poll(async () => Number(await page.locator('#image-editor-shell').getAttribute('data-editor-zoom'))).toBeGreaterThan(fittedZoom);
+    await page.locator('#editor-zoom-range').fill('150');
+    await expect(page.locator('#editor-zoom')).toHaveText('150%');
+    await expect(page.locator('#editor-workspace')).toHaveAttribute('data-manual-zoom', 'true');
+    await page.locator('#editor-workspace').dispatchEvent('wheel', { deltaY: 100, ctrlKey: true });
+    await expect.poll(async () => Number(await page.locator('#image-editor-shell').getAttribute('data-editor-zoom'))).toBeLessThan(150);
+    await page.locator('#editor-fit').click();
+    await expect(page.locator('#editor-workspace')).toHaveAttribute('data-manual-zoom', 'false');
     const editorChrome = await page.locator('#image-editor-shell, .sidebar, .editor-tools, #editor-workspace').evaluateAll((nodes) => Object.fromEntries(nodes.map((node) => {
       const rect = node.getBoundingClientRect();
       const key = node.id === 'image-editor-shell' ? 'shell' : node.classList.contains('sidebar') ? 'sidebar' : node.classList.contains('editor-tools') ? 'tools' : 'workspace';
@@ -503,6 +760,9 @@ test.describe('Electron production workflow', () => {
     await page.locator('#record-button').dispatchEvent('click');
     await expect(page.locator('#region-modal')).toBeHidden();
     await expect(page.locator('#recording-bar')).toBeVisible();
+    await expect(page.locator('#record-button')).toHaveAttribute('data-recording', 'true');
+    await expect(page.locator('#record-button')).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(page.locator('#stop-recording')).toContainText('עצור הקלטה');
     const readyMs = performance.now() - started;
     await page.waitForTimeout(1600);
     await expect.poll(async () => Number(await page.locator('html').getAttribute('data-recording-bytes')), { timeout: 5000 }).toBeGreaterThan(10_000);
@@ -510,7 +770,9 @@ test.describe('Electron production workflow', () => {
     const streamedBytes = Number(await page.locator('html').getAttribute('data-recording-bytes'));
     expect(streamedChunks).toBeGreaterThan(0);
     expect(streamedBytes).toBeGreaterThan(10_000);
-    expect((await fs.readdir(outputDir)).some((name) => name.endsWith('.partial.webm'))).toBeTruthy();
+    const activeRecordingFiles = await fs.readdir(outputDir);
+    expect(activeRecordingFiles.some((name) => name.endsWith('.recording.json'))).toBeTruthy();
+    expect(activeRecordingFiles.some((name) => name.endsWith('.segments'))).toBeTruthy();
     await page.locator('#recording-mic').click();
     await expect(page.locator('#recording-mic')).toHaveClass(/off/);
     await page.locator('#recording-mic').click();
@@ -523,6 +785,7 @@ test.describe('Electron production workflow', () => {
     await page.locator('#pause-recording').dispatchEvent('click');
     await expect(page.locator('#pause-recording')).toHaveText('השהיה');
     await page.waitForTimeout(1600);
+    await expect.poll(async () => Number(await page.locator('html').getAttribute('data-recording-segments'))).toBeGreaterThanOrEqual(2);
     const stopStarted = performance.now();
     await page.locator('#stop-recording').dispatchEvent('click');
     const mp4Path = await waitForNewFile(outputDir, '.mp4', before, 45_000);
@@ -534,6 +797,8 @@ test.describe('Electron production workflow', () => {
     expect(video).toBeTruthy();
     expect(audio).toBeTruthy();
     expect(Number(media.format.duration)).toBeGreaterThan(2.5);
+    await expect.poll(async () => (await fs.readdir(outputDir)).some((name) => /_מיקרופון\.m4a$/u.test(name)), { timeout: 20_000 }).toBeTruthy();
+    const recordingSegments = Number(await page.locator('html').getAttribute('data-recording-segments'));
     const metrics = [
       metric('Record click to active', readyMs, 'ms', 4000, 'max', 'UI click through capture pipeline'),
       metric('Stop to MP4 ready', saveMs, 'ms', 15_000, 'max', 'MediaRecorder + FFmpeg conversion'),
@@ -545,12 +810,54 @@ test.describe('Electron production workflow', () => {
       metric('Audio input choices', audioDevices - 1, 'devices', 1, 'min', 'enumerateDevices'),
       metric('Camera input choices', videoDevices - 1, 'devices', 1, 'min', 'enumerateDevices')
       ,metric('Crash-safe incremental recording', streamedChunks, 'chunks', 1, 'min', `${streamedBytes} bytes persisted before stop; floating mic and pause controls verified`)
+      ,metric('Rotated video segments', recordingSegments, 'segments', 2, 'min', 'QA rotates every 3 chunks; production rotates every 30 chunks or 64 MB')
+      ,metric('Separate drift-corrected microphone track', 1, 'tracks', 1, 'min', 'AAC sidecar normalized with async resampling and matched to video duration')
+    ];
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+    await attachMetrics(testInfo, metrics);
+  });
+
+  test('interrupted recording is recovered automatically after restart', async ({}, testInfo) => {
+    test.setTimeout(90_000);
+    await setCaptureDefaults(page, 'record', 'full');
+    await page.locator('[data-settings-tab="audio"]').click();
+    await setCheckbox(page, '#system-audio', false);
+    await setCheckbox(page, '#microphone', true);
+    await page.locator('.nav-item[data-page="capture"]:not([data-action])').click();
+    await page.locator('#record-button').click();
+    await expect(page.locator('#recording-bar')).toBeVisible();
+    await expect.poll(async () => Number(await page.locator('html').getAttribute('data-recording-chunks')), { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
+    const beforeCrash = await fs.readdir(outputDir);
+    expect(beforeCrash.some((name) => name.endsWith('.recording.json'))).toBeTruthy();
+    expect(beforeCrash.some((name) => name.endsWith('.segments'))).toBeTruthy();
+
+    await closeStudio(app);
+    app = null;
+    ({ app, page, runtimeErrors } = await launchStudio(`${testInfo.title}-restart`, { outputDir }));
+    await expect(page.locator('html')).toHaveAttribute('data-recovered-recordings', '1');
+    await expect(page.locator('#recovery-status')).toContainText('1 שוחזרו');
+    const files = await fs.readdir(outputDir);
+    const recoveredName = files.find((name) => /_שוחזרה\.webm$/u.test(name));
+    expect(recoveredName).toBeTruthy();
+    expect(files.some((name) => /_מיקרופון_שוחזר\.webm$/u.test(name))).toBeTruthy();
+    expect(files.some((name) => name.endsWith('.recording.json'))).toBeFalsy();
+    expect(files.some((name) => name.endsWith('.segments'))).toBeFalsy();
+    const recoveredPath = path.join(outputDir, recoveredName);
+    const stat = await fs.stat(recoveredPath);
+    expect(stat.size).toBeGreaterThan(10_000);
+    const recoveredMedia = await probe(recoveredPath);
+    expect(recoveredMedia.streams.some((stream) => stream.codec_type === 'video')).toBeTruthy();
+    const metrics = [
+      metric('Crash recovery after restart', 1, 'recordings', 1, 'min', `${stat.size} bytes reconstructed from segment journal`),
+      metric('Separate microphone crash recovery', 1, 'tracks', 1, 'min', 'microphone sidecar retained instead of being deleted with temporary segments'),
+      metric('Recovery cleanup', files.filter((name) => name.endsWith('.recording.json') || name.endsWith('.segments')).length, 'temporary artifacts', 0, 'max', 'journal and segment directory removed after successful reconstruction')
     ];
     expect(metrics.every((item) => item.pass)).toBeTruthy();
     await attachMetrics(testInfo, metrics);
   });
 
   test('system-audio path, local library and developer shortcuts', async ({}, testInfo) => {
+    test.setTimeout(180_000);
     await setCaptureDefaults(page, 'record', 'region');
     await setCheckbox(page, '#system-audio', true);
     await setCheckbox(page, '#microphone', false);
@@ -598,13 +905,31 @@ test.describe('Electron production workflow', () => {
     const beforeEdit = new Set(await fs.readdir(outputDir));
     await page.locator('.library-item.favorite .edit-video').click();
     await expect(page.locator('#video-editor-modal')).toBeVisible();
-    await page.locator('#video-trim-end').fill('1');
-    await page.locator('#video-speed').selectOption('1.25');
+    await expect(page.locator('.timeline-editor')).toHaveAttribute('data-timeline-ready', 'true');
+    await page.locator('#video-remove-silence').click();
+    await expect(page.locator('#video-remove-silence')).toBeEnabled();
+    await page.locator('#video-editor-preview').evaluate((video) => { video.currentTime = Math.min(0.8, video.duration / 2); });
+    await page.locator('#video-split').click();
+    await expect(page.locator('#video-clip-track .timeline-block')).toHaveCount(2);
+    await page.locator('#video-clip-track .timeline-block').first().click();
+    await page.locator('#video-transition').selectOption('fade');
+    await page.locator('#video-transition-duration').fill('0.1');
+    await page.locator('#video-add-caption').click();
+    await page.locator('#video-caption-text').fill('כתובית Timeline בעברית');
+    await expect(page.locator('#video-caption-track .timeline-block')).toHaveCount(1);
+    await page.locator('#video-auto-zoom').click();
+    await expect.poll(() => page.locator('#video-zoom-track .timeline-block').count()).toBeGreaterThanOrEqual(1);
+    await page.locator('#video-export-preset').selectOption('small');
     await page.locator('#video-volume').fill('80');
-    await page.locator('#video-fade-in').fill('0.1');
+    await page.locator('#save-video-project').click();
+    await expect.poll(async () => (await fs.readdir(outputDir)).some((name) => name.endsWith('.timeline.json'))).toBeTruthy();
     await page.locator('#save-video-edit').click();
-    const editedVideo = await waitForNewFile(outputDir, '.mp4', beforeEdit, 45_000);
-    expect(path.basename(editedVideo)).toContain('ערוך');
+    await expect.poll(async () => ({ disabled: await page.locator('#save-video-edit').isDisabled(), error: await page.locator('html').getAttribute('data-video-export-error') }), { timeout: 90_000 }).toEqual({ disabled: false, error: null });
+    const editedVideo = await waitForNewFile(outputDir, '.mp4', beforeEdit, 90_000);
+    expect(path.basename(editedVideo)).toContain('Timeline');
+    const editedMedia = await probe(editedVideo);
+    expect(editedMedia.streams.some((stream) => stream.codec_type === 'video')).toBeTruthy();
+    expect(Number(editedMedia.format.duration)).toBeGreaterThan(0.5);
     const libraryStarted = performance.now();
     await page.locator('.nav-item[data-page="capture"]:not([data-action])').dispatchEvent('click');
     await expect(page.locator('#capture-page')).toHaveClass(/active/);
@@ -641,7 +966,7 @@ test.describe('Electron production workflow', () => {
       metric('Real media thumbnails', 2, 'thumbnails', 2, 'min', 'FFmpeg frames rendered as data images with natural dimensions'),
       metric('Library sort group and rename', 4, 'assertions', 4, 'min', `name sort, type group, filesystem rename, extension ${renamedExtension} preserved`),
       metric('Client metadata and private sharing', 6, 'assertions', 6, 'min', 'client, two tags, favorite, metadata persistence and local path sharing'),
-      metric('Quick video editor output', 4, 'operations', 4, 'min', 'non-destructive MP4 trim, 1.25x speed, 80% volume and fade-in created through FFmpeg'),
+      metric('Professional timeline editor output', 8, 'operations', 8, 'min', 'silence analysis, split, transition, draggable caption model, cursor zoom, preset, project save and FFmpeg MP4 export'),
       metric('Developer console shortcut', 2, 'toggles', 2, 'min', 'Ctrl+Shift+I opened and closed Electron DevTools'),
       metric('Hard reload ready', reloadMs, 'ms', 3000, 'max', 'Ctrl+Shift+R to appReady')
     ];

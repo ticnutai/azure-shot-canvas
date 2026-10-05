@@ -1,13 +1,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { recordingPaths, recoveryPathFor, storageLevel } = require('../src/recording-utils.cjs');
+const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('../src/recording-utils.cjs');
 
 test('recording recovery paths remain inside the output directory', () => {
   const directory = 'C:\\Videos\\אולפן צילום מסך';
   const paths = recordingPaths(directory, new Date(2026, 7, 12, 10, 11, 12, 13));
-  for (const value of Object.values(paths)) assert.equal(path.dirname(value), directory);
+  for (const [key, value] of Object.entries(paths)) {
+    if (key !== 'stem') assert.equal(path.dirname(value), directory);
+  }
   assert.match(paths.partialPath, /\.partial\.webm$/);
+  assert.match(paths.segmentDirectory, /\.segments$/);
+  assert.match(recordingSegmentPath(paths.segmentDirectory, 7), /video-00007\.part$/);
+  assert.match(recordingAudioPath(paths.segmentDirectory, 'microphone'), /microphone\.partial\.webm$/);
   assert.match(recoveryPathFor(paths.partialPath), /_שוחזרה\.webm$/);
 });
 

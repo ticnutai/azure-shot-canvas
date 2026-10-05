@@ -22,8 +22,17 @@ const state = {
   recordingWriteError: null,
   recordingBytes: 0,
   recordingChunks: 0,
+  audioRecorders: [],
+  audioAppendQueue: Promise.resolve(),
+  healthTimer: null,
+  cameraLastFrameAt: 0,
+  cameraMonitorToken: 0,
+  cameraStallNotified: false,
+  cameraFrameMonitoring: false,
+  scrollCapture: null,
   cursorInfo: null,
   cursorTimer: null,
+  cursorSamples: [],
   startedAt: 0,
   timer: null,
   busy: false,
@@ -37,6 +46,7 @@ const state = {
   recentFilter: 'all',
   recentSort: 'date-desc',
   recentView: 'cards',
+  captureLayout: 'clean',
   previewFit: 'contain',
   previewZoom: 100,
   safeArea: false,
@@ -45,6 +55,7 @@ const state = {
   captureDelay: 0,
   shortcuts: {},
   afterScreenshotAction: 'save',
+  chapterMarkers: [],
   region: { x: 0, y: 0, width: 1, height: 1 }
 };
 
@@ -59,6 +70,11 @@ let qaConsoleText = '';
 let themeEditorOpen = false;
 let listeningShortcutAction = null;
 let editingVideoItem = null;
+let editingVideoProject = null;
+let editingVideoCursorSamples = [];
+let selectedTimelineItem = null;
+let workflowDefinitions = [];
+let workflowExecutionLog = [];
 let shortcutRegistrationState = {};
 const shortcutDoublePressState = new Map();
 
@@ -72,7 +88,7 @@ const defaultShortcuts = {
   camera: { kind: 'chord', code: 'KeyC', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
   openOutput: { kind: 'chord', code: 'KeyO', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
   openLibrary: null, openLatest: null, editLatest: null,
-  toggleWindow: { kind: 'double', code: 'F9', modifiers: [], scope: 'global', intervalMs: 320 }
+  toggleWindow: { kind: 'double', code: 'F9', modifiers: [], scope: 'global', intervalMs: 500 }
 };
 const shortcutActions = {
   record: ['recording', 'התחלה / עצירת הקלטה', 'מחליף מצב לפי מצב ההקלטה הנוכחי'], recordStart: ['recording', 'התחלת הקלטה', 'מתחיל רק אם אין הקלטה פעילה'], recordStop: ['recording', 'עצירת הקלטה', 'עוצר ושומר רק הקלטה פעילה'], pause: ['recording', 'השהיה / המשך', 'מחליף בין השהיה להמשך'],
@@ -100,9 +116,8 @@ function shortcutBindingFromEvent(event, template = {}) {
     if (!modifiers.length && !/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(event.code)) return null;
   }
   const modifierOnly = /^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(event.code);
-  const scope = modifierOnly ? 'focused' : (template.scope || 'global');
-  if (modifierOnly && kind !== 'double') return null;
-  return { kind, code: event.code, modifiers, scope, intervalMs: Number(template.intervalMs) || 300 };
+  if (modifierOnly) return null;
+  return { kind, code: event.code, modifiers, scope: template.scope || 'global', intervalMs: Number(template.intervalMs) || (kind === 'double' ? 500 : 300) };
 }
 
 function shortcutEventMatches(event, binding) {
@@ -137,7 +152,7 @@ function handleFocusedShortcutEvent(event) {
 function ensureShortcutRows() {
   const list = $('#shortcut-settings-list');
   if (!list || list.children.length) return;
-  list.innerHTML = Object.entries(shortcutActions).map(([action, [category, label, description]]) => `<div data-shortcut-row="${action}" data-category="${category}"><div><b>${label}</b><small>${description}</small></div><select class="shortcut-kind" data-shortcut-kind="${action}"><option value="chord">צירוף</option><option value="single">מקש יחיד</option><option value="double">לחיצה כפולה</option></select><select class="shortcut-scope" data-shortcut-scope="${action}"><option value="global">גלובלי</option><option value="focused">באפליקציה</option></select><button class="shortcut-recorder" data-shortcut-action="${action}"></button><button class="shortcut-test" data-shortcut-test="${action}">בדיקה</button><button class="shortcut-clear" data-shortcut-clear="${action}" title="ניקוי">×</button></div>`).join('');
+  list.innerHTML = Object.entries(shortcutActions).map(([action, [category, label, description]]) => `<div data-shortcut-row="${action}" data-category="${category}"><div><b>${label}</b><small>${description}</small></div><select class="shortcut-kind" data-shortcut-kind="${action}"><option value="chord">צירוף</option><option value="single">מקש יחיד</option><option value="double">לחיצה כפולה</option></select><select class="shortcut-scope" data-shortcut-scope="${action}"><option value="global">גלובלי</option><option value="focused">באפליקציה</option></select><select class="shortcut-interval" data-shortcut-interval="${action}" title="מרווח מרבי בין שתי לחיצות"><option value="300">300ms</option><option value="400">400ms</option><option value="500">500ms</option><option value="650">650ms</option><option value="700">700ms</option></select><button class="shortcut-recorder" data-shortcut-action="${action}"></button><button class="shortcut-test" data-shortcut-test="${action}">בדיקה</button><button class="shortcut-clear" data-shortcut-clear="${action}" title="ניקוי">×</button></div>`).join('');
 }
 
 function filterShortcutRows() {
@@ -160,6 +175,7 @@ function renderShortcutSettings(registration = {}) {
   });
   $$('[data-shortcut-kind]').forEach((select) => { select.value = state.shortcuts[select.dataset.shortcutKind]?.kind || select.dataset.pendingKind || 'chord'; });
   $$('[data-shortcut-scope]').forEach((select) => { select.value = state.shortcuts[select.dataset.shortcutScope]?.scope || select.dataset.pendingScope || 'global'; });
+  $$('[data-shortcut-interval]').forEach((select) => { const binding = state.shortcuts[select.dataset.shortcutInterval]; select.value = String(binding?.intervalMs || 500); select.disabled = binding?.kind !== 'double'; });
   $$('[data-shortcut-summary]').forEach((element) => { element.textContent = shortcutLabel(state.shortcuts[element.dataset.shortcutSummary]); });
   const failed = Object.entries(shortcutRegistrationState).filter(([, registered]) => registered === false).map(([action]) => action);
   const banner = $('#shortcut-status-banner');
@@ -189,12 +205,15 @@ async function applyShortcutSettings(candidate, persist = true) {
 async function loadShortcutSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('aurum-shortcuts') || '{}'); } catch {}
+  const removedUnsafe = Object.entries(saved).filter(([, binding]) => binding?.kind === 'double' && /^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(binding.code));
+  for (const [action] of removedUnsafe) saved[action] = null;
   state.shortcuts = { ...defaultShortcuts, ...saved };
   const accepted = await applyShortcutSettings(state.shortcuts, false);
   if (!accepted) {
     state.shortcuts = { ...defaultShortcuts };
     await applyShortcutSettings(state.shortcuts);
   } else localStorage.setItem('aurum-shortcuts', JSON.stringify(state.shortcuts));
+  if (removedUnsafe.length) setTimeout(() => showToast(`${removedUnsafe.length} קיצורים כפולים לא אמינים הוסרו. מקשי Windows/Ctrl/Alt/Shift נתפסים בידי Windows.`), 400);
 }
 
 const themeVariables = ['--bg', '--top', '--panel', '--panel-2', '--text', '--muted', '--gold', '--line', '--success', '--danger'];
@@ -235,7 +254,7 @@ function setStatus(label, mode = 'ready') {
 
 function applyCapturePreferences(kind = state.captureKind, scope = state.captureScope, persist = true) {
   state.captureKind = ['record', 'screenshot'].includes(kind) ? kind : 'record';
-  state.captureScope = ['full', 'region'].includes(scope) ? scope : 'full';
+  state.captureScope = ['full', 'region', 'scroll'].includes(scope) ? scope : 'full';
   if ($('#default-capture-kind')) $('#default-capture-kind').value = state.captureKind;
   if ($('#default-capture-scope')) $('#default-capture-scope').value = state.captureScope;
   $$('input[name="screenshot-mode"]').forEach((radio) => { radio.checked = radio.value === state.captureScope; });
@@ -246,7 +265,7 @@ function applyCapturePreferences(kind = state.captureKind, scope = state.capture
   document.documentElement.dataset.defaultCaptureScope = state.captureScope;
   if ($('#capture-default-summary')) {
     const kindLabel = state.captureKind === 'screenshot' ? 'צילום מסך' : 'וידאו';
-    const scopeLabel = state.captureScope === 'region' ? 'אזור לבחירה' : 'מסך מלא';
+    const scopeLabel = state.captureScope === 'region' ? 'אזור לבחירה' : state.captureScope === 'scroll' ? 'עמוד גלילה' : 'מסך מלא';
     $('#capture-default-summary').textContent = `${kindLabel} · ${scopeLabel}`;
   }
   if (persist) {
@@ -256,9 +275,37 @@ function applyCapturePreferences(kind = state.captureKind, scope = state.capture
 }
 
 function applyAfterScreenshotAction(action = 'save', persist = true) {
-  state.afterScreenshotAction = ['save', 'quick', 'professional'].includes(action) ? action : 'save';
+  state.afterScreenshotAction = ['save', 'quick', 'professional', 'ocr', 'pin', 'share'].includes(action) ? action : 'save';
   if ($('#after-screenshot-action')) $('#after-screenshot-action').value = state.afterScreenshotAction;
   if (persist) localStorage.setItem('aurum-after-screenshot-action', state.afterScreenshotAction);
+}
+
+function closeCaptureSettingsDialog() {
+  document.documentElement.dataset.captureSettingsOpen = 'false';
+  $('#open-capture-settings')?.setAttribute('aria-expanded', 'false');
+}
+
+function openCaptureSettingsDialog() {
+  if (state.captureLayout === 'professional') return;
+  document.documentElement.dataset.captureSettingsOpen = 'true';
+  $('#open-capture-settings')?.setAttribute('aria-expanded', 'true');
+  $('#capture-settings')?.classList.remove('hidden');
+  $('#close-capture-settings')?.focus();
+}
+
+function applyCaptureLayout(layout = 'clean', persist = true) {
+  state.captureLayout = ['clean', 'professional', 'focus'].includes(layout) ? layout : 'clean';
+  document.documentElement.dataset.captureLayout = state.captureLayout;
+  if ($('#capture-layout-select')) $('#capture-layout-select').value = state.captureLayout;
+  $$('[data-capture-layout-choice]').forEach((button) => {
+    const active = button.dataset.captureLayoutChoice === state.captureLayout;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-checked', String(active));
+  });
+  $('#capture-layout-menu')?.classList.add('hidden');
+  $('#capture-layout-button')?.setAttribute('aria-expanded', 'false');
+  closeCaptureSettingsDialog();
+  if (persist) localStorage.setItem('aurum-capture-layout', state.captureLayout);
 }
 
 function applyLibraryPreferences(view = state.libraryView, size = state.librarySize, persist = true) {
@@ -310,6 +357,7 @@ function applyRecentPreferences(filter = state.recentFilter, sort = state.recent
 }
 
 function restoreUserPreferences() {
+  applyCaptureLayout(localStorage.getItem('aurum-capture-layout') || 'clean', false);
   applyCapturePreferences(localStorage.getItem('aurum-default-capture-kind') || 'record', localStorage.getItem('aurum-default-capture-scope') || 'full', false);
   applyAfterScreenshotAction(localStorage.getItem('aurum-after-screenshot-action') || 'save', false);
   applyCaptureDelay(localStorage.getItem('aurum-capture-delay') || '0', false);
@@ -797,7 +845,14 @@ async function acquireInputs(includeRecordingInputs) {
   setPreviewState('ready');
   $('#selected-source-label').textContent = `${includeRecordingInputs ? 'מקליט' : 'מצלם'} — ${state.selectedSource.name}`;
   if (includeRecordingInputs && $('#cursor-highlight')?.checked) {
-    state.cursorTimer = setInterval(() => api.getCursorPosition().then((info) => { state.cursorInfo = info; }).catch(() => {}), 40);
+    state.cursorTimer = setInterval(() => api.getCursorPosition().then((info) => {
+      state.cursorInfo = info;
+      if (state.recorder && state.startedAt && info?.bounds?.width && info?.bounds?.height) {
+        const previous = state.cursorSamples.at(-1);
+        const at = (Date.now() - state.startedAt) / 1000;
+        if (!previous || at - previous.at >= 0.1) state.cursorSamples.push({ at, x: (info.point.x - info.bounds.x) / info.bounds.width, y: (info.point.y - info.bounds.y) / info.bounds.height });
+      }
+    }).catch(() => {}), 40);
   }
 
   if (includeSystemAudio && api.qaEnabled) {
@@ -838,7 +893,21 @@ async function acquireInputs(includeRecordingInputs) {
     });
     cameraVideo.srcObject = state.cameraStream;
     await waitForVideo(cameraVideo);
+    startCameraFrameMonitor();
   }
+}
+
+function startCameraFrameMonitor() {
+  const token = ++state.cameraMonitorToken;
+  state.cameraLastFrameAt = Date.now();
+  state.cameraStallNotified = false;
+  state.cameraFrameMonitoring = typeof cameraVideo.requestVideoFrameCallback === 'function';
+  const frame = () => {
+    if (token !== state.cameraMonitorToken || !state.cameraStream) return;
+    state.cameraLastFrameAt = Date.now();
+    cameraVideo.requestVideoFrameCallback(frame);
+  };
+  if (state.cameraFrameMonitoring) cameraVideo.requestVideoFrameCallback(frame);
 }
 
 function stopInputStreams() {
@@ -848,6 +917,7 @@ function stopInputStreams() {
   state.displayStream = null;
   state.microphoneStream = null;
   state.cameraStream = null;
+  state.cameraFrameMonitoring = false;
   state.outputStream = null;
   if (state.audioContext && state.audioContext.state !== 'closed') state.audioContext.close();
   state.audioContext = null;
@@ -857,8 +927,11 @@ function stopInputStreams() {
   state.qaSystemAudioContext = null;
   clearInterval(state.drawTimer);
   clearInterval(state.cursorTimer);
+  clearInterval(state.healthTimer);
   state.drawTimer = null;
   state.cursorTimer = null;
+  state.healthTimer = null;
+  state.cameraMonitorToken += 1;
   state.cursorInfo = null;
   displayVideo.srcObject = null;
   cameraVideo.srcObject = null;
@@ -939,6 +1012,23 @@ function chooseRegion() {
   box.style.display = 'none';
   $('#confirm-region').disabled = true;
 
+  const readStoredRegion = (key) => {
+    try {
+      const value = JSON.parse(localStorage.getItem(key) || 'null');
+      if (!value || !['x', 'y', 'width', 'height'].every((field) => Number.isFinite(value[field]))) return null;
+      return value;
+    } catch { return null; }
+  };
+  const readSavedRegions = () => {
+    try {
+      const value = JSON.parse(localStorage.getItem('aurum-saved-regions') || '[]');
+      return Array.isArray(value) ? value.filter((item) => item?.name && item?.region) : [];
+    } catch { return []; }
+  };
+  const savedSelect = $('#saved-region');
+  const savedRegions = readSavedRegions();
+  savedSelect.innerHTML = '<option value="">אזור שמור…</option>' + savedRegions.map((item, index) => `<option value="${index}">${escapeHtml(item.name)}</option>`).join('');
+
   return new Promise((resolve) => {
     let dragging = false;
     let start = null;
@@ -966,17 +1056,30 @@ function chooseRegion() {
       box.style.height = `${height}px`;
       selection = { x: left / canvasRect.width, y: top / canvasRect.height, width: width / canvasRect.width, height: height / canvasRect.height };
       $('#confirm-region').disabled = width < 8 || height < 8;
+      $('#save-region').disabled = width < 8 || height < 8;
+    };
+    const renderNormalizedRegion = (region) => {
+      if (!region) return;
+      const canvasRect = canvas.getBoundingClientRect();
+      renderBox(
+        { x: region.x * canvasRect.width, y: region.y * canvasRect.height },
+        { x: (region.x + region.width) * canvasRect.width, y: (region.y + region.height) * canvasRect.height }
+      );
     };
     const down = (event) => { dragging = true; start = point(event); canvas.setPointerCapture(event.pointerId); renderBox(start, start); };
     const move = (event) => { if (dragging) renderBox(start, point(event)); };
     const up = (event) => { if (dragging) { dragging = false; renderBox(start, point(event)); } };
     const finish = (value) => {
+      if (value && value.width > 0 && value.height > 0) localStorage.setItem('aurum-last-region', JSON.stringify(value));
       modal.classList.add('hidden');
       canvas.removeEventListener('pointerdown', down);
       canvas.removeEventListener('pointermove', move);
       canvas.removeEventListener('pointerup', up);
       $('#confirm-region').onclick = null;
       $('#full-region').onclick = null;
+      $('#last-region').onclick = null;
+      $('#save-region').onclick = null;
+      savedSelect.onchange = null;
       $('#cancel-region').onclick = null;
       resolve(value);
     };
@@ -985,8 +1088,187 @@ function chooseRegion() {
     canvas.addEventListener('pointerup', up);
     $('#confirm-region').onclick = () => finish(selection);
     $('#full-region').onclick = () => finish({ x: 0, y: 0, width: 1, height: 1 });
+    $('#last-region').onclick = () => {
+      const region = readStoredRegion('aurum-last-region');
+      if (!region) return showToast('עדיין לא נשמר אזור צילום אחרון');
+      renderNormalizedRegion(region);
+    };
+    savedSelect.onchange = () => renderNormalizedRegion(savedRegions[Number(savedSelect.value)]?.region);
+    $('#save-region').onclick = () => {
+      if (!selection) return;
+      const regions = readSavedRegions();
+      const name = `אזור ${regions.length + 1}`;
+      regions.unshift({ name, region: selection, savedAt: new Date().toISOString() });
+      localStorage.setItem('aurum-saved-regions', JSON.stringify(regions.slice(0, 12)));
+      showToast(`${name} נשמר לשימוש חוזר`);
+      finish(selection);
+    };
     $('#cancel-region').onclick = () => finish(null);
   });
+}
+
+async function handleSavedScreenshot(result) {
+  document.documentElement.dataset.lastSavedPath = result.path;
+  setStatus('התמונה נשמרה');
+  showToast(`התמונה נשמרה: ${result.path}`);
+  await loadLibrary().catch(() => {});
+  restoreLivePreview();
+  const completed = new Set();
+  if (['quick', 'professional'].includes(state.afterScreenshotAction) && window.aurumEditor) { await window.aurumEditor.open(result.path, state.afterScreenshotAction); completed.add('open-editor'); }
+  if (state.afterScreenshotAction === 'ocr') { const ocr = await api.runOcr(result.path); completed.add('ocr'); showToast(`OCR הושלם: ${ocr.text.length} תווים נוספו לחיפוש`); await loadLibrary(); }
+  if (state.afterScreenshotAction === 'pin') { await api.pinImage(result.path); showToast('הצילום הוצמד מעל החלונות'); }
+  if (state.afterScreenshotAction === 'share') { const share = await api.shareLocal(result.path); completed.add('share'); showToast(`קישור מקומי פרטי הועתק, בתוקף עד ${new Date(share.expiresAt).toLocaleTimeString('he-IL')}`); }
+  await runWorkflows('screenshot', result.path, completed);
+}
+
+const workflowActionLabels = { copy: 'העתקה', ocr: 'OCR', 'client-copy': 'העתק לתיקיית לקוח', 'open-editor': 'פתיחת העורך', share: 'שיתוף מקומי', 'open-folder': 'פתיחת תיקייה' };
+
+function saveWorkflows() {
+  localStorage.setItem('aurum-workflows', JSON.stringify(workflowDefinitions));
+  renderWorkflows();
+}
+
+function renderWorkflows() {
+  const container = $('#workflow-list');
+  if (!container) return;
+  if (!workflowDefinitions.length) { container.innerHTML = '<div class="loading">אין אוטומציות. בחר תבנית או צור חדשה.</div>'; return; }
+  container.innerHTML = workflowDefinitions.map((workflow, index) => `<article class="workflow-card" data-workflow-index="${index}"><input type="checkbox" data-workflow-field="enabled" ${workflow.enabled ? 'checked' : ''} title="פעילה"><input data-workflow-field="name" value="${escapeHtml(workflow.name)}" aria-label="שם אוטומציה"><select data-workflow-field="trigger"><option value="screenshot" ${workflow.trigger === 'screenshot' ? 'selected' : ''}>אחרי צילום</option><option value="recording" ${workflow.trigger === 'recording' ? 'selected' : ''}>אחרי הקלטה</option></select><input data-workflow-field="client" value="${escapeHtml(workflow.client || '')}" placeholder="שם לקוח"><button class="danger-button" data-workflow-delete>⌫</button><div class="workflow-actions">${Object.entries(workflowActionLabels).map(([action, label]) => `<label><input type="checkbox" data-workflow-action="${action}" ${workflow.actions.includes(action) ? 'checked' : ''}>${label}</label>`).join('')}</div></article>`).join('');
+}
+
+function addWorkflow(template = 'blank') {
+  const templates = {
+    blank: { name: `אוטומציה ${workflowDefinitions.length + 1}`, trigger: 'screenshot', client: '', actions: ['copy'] },
+    'copy-ocr': { name: 'העתקה ו־OCR', trigger: 'screenshot', client: '', actions: ['copy', 'ocr'] },
+    'client-edit': { name: 'צילום לתיקיית לקוח ולעורך', trigger: 'screenshot', client: 'לקוח חדש', actions: ['client-copy', 'open-editor'] },
+    'record-share': { name: 'שיתוף הקלטה', trigger: 'recording', client: '', actions: ['share', 'open-folder'] }
+  };
+  workflowDefinitions.push({ id: `workflow-${Date.now()}-${workflowDefinitions.length}`, enabled: true, ...templates[template] });
+  saveWorkflows();
+}
+
+async function runWorkflows(trigger, filePath, completed = new Set()) {
+  const rules = workflowDefinitions.filter((workflow) => workflow.enabled && workflow.trigger === trigger);
+  if (!rules.length) return [];
+  workflowExecutionLog = [`${new Date().toLocaleString('he-IL')} · ${trigger} · ${filePath}`];
+  const results = [];
+  for (const workflow of rules) {
+    workflowExecutionLog.push(`▶ ${workflow.name}`);
+    for (const action of workflow.actions) {
+      if (completed.has(action)) { workflowExecutionLog.push(`  ↷ ${workflowActionLabels[action]} — דולג כדי למנוע כפילות`); continue; }
+      let result;
+      if (action === 'open-editor') { if (/\.png$/i.test(filePath)) await window.aurumEditor?.open(filePath, 'professional'); else { const item = state.libraryItems.find((entry) => entry.path === filePath) || { path: filePath, name: filePath.split(/[\\/]/).at(-1) }; await openVideoEditor(item); } result = { renderer: true }; }
+      else result = await api.runWorkflowAction(filePath, action, { client: workflow.client });
+      completed.add(action); results.push({ workflow: workflow.name, action, result });
+      workflowExecutionLog.push(`  ✓ ${workflowActionLabels[action]}${result?.skipped ? ` — ${result.reason}` : ''}`);
+    }
+  }
+  $('#workflow-log').textContent = workflowExecutionLog.join('\n');
+  document.documentElement.dataset.workflowActions = String(results.length);
+  localStorage.setItem('aurum-workflow-log', workflowExecutionLog.join('\n'));
+  return results;
+}
+
+async function beginScrollingCapture() {
+  const engine = window.AurumScrollCapture;
+  if (!engine) throw new Error('מנוע צילום הגלילה לא נטען');
+  stopLivePreview({ preserveDisplay: true });
+  await acquireInputs(false);
+  const sourceWidth = displayVideo.videoWidth;
+  const sourceHeight = displayVideo.videoHeight;
+  const scale = Math.min(1, 1600 / sourceWidth);
+  const frameWidth = Math.max(2, Math.round(sourceWidth * scale));
+  const frameHeight = Math.max(2, Math.round(sourceHeight * scale));
+  const frameCanvas = document.createElement('canvas');
+  frameCanvas.width = frameWidth;
+  frameCanvas.height = frameHeight;
+  const frameContext = frameCanvas.getContext('2d', { willReadFrequently: true });
+  let stitchedCanvas = null;
+  let previousSignature = null;
+  let frames = 0;
+  let appended = 0;
+  let lastMovementAt = Date.now();
+  let finishing = false;
+  let interval = null;
+  let maximumTimer = null;
+  const startedAt = Date.now();
+  const bar = $('#scroll-capture-bar');
+  const status = $('#scroll-capture-status');
+  bar.classList.remove('hidden');
+  document.documentElement.dataset.scrollCapture = 'active';
+
+  const sample = () => {
+    if (finishing || !displayVideo.videoWidth) return;
+    frameContext.drawImage(displayVideo, 0, 0, sourceWidth, sourceHeight, 0, 0, frameWidth, frameHeight);
+    const signature = engine.rowSignature(frameContext.getImageData(0, 0, frameWidth, frameHeight), frameWidth, frameHeight, 2);
+    frames += 1;
+    if (!stitchedCanvas) {
+      stitchedCanvas = document.createElement('canvas');
+      stitchedCanvas.width = frameWidth;
+      stitchedCanvas.height = frameHeight;
+      stitchedCanvas.getContext('2d').drawImage(frameCanvas, 0, 0);
+      previousSignature = signature;
+      status.textContent = 'הפריים הראשון נשמר — גלול לאט כלפי מטה';
+      return;
+    }
+    const transition = engine.analyzeTransition(previousSignature, signature);
+    if (transition.kind === 'append') {
+      const nextHeight = engine.nextCanvasHeight(stitchedCanvas.height, frameHeight, transition.overlapPixels);
+      if (nextHeight <= stitchedCanvas.height) return;
+      const nextCanvas = document.createElement('canvas');
+      nextCanvas.width = frameWidth;
+      nextCanvas.height = nextHeight;
+      const nextContext = nextCanvas.getContext('2d');
+      nextContext.drawImage(stitchedCanvas, 0, 0);
+      const appendHeight = nextHeight - stitchedCanvas.height;
+      nextContext.drawImage(frameCanvas, 0, frameHeight - appendHeight, frameWidth, appendHeight, 0, stitchedCanvas.height, frameWidth, appendHeight);
+      stitchedCanvas = nextCanvas;
+      previousSignature = signature;
+      appended += 1;
+      lastMovementAt = Date.now();
+      status.textContent = `${appended + 1} חלקים חוברו · ${stitchedCanvas.width}×${stitchedCanvas.height}px`;
+    } else if (transition.kind === 'unmatched') {
+      status.textContent = 'לא נמצאה חפיפה — גלול לאט יותר ובצע צעדים קטנים';
+    } else if (appended && Date.now() - lastMovementAt > 3_500) {
+      finish().catch((error) => showToast(`צילום הגלילה נכשל: ${error.message}`, 8000));
+    }
+  };
+
+  const finish = async () => {
+    if (finishing) return;
+    if (!stitchedCanvas) sample();
+    finishing = true;
+    clearInterval(interval);
+    clearTimeout(maximumTimer);
+    $('#finish-scroll-capture').onclick = null;
+    bar.classList.add('hidden');
+    document.documentElement.dataset.scrollCapture = 'saving';
+    if (!stitchedCanvas) throw new Error('לא התקבל פריים לצילום');
+    const blob = await new Promise((resolve) => stitchedCanvas.toBlob(resolve, 'image/png'));
+    const result = await api.saveScreenshot(await blob.arrayBuffer());
+    document.documentElement.dataset.scrollCapture = 'saved';
+    document.documentElement.dataset.scrollFrames = String(frames);
+    document.documentElement.dataset.scrollParts = String(appended + 1);
+    document.documentElement.dataset.scrollHeight = String(stitchedCanvas.height);
+    stopInputStreams();
+    state.scrollCapture = null;
+    state.busy = false;
+    await handleSavedScreenshot(result);
+  };
+
+  state.scrollCapture = { finish };
+  $('#finish-scroll-capture').onclick = () => finish().catch((error) => {
+    stopInputStreams();
+    state.scrollCapture = null;
+    state.busy = false;
+    bar.classList.add('hidden');
+    showToast(`צילום הגלילה נכשל: ${error.message}`, 8000);
+    restoreLivePreview();
+  });
+  sample();
+  interval = setInterval(sample, 300);
+  maximumTimer = setTimeout(() => finish().catch(() => {}), 90_000);
+  status.textContent = 'עבור למקור וגלול לאט כלפי מטה; העצירה אוטומטית בסוף';
+  showToast('צילום גלילה התחיל — גלול לאט; בסיום לחץ על סיום ושמירה', 7000);
 }
 
 async function beginCapture(kind, forcedScope = null) {
@@ -995,9 +1277,13 @@ async function beginCapture(kind, forcedScope = null) {
   state.busy = true;
   setStatus('מכין מקורות…', 'busy');
   try {
+    const scope = forcedScope || state.captureScope;
+    if (kind === 'screenshot' && scope === 'scroll') {
+      await beginScrollingCapture();
+      return;
+    }
     stopLivePreview({ preserveDisplay: true });
     await acquireInputs(kind === 'record');
-    const scope = forcedScope || state.captureScope;
     const region = scope === 'full' ? { x: 0, y: 0, width: 1, height: 1 } : await chooseRegion();
     if (!region) {
       stopInputStreams();
@@ -1016,7 +1302,7 @@ async function beginCapture(kind, forcedScope = null) {
     showToast(`לא ניתן להתחיל צילום: ${error.message}`, 7000);
     restoreLivePreview();
   } finally {
-    state.busy = false;
+    if (!state.scrollCapture) state.busy = false;
   }
 }
 
@@ -1024,13 +1310,8 @@ async function saveScreenshot() {
   drawFrame();
   const blob = await new Promise((resolve) => recordingCanvas.toBlob(resolve, 'image/png'));
   const result = await api.saveScreenshot(await blob.arrayBuffer());
-  document.documentElement.dataset.lastSavedPath = result.path;
   stopInputStreams();
-  setStatus('התמונה נשמרה');
-  showToast(`התמונה נשמרה: ${result.path}`);
-  await loadLibrary().catch(() => {});
-  restoreLivePreview();
-  if (state.afterScreenshotAction !== 'save' && window.aurumEditor) await window.aurumEditor.open(result.path, state.afterScreenshotAction);
+  await handleSavedScreenshot(result);
 }
 
 async function createMixedAudioTrack() {
@@ -1053,6 +1334,67 @@ function recorderMimeType() {
   return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || '';
 }
 
+function audioRecorderMimeType() {
+  return ['audio/webm;codecs=opus', 'audio/webm'].find((type) => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function startIsolatedAudioRecorders() {
+  state.audioRecorders = [];
+  state.audioAppendQueue = Promise.resolve();
+  const mimeType = audioRecorderMimeType();
+  for (const [kind, stream] of [['system', state.displayStream], ['microphone', state.microphoneStream]]) {
+    const track = stream?.getAudioTracks()[0];
+    if (!track) continue;
+    const recorder = new MediaRecorder(new MediaStream([track]), { mimeType, audioBitsPerSecond: 192_000 });
+    recorder.addEventListener('dataavailable', (event) => {
+      if (!event.data.size || !state.recordingSession) return;
+      state.audioAppendQueue = state.audioAppendQueue
+        .then(() => event.data.arrayBuffer())
+        .then((bytes) => api.appendRecordingAudio(state.recordingSession.id, kind, bytes));
+    });
+    recorder.start(1000);
+    state.audioRecorders.push(recorder);
+  }
+}
+
+async function stopIsolatedAudioRecorders() {
+  await Promise.all(state.audioRecorders.map((recorder) => new Promise((resolve) => {
+    if (recorder.state === 'inactive') return resolve();
+    recorder.addEventListener('stop', resolve, { once: true });
+    recorder.stop();
+  })));
+  await state.audioAppendQueue;
+  state.audioRecorders = [];
+}
+
+function startRecordingHealthMonitor() {
+  clearInterval(state.healthTimer);
+  state.healthTimer = setInterval(async () => {
+    if (!state.recordingSession || !state.recorder || state.recorder.state === 'inactive') return;
+    try {
+      const cameraStalled = Boolean(state.cameraStream && state.cameraFrameMonitoring && Date.now() - state.cameraLastFrameAt > 5_000);
+      if (cameraStalled && !state.cameraStallNotified) {
+        state.cameraStallNotified = true;
+        cameraVideo.srcObject = null;
+        cameraVideo.srcObject = state.cameraStream;
+        cameraVideo.play().catch(() => {});
+        showToast('זוהתה תקיעת מצלמה — התצוגה הופעלה מחדש וההקלטה ממשיכה', 7000);
+      }
+      if (!cameraStalled) state.cameraStallNotified = false;
+      const health = await api.recordingHeartbeat(state.recordingSession.id, { cameraStalled, recorderState: state.recorder.state, elapsedMs: Date.now() - state.startedAt });
+      $('#recording-segments').textContent = `מקטע ${health.segments}`;
+      document.documentElement.dataset.recordingSegments = String(health.segments);
+      document.documentElement.dataset.cameraHealth = cameraStalled ? 'recovering' : 'healthy';
+      if (health.storage.level === 'critical' && state.recorder.state !== 'inactive') {
+        showToast('המקום הפנוי הגיע לסף קריטי — ההקלטה נעצרת ונשמרת בבטחה', 9000);
+        state.recorder.stop();
+      }
+    } catch (error) {
+      state.recordingWriteError ||= error;
+    }
+  }, 5_000);
+}
+
 async function startRecording() {
   const preset = qualityPresets[state.quality];
   const canvasStream = recordingCanvas.captureStream(preset.fps);
@@ -1061,11 +1403,12 @@ async function startRecording() {
   state.outputStream = canvasStream;
   const mimeType = recorderMimeType();
   state.recorder = new MediaRecorder(canvasStream, { mimeType, videoBitsPerSecond: preset.bitrate, audioBitsPerSecond: 192_000 });
-  state.recordingSession = await api.beginRecordingFile({ mimeType, fps: preset.fps, targetHeight: state.targetHeight });
+  state.recordingSession = await api.beginRecordingFile({ mimeType, fps: preset.fps, targetHeight: state.targetHeight, segmentChunkTarget: api.qaEnabled ? 3 : 30 });
   state.recordingAppendQueue = Promise.resolve();
   state.recordingWriteError = null;
   state.recordingBytes = 0;
   state.recordingChunks = 0;
+  state.cursorSamples = [];
   state.recorder.addEventListener('dataavailable', (event) => {
     if (!event.data.size) return;
     state.recordingAppendQueue = state.recordingAppendQueue.then(async () => {
@@ -1074,18 +1417,26 @@ async function startRecording() {
       state.recordingChunks = result.chunks;
       document.documentElement.dataset.recordingBytes = String(result.bytes);
       document.documentElement.dataset.recordingChunks = String(result.chunks);
+      document.documentElement.dataset.recordingSegments = String(result.segments || 1);
+      $('#recording-segments').textContent = `מקטע ${result.segments || 1}`;
       if ($('#recording-size')) $('#recording-size').textContent = `${(result.bytes / 1024 / 1024).toFixed(1)} MB`;
     }).catch((error) => { state.recordingWriteError = error; });
   });
   state.recorder.addEventListener('stop', finalizeRecording, { once: true });
   state.displayStream.getVideoTracks()[0].addEventListener('ended', () => { if (state.recorder?.state !== 'inactive') state.recorder.stop(); }, { once: true });
   state.recorder.start(1000);
+  startIsolatedAudioRecorders();
   drawFrame();
   state.drawTimer = setInterval(drawFrame, Math.max(8, Math.round(1000 / preset.fps)));
   state.startedAt = Date.now();
+  startRecordingHealthMonitor();
+  state.chapterMarkers = [];
+  api.setQuickbarRecordingState(true).catch(() => {});
   $('#recording-time').textContent = '00:00';
+  $('#recording-segments').textContent = 'מקטע 1';
   $('#recording-bar').classList.remove('hidden');
   $('#record-button span').textContent = 'עצור הקלטה';
+  $('#record-button').dataset.recording = 'true';
   state.timer = setInterval(() => { $('#recording-time').textContent = formatTime(Date.now() - state.startedAt); }, 500);
   setStatus('מקליט', 'error');
   showToast('ההקלטה התחילה — קול המחשב והמיקרופון הפעילים מסונכרנים יחד');
@@ -1094,24 +1445,31 @@ async function startRecording() {
 async function finalizeRecording() {
   clearInterval(state.timer);
   clearInterval(state.drawTimer);
+  clearInterval(state.healthTimer);
   state.drawTimer = null;
+  state.healthTimer = null;
   $('#recording-bar').classList.add('hidden');
   $('#record-button span').textContent = 'התחל הקלטה';
+  $('#record-button').dataset.recording = 'false';
   setStatus('שומר וממיר…', 'busy');
   const recorder = state.recorder;
   state.recorder = null;
+  api.setQuickbarRecordingState(false).catch(() => {});
   try {
+    await stopIsolatedAudioRecorders();
     await state.recordingAppendQueue;
     if (state.recordingWriteError) throw state.recordingWriteError;
-    const result = await api.finishRecordingFile(state.recordingSession.id, $('#convert-mp4').checked);
+    const result = await api.finishRecordingFile(state.recordingSession.id, $('#convert-mp4').checked, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples });
     state.recordingSession = null;
     document.documentElement.dataset.lastSavedPath = result.path;
     stopInputStreams();
-    if (result.converted) showToast(`ההקלטה נשמרה כ-MP4: ${result.path}`, 7000);
+    const isolatedAudio = result.audioTracks?.length ? ` · ${result.audioTracks.length} ערוצי שמע נפרדים` : '';
+    if (result.converted) showToast(`ההקלטה נשמרה כ-MP4${isolatedAudio}: ${result.path}`, 7000);
     else if (result.conversionError) showToast(`ה-WebM נשמר. המרת MP4 נכשלה: ${result.conversionError}`, 9000);
     else showToast(`ההקלטה נשמרה: ${result.path}`, 7000);
     setStatus('ההקלטה נשמרה');
     loadLibrary().catch(() => {});
+    runWorkflows('recording', result.path).catch((error) => showToast(`אוטומציה נכשלה: ${error.message}`, 8000));
     restoreLivePreview();
   } catch (error) {
     stopInputStreams();
@@ -1149,10 +1507,12 @@ function togglePause() {
   const button = $('#pause-recording');
   if (state.recorder.state === 'recording') {
     state.recorder.pause();
+    state.audioRecorders.forEach((recorder) => { if (recorder.state === 'recording') recorder.pause(); });
     button.textContent = 'המשך';
     setStatus('מושהה', 'busy');
   } else if (state.recorder.state === 'paused') {
     state.recorder.resume();
+    state.audioRecorders.forEach((recorder) => { if (recorder.state === 'paused') recorder.resume(); });
     button.textContent = 'השהיה';
     setStatus('מקליט', 'error');
   }
@@ -1205,7 +1565,7 @@ async function loadLibrary() {
 
 function sortedLibraryItems() {
   const query = $('#library-search')?.value.trim().toLocaleLowerCase('he') || '';
-  const items = state.libraryItems.filter((item) => !query || item.name.toLocaleLowerCase('he').includes(query));
+  const items = state.libraryItems.filter((item) => !query || [item.name, item.metadata?.ocrText, item.metadata?.transcriptText, item.metadata?.client, ...(item.metadata?.tags || [])].filter(Boolean).join(' ').toLocaleLowerCase('he').includes(query));
   const mode = $('#library-sort')?.value || 'date-desc';
   return [...items].sort((a, b) => {
     if (mode === 'date-asc') return a.modified - b.modified;
@@ -1264,16 +1624,21 @@ function renderLibrary() {
       const row = document.createElement('div');
       row.className = 'library-item';
       const baseName = item.name.replace(/\.[^.]+$/, '');
-      const editButton = item.extension === 'png' ? '<button class="gold-button edit-image">עריכה</button>' : '<button class="gold-button edit-video">חיתוך וידאו</button>';
+      const isImage = item.extension === 'png';
+      const editButton = isImage ? '<button class="gold-button edit-image">עריכה</button><button class="ghost ocr">OCR</button><button class="ghost pin">הצמדה</button>' : '<button class="gold-button edit-video">עריכת וידאו</button><button class="ghost analyze">איכות</button><button class="ghost transcribe">תמלול</button>';
       const metadata = item.metadata || {};
       const metaBadges = [metadata.favorite ? '★ מועדף' : '', metadata.client ? `לקוח: ${escapeHtml(metadata.client)}` : '', ...(metadata.tags || []).map((tag) => `#${escapeHtml(tag)}`)].filter(Boolean).map((label) => `<span>${label}</span>`).join('');
       row.classList.toggle('favorite', Boolean(metadata.favorite));
       row.innerHTML = `<span class="file-icon">${thumbnailMarkup(item)}</span><div class="file-details"><strong>${escapeHtml(item.name)}${item.edited ? ' <em class="edited-badge">נערך</em>' : ''}</strong><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)} · ${item.extension.toUpperCase()}</small><div class="library-meta">${metaBadges}</div><div class="rename-editor hidden"><input maxlength="120" value="${escapeHtml(baseName)}" aria-label="שם קובץ חדש"><button class="gold-button save-name">שמירה</button><button class="ghost cancel-name">ביטול</button></div></div><div class="library-actions">${editButton}<button class="ghost metadata">פרטים</button><button class="ghost share">שיתוף פרטי</button><button class="ghost rename">שם</button><button class="ghost open">פתיחה</button><button class="ghost show">בתיקייה</button></div><div class="metadata-editor hidden"><input class="meta-client" maxlength="80" placeholder="לקוח / פרויקט" value="${escapeHtml(metadata.client || '')}"><input class="meta-tags" maxlength="160" placeholder="תגיות מופרדות בפסיק" value="${escapeHtml((metadata.tags || []).join(', '))}"><label><input class="meta-favorite" type="checkbox" ${metadata.favorite ? 'checked' : ''}> מועדף</label><button class="gold-button save-metadata">שמירה</button></div>`;
       row.querySelector('.edit-image')?.addEventListener('click', () => window.aurumEditor?.open(item.path, 'professional'));
       row.querySelector('.edit-video')?.addEventListener('click', () => openVideoEditor(item));
+      row.querySelector('.ocr')?.addEventListener('click', async () => { try { showToast('מזהה טקסט מקומית…'); const result = await api.runOcr(item.path); showToast(`OCR הושלם: ${result.text.length} תווים`); await loadLibrary(); } catch (error) { showToast(`OCR נכשל: ${error.message}`); } });
+      row.querySelector('.pin')?.addEventListener('click', async () => { try { await api.pinImage(item.path); showToast('הצילום הוצמד מעל החלונות'); } catch (error) { showToast(`הצמדה נכשלה: ${error.message}`); } });
+      row.querySelector('.analyze')?.addEventListener('click', async () => { try { const result = await api.analyzeMedia(item.path); showToast(`ציון איכות ${result.score}/100 · ${result.fps} FPS · סנכרון ${result.avSyncOffsetMs ?? '—'}ms`, 9000); await loadLibrary(); } catch (error) { showToast(`ניתוח נכשל: ${error.message}`); } });
+      row.querySelector('.transcribe')?.addEventListener('click', async () => { try { showToast('מתמלל במנוע המקומי הקיים…', 9000); const result = await api.transcribeMedia(item.path); showToast(`התמלול הושלם: ${result.wordCount} מילים וקובץ SRT נוצר`, 9000); await loadLibrary(); } catch (error) { showToast(`התמלול נכשל: ${error.message}`, 9000); } });
       row.querySelector('.open').addEventListener('click', () => api.openFile(item.path));
       row.querySelector('.show').addEventListener('click', () => api.showFile(item.path));
-      row.querySelector('.share').addEventListener('click', async () => { await api.shareLocal(item.path); showToast('נתיב הקובץ הועתק לשיתוף פרטי'); });
+      row.querySelector('.share').addEventListener('click', async () => { const share = await api.shareLocal(item.path); showToast(`שיתוף פרטי מקומי הועתק · תפוגה ${new Date(share.expiresAt).toLocaleTimeString('he-IL')}`); });
       row.querySelector('.metadata').addEventListener('click', () => row.querySelector('.metadata-editor').classList.toggle('hidden'));
       row.querySelector('.save-metadata').addEventListener('click', async () => {
         await api.saveLibraryMetadata(item.path, { client: row.querySelector('.meta-client').value, tags: row.querySelector('.meta-tags').value, favorite: row.querySelector('.meta-favorite').checked });
@@ -1297,18 +1662,70 @@ function renderLibrary() {
   }
 }
 
-function openVideoEditor(item) {
+function timelineDuration() { return Math.max(0.1, editingVideoProject?.duration || 0.1); }
+function timelinePosition(time) { return `${Math.max(0, Math.min(100, Number(time || 0) / timelineDuration() * 100))}%`; }
+
+function selectTimelineItem(type, id) {
+  selectedTimelineItem = { type, id };
+  const item = editingVideoProject?.[`${type}s`]?.find((candidate) => candidate.id === id);
+  if (item) $('#video-editor-preview').currentTime = item.start;
+  if (type === 'clip' && item) { $('#video-transition').value = item.transition; $('#video-transition-duration').value = item.transitionDuration; }
+  if (type === 'caption' && item) { $('#video-caption-text').value = item.text; $('#video-caption-start').value = item.start.toFixed(2); $('#video-caption-end').value = item.end.toFixed(2); }
+  renderVideoTimeline();
+}
+
+function renderVideoTimeline() {
+  if (!editingVideoProject) return;
+  const ruler = $('#timeline-ruler');
+  const marks = Math.min(12, Math.max(4, Math.ceil(timelineDuration() / 5)));
+  ruler.innerHTML = Array.from({ length: marks + 1 }, (_item, index) => `<span style="left:${index / marks * 100}%">${(timelineDuration() * index / marks).toFixed(1)}s</span>`).join('');
+  const renderTrack = (type, label) => {
+    const items = editingVideoProject[`${type}s`] || [];
+    $(`#video-${type}-track`).innerHTML = items.map((item, index) => `<button class="timeline-block ${type} ${selectedTimelineItem?.type === type && selectedTimelineItem.id === item.id ? 'selected' : ''}" data-timeline-type="${type}" data-timeline-id="${item.id}" style="left:${timelinePosition(item.start)};width:${Math.max(0.7, (item.end - item.start) / timelineDuration() * 100)}%">${escapeHtml(type === 'caption' ? item.text : `${label} ${index + 1}`)}</button>`).join('');
+  };
+  renderTrack('clip', 'קליפ'); renderTrack('caption', 'כתובית'); renderTrack('zoom', 'זום');
+  $('#timeline-status').textContent = `${editingVideoProject.clips.length} קליפים · ${editingVideoProject.captions.length} כתוביות · ${editingVideoProject.zooms.length} מקטעי זום · ${editingVideoProject.preset}`;
+  $('.timeline-editor').dataset.timelineReady = 'true';
+}
+
+function updateTimelinePreview() {
+  if (!editingVideoProject) return;
+  const video = $('#video-editor-preview');
+  $('#timeline-playhead').style.left = `calc(72px + (100% - 80px) * ${Math.max(0, Math.min(1, video.currentTime / timelineDuration()))})`;
+  const caption = editingVideoProject.captions.find((item) => video.currentTime >= item.start && video.currentTime <= item.end);
+  const overlay = $('#video-caption-overlay');
+  overlay.classList.toggle('hidden', !caption);
+  if (caption) { overlay.textContent = caption.text; overlay.style.left = `${caption.x * 100}%`; overlay.style.top = `${caption.y * 100}%`; overlay.dataset.captionId = caption.id; }
+  if (!video.paused) {
+    const activeIndex = editingVideoProject.clips.findIndex((clip) => video.currentTime >= clip.start && video.currentTime < clip.end);
+    if (activeIndex >= 0 && video.currentTime >= editingVideoProject.clips[activeIndex].end - 0.04) {
+      const next = editingVideoProject.clips[activeIndex + 1]; if (next) video.currentTime = next.start; else video.pause();
+    } else if (activeIndex < 0) {
+      const next = editingVideoProject.clips.find((clip) => clip.start > video.currentTime); if (next) video.currentTime = next.start;
+    }
+  }
+}
+
+async function openVideoEditor(item) {
   editingVideoItem = item;
   $('#video-editor-name').textContent = item.name;
-  $('#video-trim-start').value = '0';
-  $('#video-trim-end').value = '';
   $('#video-mute').checked = false;
-  $('#video-speed').value = '1';
   $('#video-volume').value = '100';
   $('#video-volume-output').textContent = '100%';
-  $('#video-fade-in').value = '0';
   $('#video-editor-preview').src = `file:///${item.path.replaceAll('\\', '/')}`;
-  $('#video-editor-modal').classList.remove('hidden');
+  $('.timeline-editor').dataset.timelineReady = 'false';
+  selectedTimelineItem = null;
+  const loaded = await api.loadVideoTimeline(item.path);
+  editingVideoProject = window.AurumTimeline.normalizeTimelineProject(loaded.project, loaded.quality.durationSeconds);
+  editingVideoCursorSamples = loaded.cursorSamples || [];
+  $('#video-export-preset').value = editingVideoProject.preset;
+  $('#video-volume').value = String(editingVideoProject.volume);
+  $('#video-volume-output').textContent = `${editingVideoProject.volume}%`;
+  $('#video-mute').checked = editingVideoProject.mute;
+  const waveform = $('#video-waveform');
+  waveform.innerHTML = '<span>טוען צורת גל מקומית…</span>';
+  api.getWaveform(item.path).then((dataUrl) => { if (editingVideoItem === item) waveform.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="צורת גל של ערוץ השמע">` : '<span>אין צורת גל</span>'; }).catch((error) => { waveform.innerHTML = `<span>${escapeHtml(error.message)}</span>`; });
+  $('#video-editor-modal').classList.remove('hidden'); renderVideoTimeline();
 }
 
 function closeVideoEditor() {
@@ -1316,6 +1733,8 @@ function closeVideoEditor() {
   $('#video-editor-preview').removeAttribute('src');
   $('#video-editor-modal').classList.add('hidden');
   editingVideoItem = null;
+  editingVideoProject = null;
+  selectedTimelineItem = null;
 }
 
 function recentLibraryItems(items) {
@@ -1384,6 +1803,7 @@ function showPage(page, navigationAction = null) {
   const titles = {
     capture: ['מה תרצה ליצור?', 'בחר מקור, איכות וקול — והתחל בלחיצה אחת.'],
     library: ['הספרייה שלי', 'כל הצילומים וההקלטות שנשמרו במחשב.'],
+    tools: ['כלים חכמים', 'OCR, כתוביות, אבחון איכות ושיתוף פרטי מקומי.'],
     settings: ['הגדרות', 'תיקיית שמירה, פורמטים וקיצורי דרך.']
   };
   $$('.nav-item').forEach((button) => {
@@ -1393,6 +1813,8 @@ function showPage(page, navigationAction = null) {
   $('.content-shell').dataset.activePage = page;
   $('.content-shell').dataset.activeNavigation = navigationAction || page;
   $('#theme-menu')?.classList.add('hidden');
+  $('#capture-layout-menu')?.classList.add('hidden');
+  closeCaptureSettingsDialog();
   if (page !== 'settings' && themeEditorOpen) cancelThemeEditor(false);
   $$('.page').forEach((section) => section.classList.remove('active'));
   $(`#${page}-page`).classList.add('active');
@@ -1402,10 +1824,56 @@ function showPage(page, navigationAction = null) {
   if (page === 'capture') restoreLivePreview();
   else if (!state.recorder) stopLivePreview();
   if (page === 'library') loadLibrary();
+  if (page === 'tools') refreshEngineStatus();
+}
+
+async function refreshEngineStatus() {
+  const container = $('#engine-grid');
+  if (!container) return;
+  container.innerHTML = '<article><small>סורק מנועים קיימים…</small></article>';
+  try {
+    const engines = await api.getLocalEngines();
+    const entries = [
+      ['FFmpeg', engines.ffmpeg, engines.ffmpeg?.version], ['FFprobe', engines.ffprobe, engines.ffprobe?.version],
+      ['OCR', engines.ocr, (engines.ocr?.languages || []).join(', ') || 'ללא שפות'], ['Whisper מקומי', engines.transcription, engines.transcription?.model || engines.transcription?.url]
+    ];
+    container.innerHTML = entries.map(([name, engine, detail]) => `<article><small>${escapeHtml(name)}</small><b class="${engine?.available ? 'ok' : 'missing'}">${engine?.available ? '● זמין וקיים' : '○ לא זמין'}</b><span>${escapeHtml(detail || '—')}</span></article>`).join('');
+    document.documentElement.dataset.enginePolicy = engines.duplicatePolicy || 'unknown';
+  } catch (error) { container.innerHTML = `<article><b class="missing">בדיקת המנועים נכשלה</b><span>${escapeHtml(error.message)}</span></article>`; }
+}
+
+async function runSmartAction(action, button) {
+  if (!state.libraryItems.length) await loadLibrary();
+  const image = state.libraryItems.find((item) => item.extension === 'png');
+  const video = state.libraryItems.find((item) => item.extension !== 'png');
+  const target = ['ocr', 'pin'].includes(action) ? image : video || image;
+  if (!target) throw new Error('אין עדיין קובץ מתאים בספרייה');
+  button.disabled = true;
+  const original = button.textContent;
+  button.textContent = 'מעבד מקומית…';
+  try {
+    let result;
+    if (action === 'ocr') result = await api.runOcr(target.path);
+    if (action === 'transcribe') result = await api.transcribeMedia(target.path);
+    if (action === 'analyze') result = await api.analyzeMedia(target.path);
+    if (action === 'pin') result = await api.pinImage(target.path);
+    if (action === 'share') result = await api.shareLocal(target.path);
+    $('#tool-result').textContent = `${original}\nקובץ: ${target.name}\n\n${JSON.stringify(result, null, 2)}`;
+    await loadLibrary();
+    showToast('הפעולה הסתיימה בהצלחה');
+  } finally { button.disabled = false; button.textContent = original; }
 }
 
 async function initialize() {
+  const appVersion = await api.getAppVersion().catch(() => 'לא ידועה');
+  $('#app-version').textContent = `v${appVersion}`;
+  document.documentElement.dataset.appVersion = appVersion;
   restoreUserPreferences();
+  try { workflowDefinitions = JSON.parse(localStorage.getItem('aurum-workflows') || '[]'); } catch { workflowDefinitions = []; }
+  if (!Array.isArray(workflowDefinitions)) workflowDefinitions = [];
+  workflowExecutionLog = (localStorage.getItem('aurum-workflow-log') || 'עדיין לא הופעלה אוטומציה.').split('\n');
+  $('#workflow-log').textContent = workflowExecutionLog.join('\n');
+  renderWorkflows();
   await loadShortcutSettings();
   $$('.nav-item[data-page]').forEach((button) => button.addEventListener('click', () => {
     if (button.dataset.action === 'edit') {
@@ -1413,7 +1881,6 @@ async function initialize() {
       return;
     }
     showPage(button.dataset.page, button.dataset.action || null);
-    if (button.dataset.action === 'screenshot') $('[data-settings-tab="image"]').click();
   }));
   $$('[data-page-link]').forEach((button) => button.addEventListener('click', () => showPage(button.dataset.pageLink)));
   $$('.page-tab').forEach((button) => button.addEventListener('click', () => {
@@ -1423,7 +1890,25 @@ async function initialize() {
     $$('.preference-section').forEach((section) => section.classList.toggle('active', section.dataset.preferenceSection === button.dataset.preferenceTab));
     if (button.dataset.preferenceTab === 'development') loadQaDashboard();
     if (button.dataset.preferenceTab === 'appearance') openThemeEditor();
+    if (button.dataset.preferenceTab === 'workflows') renderWorkflows();
   }));
+  $('#capture-layout-button').addEventListener('click', (event) => {
+    event.stopPropagation();
+    const menu = $('#capture-layout-menu');
+    const willOpen = menu.classList.contains('hidden');
+    menu.classList.toggle('hidden', !willOpen);
+    $('#capture-layout-button').setAttribute('aria-expanded', String(willOpen));
+  });
+  $$('[data-capture-layout-choice]').forEach((button) => button.addEventListener('click', () => applyCaptureLayout(button.dataset.captureLayoutChoice)));
+  $('#capture-layout-select').addEventListener('change', (event) => applyCaptureLayout(event.target.value));
+  $('#open-capture-settings').addEventListener('click', openCaptureSettingsDialog);
+  $('#close-capture-settings').addEventListener('click', closeCaptureSettingsDialog);
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.capture-layout-picker')) {
+      $('#capture-layout-menu')?.classList.add('hidden');
+      $('#capture-layout-button')?.setAttribute('aria-expanded', 'false');
+    }
+  });
   $$('[data-shortcut-action]').forEach((button) => button.addEventListener('click', () => {
     listeningShortcutAction = button.dataset.shortcutAction;
     const row = button.closest('[data-shortcut-row]');
@@ -1434,6 +1919,12 @@ async function initialize() {
     button.focus();
   }));
   $('#shortcut-settings-list').addEventListener('change', (event) => {
+    const intervalAction = event.target.dataset.shortcutInterval;
+    if (intervalAction) {
+      const current = state.shortcuts[intervalAction];
+      if (current?.kind === 'double') applyShortcutSettings({ ...state.shortcuts, [intervalAction]: { ...current, intervalMs: Number(event.target.value) } });
+      return;
+    }
     const action = event.target.dataset.shortcutKind || event.target.dataset.shortcutScope;
     if (!action) return;
     const row = event.target.closest('[data-shortcut-row]');
@@ -1468,8 +1959,12 @@ async function initialize() {
       return;
     }
     const row = $(`[data-shortcut-row="${listeningShortcutAction}"]`);
-    const binding = shortcutBindingFromEvent(event, { kind: row?.dataset.pendingKind || 'chord', scope: row?.dataset.pendingScope || 'global', intervalMs: 300 });
-    if (!binding) return;
+    const intervalMs = Number(row?.querySelector('[data-shortcut-interval]')?.value) || ((row?.dataset.pendingKind || 'chord') === 'double' ? 500 : 300);
+    const binding = shortcutBindingFromEvent(event, { kind: row?.dataset.pendingKind || 'chord', scope: row?.dataset.pendingScope || 'global', intervalMs });
+    if (!binding) {
+      if (/^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(event.code)) showToast('מקש Windows, Ctrl, Alt או Shift לבדו אינו מתאים ללחיצה כפולה. בחר F8–F11, Numpad או מקש רגיל במצב אפליקציה.');
+      return;
+    }
     if (binding.kind !== 'chord' && /^Key[A-Z]$/.test(binding.code) && binding.scope === 'global') {
       binding.scope = 'focused';
       showToast('מקש אות יחיד או כפול הוגבל לאפליקציה כדי שלא יופעל בזמן הקלדה');
@@ -1503,6 +1998,12 @@ async function initialize() {
   $('#stop-recording').addEventListener('click', stopRecording);
   $('#pause-recording').addEventListener('click', togglePause);
   $('#recording-pause').addEventListener('click', togglePause);
+  $('#recording-chapter').addEventListener('click', () => {
+    if (!state.recorder) return;
+    const at = Math.max(0, (Date.now() - state.startedAt) / 1000);
+    state.chapterMarkers.push({ at, label: `פרק ${state.chapterMarkers.length + 1}` });
+    showToast(`סימון פרק ${state.chapterMarkers.length} נוסף ב־${formatTime(at * 1000)}`);
+  });
   $('#recording-mic').addEventListener('click', () => {
     const muted = state.microphoneStream?.getAudioTracks().some((track) => track.enabled) ?? false;
     state.microphoneStream?.getAudioTracks().forEach((track) => { track.enabled = !muted; });
@@ -1516,24 +2017,94 @@ async function initialize() {
   $('#close-video-editor').addEventListener('click', closeVideoEditor);
   $('#cancel-video-edit').addEventListener('click', closeVideoEditor);
   $('#video-volume').addEventListener('input', (event) => { $('#video-volume-output').textContent = `${event.target.value}%`; });
+  $('#video-editor-preview').addEventListener('timeupdate', updateTimelinePreview);
+  $('#video-timeline').addEventListener('click', (event) => {
+    const block = event.target.closest('[data-timeline-type]');
+    if (block) return selectTimelineItem(block.dataset.timelineType, block.dataset.timelineId);
+    const track = event.target.closest('.timeline-track>div,.timeline-ruler');
+    if (track && editingVideoProject) { const rect = track.getBoundingClientRect(); $('#video-editor-preview').currentTime = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * timelineDuration(); }
+  });
+  $('#video-split').addEventListener('click', () => {
+    if (!editingVideoProject) return;
+    const at = $('#video-editor-preview').currentTime;
+    const clip = editingVideoProject.clips.find((item) => at > item.start && at < item.end);
+    if (!clip) return showToast('מקם את הסמן בתוך קליפ כדי לפצל');
+    const result = window.AurumTimeline.splitClip(editingVideoProject, clip.id, at);
+    editingVideoProject = result; selectedTimelineItem = { type: 'clip', id: result.clips.find((item) => Math.abs(item.start - at) < 0.05)?.id || result.clips[0].id }; renderVideoTimeline();
+  });
+  $('#video-remove-silence').addEventListener('click', async () => {
+    if (!editingVideoItem || !editingVideoProject) return;
+    const button = $('#video-remove-silence'); button.disabled = true; button.textContent = 'מנתח שמע…';
+    try { const silences = await api.detectVideoSilence(editingVideoItem.path, { noiseDb: -38, minimumSeconds: 0.55 }); editingVideoProject.clips = window.AurumTimeline.clipsWithoutSilence(editingVideoProject.duration, silences); selectedTimelineItem = null; renderVideoTimeline(); showToast(`${silences.length} קטעים שקטים זוהו והוסרו מה-Timeline`); }
+    catch (error) { showToast(`זיהוי שתיקות נכשל: ${error.message}`, 8000); }
+    finally { button.disabled = false; button.textContent = '≋ הסרת מילים שקטות'; }
+  });
+  $('#video-add-caption').addEventListener('click', () => {
+    if (!editingVideoProject) return; const start = $('#video-editor-preview').currentTime;
+    const caption = { id: `caption-${Date.now()}`, text: 'כתובית חדשה', start, end: Math.min(editingVideoProject.duration, start + 2), x: .5, y: .84 };
+    editingVideoProject.captions.push(caption); selectTimelineItem('caption', caption.id);
+  });
+  $('#video-auto-zoom').addEventListener('click', () => {
+    if (!editingVideoProject) return;
+    const samples = editingVideoCursorSamples.length ? editingVideoCursorSamples : [{ at: $('#video-editor-preview').currentTime, x: .5, y: .5 }];
+    editingVideoProject.zooms = window.AurumTimeline.cursorZooms(samples, editingVideoProject.duration); renderVideoTimeline();
+    showToast(editingVideoCursorSamples.length ? `${editingVideoProject.zooms.length} מקטעי זום נוצרו מנתיב העכבר שהוקלט` : 'לא נמצא נתיב עכבר בהקלטה הישנה — נוסף זום במיקום הסמן');
+  });
+  $('#video-export-preset').addEventListener('change', (event) => { if (editingVideoProject) editingVideoProject.preset = event.target.value; renderVideoTimeline(); });
+  $('#video-transition').addEventListener('change', (event) => { const item = editingVideoProject?.clips.find((clip) => selectedTimelineItem?.type === 'clip' && clip.id === selectedTimelineItem.id); if (item) { item.transition = event.target.value; renderVideoTimeline(); } });
+  $('#video-transition-duration').addEventListener('change', (event) => { const item = editingVideoProject?.clips.find((clip) => selectedTimelineItem?.type === 'clip' && clip.id === selectedTimelineItem.id); if (item) item.transitionDuration = Number(event.target.value); });
+  const updateCaption = () => { const item = editingVideoProject?.captions.find((caption) => selectedTimelineItem?.type === 'caption' && caption.id === selectedTimelineItem.id); if (!item) return; item.text = $('#video-caption-text').value; item.start = Number($('#video-caption-start').value); item.end = Number($('#video-caption-end').value); renderVideoTimeline(); updateTimelinePreview(); };
+  $('#video-caption-text').addEventListener('input', updateCaption); $('#video-caption-start').addEventListener('change', updateCaption); $('#video-caption-end').addEventListener('change', updateCaption);
+  $('#video-caption-overlay').addEventListener('pointerdown', (event) => {
+    const overlay = event.currentTarget; const id = overlay.dataset.captionId; const stage = $('#video-preview-stage'); overlay.setPointerCapture(event.pointerId);
+    const move = (moveEvent) => { const caption = editingVideoProject?.captions.find((item) => item.id === id); if (!caption) return; const rect = stage.getBoundingClientRect(); caption.x = Math.max(.05, Math.min(.95, (moveEvent.clientX - rect.left) / rect.width)); caption.y = Math.max(.05, Math.min(.95, (moveEvent.clientY - rect.top) / rect.height)); updateTimelinePreview(); };
+    const up = () => { overlay.removeEventListener('pointermove', move); overlay.removeEventListener('pointerup', up); renderVideoTimeline(); };
+    overlay.addEventListener('pointermove', move); overlay.addEventListener('pointerup', up);
+  });
+  $('#video-delete-item').addEventListener('click', () => { if (!editingVideoProject || !selectedTimelineItem) return; const key = `${selectedTimelineItem.type}s`; if (selectedTimelineItem.type === 'clip' && editingVideoProject.clips.length <= 1) return showToast('חייב להישאר לפחות קליפ אחד'); editingVideoProject[key] = editingVideoProject[key].filter((item) => item.id !== selectedTimelineItem.id); selectedTimelineItem = null; renderVideoTimeline(); });
+  $('#save-video-project').addEventListener('click', async () => { if (!editingVideoItem || !editingVideoProject) return; const result = await api.saveVideoTimeline(editingVideoItem.path, editingVideoProject); editingVideoProject = result.project; showToast('פרויקט ה-Timeline נשמר ללא שינוי בקובץ המקור'); });
   $('#save-video-edit').addEventListener('click', async () => {
     if (!editingVideoItem) return;
     const button = $('#save-video-edit');
     button.disabled = true;
     button.textContent = 'מעבד…';
     try {
-      const result = await api.editVideo(editingVideoItem.path, { start: Number($('#video-trim-start').value) || 0, end: Number($('#video-trim-end').value) || null, mute: $('#video-mute').checked, speed: Number($('#video-speed').value), volume: Number($('#video-volume').value), fadeIn: Number($('#video-fade-in').value) });
+      editingVideoProject.volume = Number($('#video-volume').value); editingVideoProject.mute = $('#video-mute').checked; editingVideoProject.preset = $('#video-export-preset').value;
+      const result = await api.exportVideoTimeline(editingVideoItem.path, editingVideoProject);
       closeVideoEditor();
       showToast(`העותק הערוך נשמר: ${result.path}`);
       await loadLibrary();
-    } catch (error) { showToast(`עריכת הווידאו נכשלה: ${error.message}`); }
-    finally { button.disabled = false; button.textContent = 'שמירת עותק ערוך'; }
+    } catch (error) { document.documentElement.dataset.videoExportError = error.message; showToast(`עריכת הווידאו נכשלה: ${error.message}`, 15_000); }
+    finally { button.disabled = false; button.textContent = 'ייצוא עותק ערוך'; }
   });
+  $('#add-workflow').addEventListener('click', () => addWorkflow());
+  $$('[data-workflow-template]').forEach((button) => button.addEventListener('click', () => addWorkflow(button.dataset.workflowTemplate)));
+  $('#workflow-list').addEventListener('change', (event) => { const card = event.target.closest('[data-workflow-index]'); if (!card) return; const workflow = workflowDefinitions[Number(card.dataset.workflowIndex)]; const field = event.target.dataset.workflowField; const action = event.target.dataset.workflowAction; if (field) workflow[field] = event.target.type === 'checkbox' ? event.target.checked : event.target.value; if (['name', 'client'].includes(field)) { localStorage.setItem('aurum-workflows', JSON.stringify(workflowDefinitions)); return; } if (action) { if (event.target.checked && !workflow.actions.includes(action)) workflow.actions.push(action); if (!event.target.checked) workflow.actions = workflow.actions.filter((item) => item !== action); } saveWorkflows(); });
+  $('#workflow-list').addEventListener('input', (event) => { const card = event.target.closest('[data-workflow-index]'); const field = event.target.dataset.workflowField; if (!card || !['name', 'client'].includes(field)) return; workflowDefinitions[Number(card.dataset.workflowIndex)][field] = event.target.value; localStorage.setItem('aurum-workflows', JSON.stringify(workflowDefinitions)); });
+  $('#workflow-list').addEventListener('click', (event) => { const button = event.target.closest('[data-workflow-delete]'); if (!button) return; const card = button.closest('[data-workflow-index]'); workflowDefinitions.splice(Number(card.dataset.workflowIndex), 1); saveWorkflows(); });
+  $('#copy-workflow-log').addEventListener('click', () => api.copyText(workflowExecutionLog.join('\n')));
   $('#open-output').addEventListener('click', () => api.openOutput());
   $('#quick-open-output').addEventListener('click', () => api.openOutput());
   $('#edit-latest-image').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   $('#quick-edit-latest').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   $('#choose-output').addEventListener('click', async () => { $('#output-path').textContent = await api.chooseOutput(); });
+  $('#autostart-app').addEventListener('change', async (event) => { event.target.checked = await api.setAutostart(event.target.checked); });
+  const updateQuickbar = async (patch) => {
+    const preferences = await api.setQuickbarPreferences(patch);
+    $('#quickbar-enabled').checked = preferences.enabled;
+    $('#quickbar-edge').value = preferences.edge;
+    $('#quickbar-activation').value = preferences.activation;
+    $('#quickbar-display').value = preferences.display;
+    $('#quickbar-pinned').checked = preferences.pinned;
+    $$('#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
+  };
+  $('#quickbar-enabled').addEventListener('change', (event) => updateQuickbar({ enabled: event.target.checked }));
+  $('#quickbar-edge').addEventListener('change', (event) => updateQuickbar({ edge: event.target.value }));
+  $('#quickbar-activation').addEventListener('change', (event) => updateQuickbar({ activation: event.target.value }));
+  $('#quickbar-display').addEventListener('change', (event) => updateQuickbar({ display: event.target.value }));
+  $('#quickbar-pinned').addEventListener('change', (event) => updateQuickbar({ pinned: event.target.checked }));
+  $('#refresh-engines').addEventListener('click', refreshEngineStatus);
+  $$('[data-smart-action]').forEach((button) => button.addEventListener('click', () => runSmartAction(button.dataset.smartAction, button).catch((error) => { $('#tool-result').textContent = `שגיאה: ${error.message}`; showToast(`הפעולה נכשלה: ${error.message}`, 9000); })));
   $('#microphone').addEventListener('change', async (event) => {
     try { if (event.target.checked) await ensureDevicePermission('audio'); else await refreshDevices(); }
     catch (error) { event.target.checked = false; showToast(`אין גישה למיקרופון: ${error.message}`); }
@@ -1634,6 +2205,11 @@ async function initialize() {
   $('#save-theme-edit').addEventListener('click', saveCustomTheme);
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && themeEditorOpen && $('[data-preference-section="appearance"]').classList.contains('active')) cancelThemeEditor();
+    if (event.key === 'Escape' && document.documentElement.dataset.captureSettingsOpen === 'true') closeCaptureSettingsDialog();
+    if (event.key === 'Escape') {
+      $('#capture-layout-menu')?.classList.add('hidden');
+      $('#capture-layout-button')?.setAttribute('aria-expanded', 'false');
+    }
   });
   $('#global-search').addEventListener('input', (event) => {
     const query = event.target.value.trim().toLowerCase();
@@ -1700,9 +2276,13 @@ async function initialize() {
     }
     executeShortcutAction(action).catch((error) => showToast(`הפעלת הקיצור נכשלה: ${error.message}`));
   });
+  api.onNavigate((page) => showPage(page));
   document.documentElement.dataset.appReady = 'true';
   setTimeout(() => Promise.all([
-    api.getOutput().then((value) => { $('#output-path').textContent = value; }),
+    api.getOutput().then((value) => { $('#output-path').textContent = value; }), api.getAutostart().then((enabled) => { $('#autostart-app').checked = enabled; }), api.getQuickbarPreferences().then((preferences) => {
+      $('#quickbar-enabled').checked = preferences.enabled; $('#quickbar-edge').value = preferences.edge; $('#quickbar-activation').value = preferences.activation; $('#quickbar-display').value = preferences.display; $('#quickbar-pinned').checked = preferences.pinned;
+      $$('#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
+    }),
     refreshSources(), loadLibrary(), refreshStorageStatus()
   ]).catch((error) => {
     console.warn('Deferred library/status refresh failed', error);

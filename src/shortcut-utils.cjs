@@ -31,7 +31,7 @@ const DEFAULT_SHORTCUTS = Object.freeze({
   openLibrary: null,
   openLatest: null,
   editLatest: null,
-  toggleWindow: Object.freeze({ kind: 'double', code: 'F9', modifiers: [], scope: 'global', intervalMs: 320 })
+  toggleWindow: Object.freeze({ kind: 'double', code: 'F9', modifiers: [], scope: 'global', intervalMs: 500 })
 });
 
 const ACTION_LABELS = Object.freeze(Object.fromEntries(Object.entries(ACTION_DEFINITIONS).map(([key, value]) => [key, value.label])));
@@ -58,7 +58,7 @@ function normalizeBinding(value) {
   if (!KEY_CODE_PATTERN.test(code)) return null;
   const modifiers = kind === 'chord' ? MODIFIER_ORDER.filter((modifier) => Array.isArray(value.modifiers) && value.modifiers.includes(modifier)) : [];
   if (kind === 'chord' && !modifiers.length && !/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(code)) return null;
-  if (kind !== 'double' && /^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(code)) return null;
+  if (/^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(code)) return null;
   let scope = value.scope === 'focused' ? 'focused' : 'global';
   if (scope === 'global' && kind !== 'chord' && /^(?:Key[A-Z]|Digit[0-9])$/.test(code)) scope = 'focused';
   if (scope === 'global' && /^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(code)) return null;

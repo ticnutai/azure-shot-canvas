@@ -11,7 +11,7 @@
     return { path: anchor.download, converted: false };
   };
   window.screenStudio = {
-    browserMode: true, qaEnabled: false,
+    browserMode: true, qaEnabled: false, getAppVersion: async () => 'Web Dev',
     listSources: async () => [{ id: 'browser-picker', name: 'בחירה באמצעות הדפדפן', type: 'screen', thumbnail: demoThumbnail }],
     getCaptureCapabilities: async () => ({ ffmpeg: false, preferred: 'browser', preferredLabel: 'מקודד הדפדפן', hardware: false, encoders: [] }),
     prepareCapture: async () => true,
@@ -19,21 +19,29 @@
     saveRecording: async (bytes) => download(bytes, 'video/webm', 'webm'),
     beginRecordingFile: async () => ({ id: 'browser-recording', path: 'הורדות הדפדפן' }),
     appendRecordingChunk: async (_id, bytes) => ({ bytes: bytes.byteLength || 0, chunks: 1 }),
+    appendRecordingAudio: async (_id, kind, bytes) => ({ kind, bytes: bytes.byteLength || 0 }),
+    recordingHeartbeat: async () => ({ storage: { level: 'unknown' }, segments: 1 }),
     finishRecordingFile: async () => ({ path: 'הורדות הדפדפן', converted: false }),
     getStorageStatus: async () => ({ directory: 'הורדות הדפדפן', freeBytes: null, totalBytes: null, level: 'unknown', recovered: 0 }),
     getCursorPosition: async () => ({ point: { x: 0, y: 0 }, displayId: '', bounds: { x: 0, y: 0, width: 1, height: 1 } }),
     listLibrary: async () => [], openFile: async () => '', showFile: async () => '', renameFile: async () => { throw new Error('שינוי שם זמין במצב Electron'); },
-    saveLibraryMetadata: async () => ({}), shareLocal: async () => ({ private: true }), editVideo: async () => { throw new Error('עריכת וידאו זמינה במצב Electron'); },
+    saveLibraryMetadata: async () => ({}), shareLocal: async () => ({ private: true, localOnly: true }),
+    analyzeMedia: async () => { throw new Error('אבחון מדיה זמין במצב Electron'); }, runOcr: async () => { throw new Error('OCR זמין במצב Electron'); },
+    transcribeMedia: async () => { throw new Error('תמלול זמין במצב Electron'); }, getWaveform: async () => null, pinImage: async () => { throw new Error('הצמדה זמינה במצב Electron'); },
+    getLocalEngines: async () => ({ ffmpeg: { available: false }, ffprobe: { available: false }, ocr: { available: false, languages: [] }, transcription: { available: false }, duplicatePolicy: 'browser-mode' }),
+    editVideo: async () => { throw new Error('עריכת וידאו זמינה במצב Electron'); },
+    loadVideoTimeline: async () => { throw new Error('Timeline זמין במצב Electron'); }, saveVideoTimeline: async () => { throw new Error('Timeline זמין במצב Electron'); }, exportVideoTimeline: async () => { throw new Error('Timeline זמין במצב Electron'); }, detectVideoSilence: async () => [], runWorkflowAction: async () => { throw new Error('אוטומציות זמינות במצב Electron'); },
     loadEditorImage: async () => { throw new Error('עריכה מהספרייה זמינה במצב Electron'); },
     saveEditorImage: async () => { throw new Error('שמירת פרויקט עריכה זמינה במצב Electron'); },
     copyEditorImage: async (dataUrl) => navigator.clipboard.write([new ClipboardItem({ 'image/png': await (await fetch(dataUrl)).blob() })]),
-    openOutput: async () => '', chooseOutput: async () => 'הורדות הדפדפן', getOutput: async () => 'הורדות הדפדפן',
+    openOutput: async () => '', chooseOutput: async () => 'הורדות הדפדפן', getOutput: async () => 'הורדות הדפדפן', getAutostart: async () => false, setAutostart: async () => false,
+    getQuickbarPreferences: async () => ({ enabled: false, edge: 'right', activation: 'click', display: 'cursor', pinned: false }), setQuickbarPreferences: async (patch) => patch, setQuickbarRecordingState: async () => true,
     getQaStatus: async () => ({ available: false, running: false, report: null, comparisons: [], console: 'QA זמין במצב Electron לפיתוח.' }),
     runQa: async () => { throw new Error('QA זמין במצב Electron לפיתוח'); },
     copyText: async (text) => navigator.clipboard.writeText(String(text)), openQaReport: async () => '',
     getShortcuts: async () => ({ shortcuts: {}, registration: {} }),
     setShortcuts: async (shortcuts) => ({ ok: true, shortcuts, registration: Object.fromEntries(Object.keys(shortcuts).map((key) => [key, true])) }),
     testShortcut: async () => true,
-    onQaOutput: () => {}, onShortcut: () => {}
+    onQaOutput: () => {}, onShortcut: () => {}, onNavigate: () => {}
   };
 })();

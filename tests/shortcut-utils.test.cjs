@@ -32,11 +32,17 @@ test('single and double press bindings normalize and produce accelerators', () =
   assert.equal(normalizeBinding({ kind: 'single', code: 'KeyR', scope: 'global' }).scope, 'focused');
 });
 
-test('double modifier is supported only while the app is focused', () => {
-  const shift = bindingFromInput({ type: 'keyDown', code: 'ShiftLeft', shiftKey: true }, { kind: 'double', scope: 'focused' });
-  assert.equal(shift.scope, 'focused');
-  assert.equal(inputMatchesBinding({ type: 'keyDown', code: 'ShiftLeft', shiftKey: true }, shift), true);
-  assert.equal(normalizeBinding({ ...shift, scope: 'global' }), null);
+test('unreliable modifier-only double presses are rejected', () => {
+  for (const code of ['ShiftLeft', 'ControlLeft', 'AltLeft', 'MetaLeft']) {
+    assert.equal(bindingFromInput({ type: 'keyDown', code }, { kind: 'double', scope: 'focused' }), null);
+    assert.equal(normalizeBinding({ kind: 'double', code, scope: 'focused', intervalMs: 500 }), null);
+  }
+});
+
+test('double press interval is configurable and safely clamped', () => {
+  assert.equal(normalizeBinding({ kind: 'double', code: 'F8', scope: 'global', intervalMs: 650 }).intervalMs, 650);
+  assert.equal(normalizeBinding({ kind: 'double', code: 'F8', scope: 'global', intervalMs: 900 }).intervalMs, 700);
+  assert.equal(normalizeBinding({ kind: 'double', code: 'F8', scope: 'global', intervalMs: 100 }).intervalMs, 180);
 });
 
 test('shortcut input rejects modifier-only chord and key-up events', () => {

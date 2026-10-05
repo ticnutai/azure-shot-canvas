@@ -140,7 +140,15 @@ class AurumImageEditorEngine {
 
   setZoom(value) {
     this.zoom = clamp(Number(value) || 1, 0.05, 4);
-    this.canvas.setDimensions({ width: Math.round(this.canvas.width * this.zoom), height: Math.round(this.canvas.height * this.zoom) }, { cssOnly: true });
+    const width = Math.max(1, Math.round(this.canvas.width * this.zoom));
+    const height = Math.max(1, Math.round(this.canvas.height * this.zoom));
+    this.canvas.setDimensions({ width, height }, { cssOnly: true });
+    if (this.canvas.wrapperEl) {
+      this.canvas.wrapperEl.style.width = `${width}px`;
+      this.canvas.wrapperEl.style.height = `${height}px`;
+    }
+    this.canvas.calcOffset();
+    this.canvas.requestRenderAll();
     this.hooks.onZoom?.(this.zoom);
   }
 

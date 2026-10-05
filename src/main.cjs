@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, nativeImage, screen, session, shell } = require('electron');
+const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, shell, Tray } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -8,8 +8,14 @@ const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, projectPathFor } = require('./editor-utils.cjs');
 const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
-const { recordingPaths, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
+const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
+const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, transcribeMedia } = require('./studio-tools.cjs');
+const { DEFAULT_QUICKBAR_PREFERENCES, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { normalizeTimelineProject } = require('./video-timeline-utils.cjs');
+const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
+
+if (process.env.SCREEN_STUDIO_USER_DATA_DIR) app.setPath('userData', path.resolve(process.env.SCREEN_STUDIO_USER_DATA_DIR));
 
 let mainWindow;
 let pendingCapture = null;
@@ -25,12 +31,114 @@ const recordingSessions = new Map();
 let recoveredRecordings = [];
 const thumbnailJobs = new Map();
 let encoderCapabilities = null;
+let tray = null;
+let quickbarWindow = null;
+let quickbarExpanded = false;
+let quickbarPreferences = { ...DEFAULT_QUICKBAR_PREFERENCES };
+let quickbarCursorTimer = null;
+let isQuitting = false;
+const privateShareServer = new PrivateShareServer();
 
 const projectDirectory = path.resolve(__dirname, '..');
 const qaDirectory = process.env.SCREEN_STUDIO_QA_REPORT_DIR || path.join(projectDirectory, 'artifacts', 'qa');
 
 async function readJson(filePath) {
   try { return JSON.parse(await fs.readFile(filePath, 'utf8')); } catch { return null; }
+}
+
+function quickbarPreferencesPath() { return path.join(app.getPath('userData'), 'quickbar-preferences.json'); }
+async function loadQuickbarPreferences() {
+  const saved = await readJson(quickbarPreferencesPath()) || {};
+  quickbarPreferences = normalizeQuickbarPreferences(saved);
+  return quickbarPreferences;
+}
+async function saveQuickbarPreferences(patch = {}) {
+  quickbarPreferences = normalizeQuickbarPreferences(patch, quickbarPreferences);
+  await fs.writeFile(quickbarPreferencesPath(), JSON.stringify(quickbarPreferences, null, 2), 'utf8');
+  return quickbarPreferences;
+}
+
+function quickbarDisplay() {
+  return quickbarPreferences.display === 'primary' ? screen.getPrimaryDisplay() : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+}
+function quickbarBounds(expanded = quickbarExpanded) {
+  return calculateQuickbarBounds(quickbarDisplay().workArea, quickbarPreferences, expanded);
+}
+function positionQuickbar(expanded = quickbarExpanded) {
+  if (!quickbarWindow || quickbarWindow.isDestroyed()) return;
+  quickbarExpanded = Boolean(expanded || quickbarPreferences.pinned);
+  quickbarWindow.setBounds(quickbarBounds(quickbarExpanded), false);
+  quickbarWindow.setAlwaysOnTop(true, 'floating');
+}
+function updateQuickbarCursorTracking() {
+  clearInterval(quickbarCursorTimer);
+  quickbarCursorTimer = null;
+  if (!quickbarPreferences.enabled || quickbarPreferences.display !== 'cursor') return;
+  quickbarCursorTimer = setInterval(() => {
+    if (!quickbarExpanded && quickbarWindow && !quickbarWindow.isDestroyed()) positionQuickbar(false);
+  }, 800);
+  quickbarCursorTimer.unref?.();
+}
+async function createQuickbarWindow() {
+  if (!quickbarPreferences.enabled || quickbarWindow) return quickbarWindow;
+  quickbarExpanded = Boolean(quickbarPreferences.pinned);
+  quickbarWindow = new BrowserWindow({
+    ...quickbarBounds(quickbarExpanded), show: false, frame: false, transparent: true, resizable: false, movable: false,
+    minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, focusable: false, alwaysOnTop: true,
+    type: 'toolbar', backgroundColor: '#00000000', webPreferences: { preload: path.join(__dirname, 'quickbar-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false, backgroundThrottling: false }
+  });
+  quickbarWindow.setMenuBarVisibility(false);
+  quickbarWindow.setAlwaysOnTop(true, 'floating');
+  quickbarWindow.on('blur', () => {
+    if (!quickbarPreferences.pinned && quickbarPreferences.activation === 'click') positionQuickbar(false);
+  });
+  await quickbarWindow.loadFile(path.join(__dirname, 'quickbar.html'));
+  quickbarWindow.setFocusable(false);
+  quickbarWindow.setAlwaysOnTop(true, 'floating');
+  quickbarWindow.on('closed', () => { quickbarWindow = null; });
+  if (process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') quickbarWindow.showInactive();
+  quickbarWindow.setContentProtection(true);
+  quickbarWindow.webContents.send('quickbar:recording-state', Boolean(recordingSessions.size));
+  updateQuickbarCursorTracking();
+  return quickbarWindow;
+}
+async function applyQuickbarPreferences(patch = {}) {
+  await saveQuickbarPreferences(patch);
+  if (!quickbarPreferences.enabled) { clearInterval(quickbarCursorTimer); quickbarCursorTimer = null; quickbarWindow?.destroy(); quickbarWindow = null; quickbarExpanded = false; }
+  else { await createQuickbarWindow(); updateQuickbarCursorTracking(); positionQuickbar(quickbarPreferences.pinned); quickbarWindow?.webContents.send('quickbar:preferences', quickbarPreferences); }
+  return quickbarPreferences;
+}
+
+async function assertLibraryFile(filePath, extensions = /\.(png|webm|mp4)$/i) {
+  const directory = path.resolve(await ensureOutputDirectory());
+  const resolved = path.resolve(String(filePath || ''));
+  if (path.dirname(resolved).toLowerCase() !== directory.toLowerCase() || !extensions.test(resolved)) throw new Error('הקובץ אינו קובץ מדיה תקין בספרייה המקומית');
+  await fs.access(resolved);
+  return resolved;
+}
+
+async function updateMetadata(filePath, patch) {
+  const current = await readJson(`${filePath}.meta.json`) || {};
+  const updated = { ...current, ...patch };
+  await fs.writeFile(`${filePath}.meta.json`, JSON.stringify(updated, null, 2), 'utf8');
+  return updated;
+}
+
+async function ensureOcrLanguageData() {
+  const cacheDirectory = path.join(app.getPath('userData'), 'ocr-tessdata');
+  await fs.mkdir(cacheDirectory, { recursive: true });
+  const installedDirectory = process.env.TESSDATA_PREFIX || 'C:\\Program Files\\Tesseract-OCR\\tessdata';
+  const sources = {
+    heb: path.join(__dirname, 'tessdata', 'heb.traineddata'),
+    eng: path.join(installedDirectory, 'eng.traineddata'),
+    osd: path.join(installedDirectory, 'osd.traineddata')
+  };
+  for (const [language, source] of Object.entries(sources)) {
+    const target = path.join(cacheDirectory, `${language}.traineddata`);
+    try { await fs.access(target); }
+    catch { await fs.copyFile(source, target); }
+  }
+  return cacheDirectory;
 }
 
 async function qaStatus() {
@@ -128,6 +236,13 @@ function createWindow() {
   const devUrl = process.env.SCREEN_STUDIO_DEV_URL;
   if (devUrl && /^http:\/\/127\.0\.0\.1:\d+$/.test(devUrl)) mainWindow.loadURL(devUrl);
   else mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.on('close', (event) => {
+    if (shouldHideMainWindowOnClose(quickbarPreferences, { quitting: isQuitting, qa: process.env.SCREEN_STUDIO_QA === '1', headless: process.env.SCREEN_STUDIO_HEADLESS === '1' })) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
 
 async function ensureOutputDirectory() {
@@ -148,12 +263,78 @@ async function storageStatus() {
   }
 }
 
+async function concatenateFiles(files, outputPath) {
+  const output = await fs.open(outputPath, 'w');
+  try {
+    for (const filePath of files) {
+      const input = await fs.open(filePath, 'r');
+      try {
+        for await (const chunk of input.createReadStream()) await output.write(chunk);
+      } finally { await input.close().catch(() => {}); }
+    }
+  } finally { await output.close(); }
+  return outputPath;
+}
+
+async function writeRecordingJournal(session, patch = {}) {
+  const journal = {
+    id: session.id,
+    startedAt: session.startedAt,
+    updatedAt: new Date().toISOString(),
+    mimeType: session.mimeType,
+    partialPath: session.partialPath,
+    finalPath: session.finalPath,
+    segmentDirectory: session.segmentDirectory,
+    segmentIndex: session.segmentIndex,
+    bytes: session.bytes,
+    chunks: session.chunks,
+    audioBytes: session.audioBytes,
+    ...patch
+  };
+  await fs.writeFile(session.journalPath, JSON.stringify(journal, null, 2), 'utf8');
+}
+
+async function normalizeAudioSidecar(inputPath, outputPath, durationSeconds = 0) {
+  const args = ['-y', '-hide_banner', '-loglevel', 'error', '-i', inputPath, '-af', 'aresample=async=1:first_pts=0'];
+  if (durationSeconds > 0) args.push('-t', String(durationSeconds));
+  args.push('-c:a', 'aac', '-b:a', '192k', outputPath);
+  return runProcess('ffmpeg', args);
+}
+
 async function recoverInterruptedRecordings() {
   const directory = await ensureOutputDirectory();
   const names = await fs.readdir(directory).catch(() => []);
   const recovered = [];
+  const handledPartials = new Set();
+  for (const name of names.filter((item) => /\.recording\.json$/i.test(item))) {
+    const journalPath = path.join(directory, name);
+    const journal = await readJson(journalPath);
+    if (!journal) continue;
+    const partialPath = path.resolve(String(journal.partialPath || ''));
+    if (path.dirname(partialPath).toLowerCase() !== path.resolve(directory).toLowerCase()) continue;
+    handledPartials.add(partialPath.toLowerCase());
+    const segmentDirectory = path.resolve(String(journal.segmentDirectory || ''));
+    const segmentNames = path.dirname(segmentDirectory).toLowerCase() === path.resolve(directory).toLowerCase()
+      ? (await fs.readdir(segmentDirectory).catch(() => [])).filter((item) => /^video-\d+\.part$/i.test(item)).sort()
+      : [];
+    if (segmentNames.length) await concatenateFiles(segmentNames.map((item) => path.join(segmentDirectory, item)), partialPath).catch(() => {});
+    const stat = await fs.stat(partialPath).catch(() => null);
+    if (stat?.size) {
+      const recoveredPath = recoveryPathFor(partialPath);
+      await fs.rename(partialPath, recoveredPath).catch(() => {});
+      try { await fs.access(recoveredPath); recovered.push(recoveredPath); } catch {}
+      for (const [kind, label] of [['system', 'קול-מחשב'], ['microphone', 'מיקרופון']]) {
+        const audioPartial = recordingAudioPath(segmentDirectory, kind);
+        const audioStat = await fs.stat(audioPartial).catch(() => null);
+        if (audioStat?.size) await fs.rename(audioPartial, recoveredPath.replace(/\.webm$/i, `_${label}_שוחזר.webm`)).catch(() => {});
+      }
+    }
+    await fs.rm(segmentDirectory, { recursive: true, force: true }).catch(() => {});
+    await fs.rm(journalPath, { force: true }).catch(() => {});
+  }
   for (const name of names.filter((item) => /\.partial\.webm$/i.test(item))) {
     const partialPath = path.join(directory, name);
+    if (handledPartials.has(path.resolve(partialPath).toLowerCase())) continue;
     const stat = await fs.stat(partialPath).catch(() => null);
     if (!stat?.size) continue;
     const recoveredPath = recoveryPathFor(partialPath);
@@ -167,16 +348,21 @@ async function recoverInterruptedRecordings() {
 }
 
 async function convertRecording(webmPath, convertToMp4) {
-  if (!convertToMp4) return { path: webmPath, webmPath, converted: false };
+  if (!convertToMp4) {
+    const quality = await analyzeMedia(webmPath).catch((error) => ({ valid: false, error: error.message }));
+    return { path: webmPath, webmPath, converted: false, quality };
+  }
   const mp4Path = webmPath.replace(/\.webm$/i, '.mp4');
   const temporaryMp4Path = mp4Path.replace(/\.mp4$/i, '.partial');
   const conversion = await runFfmpeg(webmPath, temporaryMp4Path);
   if (conversion.ok) {
     await fs.rename(temporaryMp4Path, mp4Path);
-    return { path: mp4Path, webmPath, converted: true, encoder: conversion.encoder, hardwareEncoder: conversion.hardware };
+    const quality = await analyzeMedia(mp4Path).catch((error) => ({ valid: false, error: error.message }));
+    return { path: mp4Path, webmPath, converted: true, encoder: conversion.encoder, hardwareEncoder: conversion.hardware, quality };
   }
   await fs.rm(temporaryMp4Path, { force: true }).catch(() => {});
-  return { path: webmPath, webmPath, converted: false, conversionError: conversion.error };
+  const quality = await analyzeMedia(webmPath).catch((error) => ({ valid: false, error: error.message }));
+  return { path: webmPath, webmPath, converted: false, conversionError: conversion.error, quality };
 }
 
 async function getSources() {
@@ -282,6 +468,76 @@ function runVideoEdit(inputPath, outputPath, options = {}) {
   });
 }
 
+function escapeDrawText(value) {
+  return String(value || '').replaceAll('\\', '\\\\').replaceAll(':', '\\:').replaceAll("'", "\\'").replaceAll('%', '\\%').replaceAll(',', '\\,').replaceAll('\n', ' ');
+}
+
+async function detectSilences(inputPath, options = {}) {
+  const noise = Math.max(-70, Math.min(-20, Number(options.noiseDb) || -38));
+  const minimum = Math.max(0.15, Math.min(5, Number(options.minimumSeconds) || 0.55));
+  const result = await runHidden('ffmpeg', ['-hide_banner', '-i', inputPath, '-af', `silencedetect=noise=${noise}dB:d=${minimum}`, '-f', 'null', '-'], { timeoutMs: 120_000 });
+  if (!result.ok) throw new Error(result.error || 'זיהוי השתיקות נכשל');
+  const starts = [...result.stderr.matchAll(/silence_start:\s*([\d.]+)/g)].map((match) => Number(match[1]));
+  const ends = [...result.stderr.matchAll(/silence_end:\s*([\d.]+)/g)].map((match) => Number(match[1]));
+  return starts.map((start, index) => ({ start, end: ends[index] ?? start + minimum })).filter((item) => item.end > item.start);
+}
+
+async function exportTimeline(inputPath, outputPath, candidate) {
+  const quality = await analyzeMedia(inputPath);
+  const project = normalizeTimelineProject(candidate, quality.durationSeconds);
+  const hasAudio = Boolean(quality.audioCodec) && !project.mute;
+  const filters = [];
+  project.clips.forEach((clip, index) => {
+    const duration = clip.end - clip.start;
+    const transition = clip.transition === 'none' ? 0 : Math.min(clip.transitionDuration, duration / 3);
+    const fades = transition ? `,fade=t=in:st=0:d=${transition},fade=t=out:st=${Math.max(0, duration - transition)}:d=${transition}${clip.transition === 'black' ? ':color=black' : ''}` : '';
+    filters.push(`[0:v]trim=start=${clip.start}:end=${clip.end},setpts=PTS-STARTPTS${fades}[v${index}]`);
+    if (hasAudio) filters.push(`[0:a]atrim=start=${clip.start}:end=${clip.end},asetpts=PTS-STARTPTS${transition ? `,afade=t=in:st=0:d=${transition},afade=t=out:st=${Math.max(0, duration - transition)}:d=${transition}` : ''}[a${index}]`);
+  });
+  const concatInputs = project.clips.map((_clip, index) => `[v${index}]${hasAudio ? `[a${index}]` : ''}`).join('');
+  filters.push(`${concatInputs}concat=n=${project.clips.length}:v=1:a=${hasAudio ? 1 : 0}[vjoined]${hasAudio ? '[ajoined]' : ''}`);
+  let videoLabel = 'vjoined';
+  const outputDuration = project.clips.reduce((sum, clip) => sum + clip.end - clip.start, 0);
+  const sourceToOutput = (time) => {
+    let offset = 0;
+    for (const clip of project.clips) {
+      if (time >= clip.start && time <= clip.end) return offset + time - clip.start;
+      offset += clip.end - clip.start;
+    }
+    return null;
+  };
+  const postFilters = [];
+  project.captions.forEach((caption) => {
+    const start = sourceToOutput(caption.start); const end = sourceToOutput(caption.end);
+    if (start === null || end === null || end <= start) return;
+    postFilters.push(`drawtext=fontfile='C\\:/Windows/Fonts/arial.ttf':text='${escapeDrawText(caption.text)}':fontcolor=white:fontsize=h/24:borderw=3:bordercolor=black@0.8:x=(w-text_w)*${caption.x}:y=(h-text_h)*${caption.y}:enable='between(t,${start},${end})'`);
+  });
+  project.zooms.forEach((zoom) => {
+    const start = sourceToOutput(zoom.start); const end = sourceToOutput(zoom.end);
+    if (start === null || end === null || end <= start) return;
+    const width = quality.width || 1920; const height = quality.height || 1080;
+    postFilters.push(`crop=w='if(between(t,${start},${end}),iw/${zoom.scale},iw)':h='if(between(t,${start},${end}),ih/${zoom.scale},ih)':x='if(between(t,${start},${end}),(iw-ow)*${zoom.x},0)':y='if(between(t,${start},${end}),(ih-oh)*${zoom.y},0)',scale=${width}:${height}`);
+  });
+  const preset = {
+    quality: { crf: 16, preset: 'slow', scale: null }, balanced: { crf: 20, preset: 'veryfast', scale: null },
+    small: { crf: 28, preset: 'veryfast', scale: 'scale=w=min(1280\\,iw):h=-2' },
+    social: { crf: 20, preset: 'veryfast', scale: 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2' }
+  }[project.preset];
+  if (preset.scale) postFilters.push(preset.scale);
+  if (postFilters.length) { filters.push(`[${videoLabel}]${postFilters.join(',')}[vout]`); videoLabel = 'vout'; }
+  if (hasAudio && project.volume !== 100) filters.push(`[ajoined]volume=${project.volume / 100}[aout]`);
+  const audioLabel = hasAudio ? (project.volume !== 100 ? 'aout' : 'ajoined') : null;
+  const args = ['-y', '-hide_banner', '-loglevel', 'error', '-i', inputPath, '-filter_complex', filters.join(';'), '-map', `[${videoLabel}]`];
+  if (audioLabel) args.push('-map', `[${audioLabel}]`);
+  args.push('-c:v', 'libx264', '-preset', preset.preset, '-crf', String(preset.crf), '-pix_fmt', 'yuv420p');
+  if (audioLabel) args.push('-c:a', 'aac', '-b:a', '192k');
+  args.push('-movflags', '+faststart', outputPath);
+  const result = await runHidden('ffmpeg', args, { timeoutMs: 300_000 });
+  if (!result.ok) throw new Error(result.error || 'ייצוא ה-Timeline נכשל');
+  const outputQuality = await analyzeMedia(outputPath);
+  return { path: outputPath, duration: outputDuration, quality: outputQuality, project };
+}
+
 function runThumbnailFfmpeg(inputPath, outputPath) {
   return new Promise((resolve) => {
     const child = spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-ss', '0.2', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '3', outputPath], { windowsHide: true });
@@ -359,29 +615,88 @@ function registerIpc() {
     if (status.level === 'critical') throw new Error('אין מספיק מקום פנוי להקלטה בטוחה');
     const id = crypto.randomUUID();
     const paths = recordingPaths(await ensureOutputDirectory());
-    await fs.writeFile(paths.partialPath, Buffer.alloc(0));
-    await fs.writeFile(paths.journalPath, JSON.stringify({ id, startedAt: new Date().toISOString(), mimeType: details.mimeType || 'video/webm', partialPath: paths.partialPath }, null, 2), 'utf8');
-    recordingSessions.set(id, { ...paths, bytes: 0, chunks: 0 });
+    await fs.mkdir(paths.segmentDirectory, { recursive: true });
+    const session = { id, ...paths, startedAt: new Date().toISOString(), mimeType: details.mimeType || 'video/webm', bytes: 0, chunks: 0, segmentIndex: 1, segmentBytes: 0, segmentChunks: 0, segmentChunkTarget: Math.max(3, Math.min(120, Number(details.segmentChunkTarget) || 30)), audioBytes: { system: 0, microphone: 0 } };
+    await writeRecordingJournal(session, { state: 'recording', fps: details.fps, targetHeight: details.targetHeight });
+    recordingSessions.set(id, session);
     return { id, path: paths.partialPath, storage: status };
   });
   ipcMain.handle('recording:append', async (_event, id, bytes) => {
     const session = recordingSessions.get(id);
     if (!session) throw new Error('Recording session is not active');
     const buffer = Buffer.from(bytes);
-    await fs.appendFile(session.partialPath, buffer);
+    await fs.appendFile(recordingSegmentPath(session.segmentDirectory, session.segmentIndex), buffer);
     session.bytes += buffer.length;
     session.chunks += 1;
-    return { bytes: session.bytes, chunks: session.chunks };
+    session.segmentBytes += buffer.length;
+    session.segmentChunks += 1;
+    if (session.segmentChunks >= session.segmentChunkTarget || session.segmentBytes >= 64 * 1024 * 1024) {
+      session.segmentIndex += 1;
+      session.segmentBytes = 0;
+      session.segmentChunks = 0;
+      await writeRecordingJournal(session, { state: 'recording', rotatedAt: new Date().toISOString() });
+    }
+    if (session.chunks % 5 === 0) await writeRecordingJournal(session, { state: 'recording' });
+    return { bytes: session.bytes, chunks: session.chunks, segments: session.segmentIndex };
   });
-  ipcMain.handle('recording:finish', async (_event, id, convertToMp4) => {
+  ipcMain.handle('recording:audio-append', async (_event, id, kind, bytes) => {
+    const session = recordingSessions.get(id);
+    if (!session) throw new Error('Recording session is not active');
+    const buffer = Buffer.from(bytes);
+    await fs.appendFile(recordingAudioPath(session.segmentDirectory, kind), buffer);
+    session.audioBytes[kind] += buffer.length;
+    return { kind, bytes: session.audioBytes[kind] };
+  });
+  ipcMain.handle('recording:heartbeat', async (_event, id, health = {}) => {
+    const session = recordingSessions.get(id);
+    if (!session) throw new Error('Recording session is not active');
+    const storage = await storageStatus();
+    await writeRecordingJournal(session, { state: 'recording', health, storageLevel: storage.level });
+    return { storage, bytes: session.bytes, chunks: session.chunks, segments: session.segmentIndex };
+  });
+  ipcMain.handle('recording:finish', async (_event, id, convertToMp4, details = {}) => {
     const session = recordingSessions.get(id);
     if (!session) throw new Error('Recording session is not active');
     recordingSessions.delete(id);
+    const segmentNames = (await fs.readdir(session.segmentDirectory)).filter((item) => /^video-\d+\.part$/i.test(item)).sort();
+    if (!segmentNames.length) throw new Error('לא נשמרו מקטעי וידאו תקינים');
+    await concatenateFiles(segmentNames.map((item) => path.join(session.segmentDirectory, item)), session.partialPath);
     await fs.rename(session.partialPath, session.finalPath);
+    const result = { ...(await convertRecording(session.finalPath, convertToMp4)), bytes: session.bytes, chunks: session.chunks, recovered: false };
+    result.segments = segmentNames.length;
+    result.audioTracks = [];
+    for (const [kind, label] of [['system', 'קול-מחשב'], ['microphone', 'מיקרופון']]) {
+      const partialAudio = recordingAudioPath(session.segmentDirectory, kind);
+      const stat = await fs.stat(partialAudio).catch(() => null);
+      if (!stat?.size) continue;
+      const rawPath = session.finalPath.replace(/\.webm$/i, `_${label}.webm`);
+      const normalizedPath = session.finalPath.replace(/\.webm$/i, `_${label}.m4a`);
+      await fs.rename(partialAudio, rawPath);
+      const normalized = await normalizeAudioSidecar(rawPath, normalizedPath, result.quality?.durationSeconds || 0);
+      if (normalized.ok) { await fs.rm(rawPath, { force: true }); result.audioTracks.push({ kind, path: normalizedPath, driftCorrected: true }); }
+      else result.audioTracks.push({ kind, path: rawPath, driftCorrected: false, error: normalized.error });
+    }
+    await fs.writeFile(`${result.path}.recording-health.json`, JSON.stringify({ segments: result.segments, audioTracks: result.audioTracks, bytes: session.bytes, chunks: session.chunks, finishedAt: new Date().toISOString() }, null, 2), 'utf8');
+    await fs.rm(session.segmentDirectory, { recursive: true, force: true });
     await fs.rm(session.journalPath, { force: true });
-    return { ...(await convertRecording(session.finalPath, convertToMp4)), bytes: session.bytes, chunks: session.chunks, recovered: false };
+    if (Array.isArray(details.chapters) && details.chapters.length) {
+      const chapters = details.chapters.slice(0, 500).map((chapter, index) => ({ index: index + 1, at: Math.max(0, Number(chapter.at) || 0), label: String(chapter.label || `פרק ${index + 1}`).slice(0, 80) }));
+      await fs.writeFile(`${result.path}.chapters.json`, JSON.stringify(chapters, null, 2), 'utf8');
+      result.chapters = chapters;
+    }
+    if (Array.isArray(details.cursorSamples) && details.cursorSamples.length) {
+      const cursorSamples = details.cursorSamples.slice(0, 36_000).map((sample) => ({ at: Math.max(0, Number(sample.at) || 0), x: Math.max(0, Math.min(1, Number(sample.x) || 0)), y: Math.max(0, Math.min(1, Number(sample.y) || 0)) }));
+      await fs.writeFile(`${result.path}.cursor.json`, JSON.stringify(cursorSamples), 'utf8');
+      result.cursorSamples = cursorSamples.length;
+    }
+    return result;
   });
   ipcMain.handle('storage:status', storageStatus);
+  ipcMain.handle('tools:engines', async () => {
+    const engines = await discoverLocalEngines();
+    try { await ensureOcrLanguageData(); engines.ocr.languages = [...new Set([...(engines.ocr.languages || []), 'heb'])]; engines.ocr.hebrewBundled = true; } catch {}
+    return engines;
+  });
   ipcMain.handle('cursor:position', () => {
     const point = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(point);
@@ -403,20 +718,67 @@ function registerIpc() {
       const project = await readJson(newProjectPath);
       if (project) await fs.writeFile(newProjectPath, JSON.stringify({ ...project, sourcePath: targetPath, outputPath: targetPath }, null, 2), 'utf8');
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await fs.rename(`${filePath}.meta.json`, `${targetPath}.meta.json`).catch((error) => { if (error.code !== 'ENOENT') throw error; });
+    for (const suffix of ['.meta.json', '.quality.json', '.transcript.json', '.srt', '.chapters.json', '.cursor.json', '.timeline.json']) {
+      await fs.rename(`${filePath}${suffix}`, `${targetPath}${suffix}`).catch((error) => { if (error.code !== 'ENOENT') throw error; });
+    }
     return { path: targetPath, name: path.basename(targetPath) };
   });
   ipcMain.handle('library:metadata', async (_event, filePath, metadata) => {
     const directory = path.resolve(await ensureOutputDirectory());
     const resolved = path.resolve(filePath);
     if (path.dirname(resolved).toLowerCase() !== directory.toLowerCase()) throw new Error('הקובץ אינו בספרייה המקומית');
-    const safe = { client: String(metadata.client || '').trim().slice(0, 80), tags: String(metadata.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 12), favorite: Boolean(metadata.favorite), note: String(metadata.note || '').trim().slice(0, 500) };
+    const current = await readJson(`${resolved}.meta.json`) || {};
+    const safe = { ...current, client: String(metadata.client || '').trim().slice(0, 80), tags: String(metadata.tags || '').split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 12), favorite: Boolean(metadata.favorite), note: String(metadata.note || '').trim().slice(0, 500) };
     await fs.writeFile(`${resolved}.meta.json`, JSON.stringify(safe, null, 2), 'utf8');
     return safe;
   });
   ipcMain.handle('library:share-local', async (_event, filePath) => {
-    clipboard.writeText(filePath);
-    return { path: filePath, private: true };
+    const resolved = await assertLibraryFile(filePath);
+    const share = await privateShareServer.share(resolved, 30);
+    clipboard.writeText(share.url);
+    return { ...share, path: resolved };
+  });
+  ipcMain.handle('library:analyze', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const quality = await analyzeMedia(resolved);
+    await updateMetadata(resolved, { quality });
+    return quality;
+  });
+  ipcMain.handle('library:ocr', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, /\.png$/i);
+    const result = await runOcr(resolved, { tessdataDirectory: await ensureOcrLanguageData() });
+    await updateMetadata(resolved, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
+    return result;
+  });
+  ipcMain.handle('library:transcribe', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const result = await transcribeMedia(resolved, { language: 'he' });
+    await updateMetadata(resolved, { transcriptText: result.text, transcriptPath: result.transcriptPath, srtPath: result.srtPath, transcribedAt: new Date().toISOString() });
+    return result;
+  });
+  ipcMain.handle('library:waveform', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const cacheDirectory = path.join(app.getPath('userData'), 'waveforms');
+    await fs.mkdir(cacheDirectory, { recursive: true });
+    const outputPath = path.join(cacheDirectory, `${crypto.createHash('sha1').update(resolved).digest('hex')}.png`);
+    try { await fs.access(outputPath); }
+    catch {
+      const result = await runHidden('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', resolved, '-filter_complex', 'aformat=channel_layouts=mono,showwavespic=s=1200x160:colors=0xc99124', '-frames:v', '1', outputPath], { timeoutMs: 120_000 });
+      if (!result.ok) throw new Error('לא ניתן ליצור צורת גל לקובץ ללא ערוץ שמע תקין');
+    }
+    return `data:image/png;base64,${(await fs.readFile(outputPath)).toString('base64')}`;
+  });
+  ipcMain.handle('library:pin', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, /\.png$/i);
+    const bytes = await fs.readFile(resolved);
+    const dataUrl = `data:image/png;base64,${bytes.toString('base64')}`;
+    const image = nativeImage.createFromBuffer(bytes);
+    const size = image.getSize();
+    const scale = Math.min(1, 900 / Math.max(size.width, 1), 700 / Math.max(size.height, 1));
+    const pinWindow = new BrowserWindow({ show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1', width: Math.max(260, Math.round(size.width * scale)), height: Math.max(180, Math.round(size.height * scale)), frame: false, resizable: true, alwaysOnTop: true, backgroundColor: '#111111', webPreferences: { contextIsolation: true, sandbox: true } });
+    await pinWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px}img{width:100%;height:100%;object-fit:contain;display:block}</style><img draggable="false" src="${dataUrl}">`)}`);
+    pinWindow.setAlwaysOnTop(true, 'floating');
+    return { pinned: true, bounds: pinWindow.getBounds() };
   });
   ipcMain.handle('video:edit', async (_event, filePath, options) => {
     const directory = path.resolve(await ensureOutputDirectory());
@@ -426,6 +788,56 @@ function registerIpc() {
     const result = await runVideoEdit(resolved, outputPath, options);
     if (!result.ok) throw new Error(result.error);
     return { path: outputPath };
+  });
+  ipcMain.handle('video:timeline-load', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const quality = await analyzeMedia(resolved);
+    const project = await readJson(`${resolved}.timeline.json`);
+    const cursorSamples = await readJson(`${resolved}.cursor.json`) || [];
+    return { project: normalizeTimelineProject(project || {}, quality.durationSeconds), cursorSamples, quality };
+  });
+  ipcMain.handle('video:timeline-save', async (_event, filePath, candidate) => {
+    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const quality = await analyzeMedia(resolved);
+    const project = normalizeTimelineProject(candidate, quality.durationSeconds);
+    const projectPath = `${resolved}.timeline.json`;
+    await fs.writeFile(projectPath, JSON.stringify(project, null, 2), 'utf8');
+    return { project, projectPath };
+  });
+  ipcMain.handle('video:timeline-export', async (_event, filePath, candidate) => {
+    const resolved = await assertLibraryFile(filePath, /\.(webm|mp4)$/i);
+    const outputPath = path.join(path.dirname(resolved), `${path.basename(resolved, path.extname(resolved))} — Timeline.mp4`);
+    const result = await exportTimeline(resolved, outputPath, candidate);
+    await fs.writeFile(`${resolved}.timeline.json`, JSON.stringify(result.project, null, 2), 'utf8');
+    return result;
+  });
+  ipcMain.handle('video:detect-silence', async (_event, filePath, options) => detectSilences(await assertLibraryFile(filePath, /\.(webm|mp4)$/i), options));
+  ipcMain.handle('workflow:action', async (_event, filePath, action, options = {}) => {
+    if (!WORKFLOW_ACTIONS.has(action)) throw new Error('פעולת אוטומציה אינה מוכרת');
+    const resolved = await assertLibraryFile(filePath);
+    if (action === 'copy') {
+      if (/\.png$/i.test(resolved)) clipboard.writeImage(nativeImage.createFromPath(resolved));
+      else clipboard.writeText(resolved);
+      return { action, path: resolved };
+    }
+    if (action === 'ocr') {
+      if (!/\.png$/i.test(resolved)) return { action, skipped: true, reason: 'OCR מיועד לתמונה' };
+      const result = await runOcr(resolved, { tessdataDirectory: await ensureOcrLanguageData() });
+      await updateMetadata(resolved, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
+      return { action, characters: result.text.length };
+    }
+    if (action === 'client-copy') {
+      const client = String(options.client || '').trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, '').slice(0, 60);
+      if (!client) return { action, skipped: true, reason: 'לא הוגדר שם לקוח' };
+      const clientDirectory = path.join(await ensureOutputDirectory(), 'לקוחות', client);
+      await fs.mkdir(clientDirectory, { recursive: true });
+      const target = path.join(clientDirectory, path.basename(resolved));
+      await fs.copyFile(resolved, target);
+      return { action, path: target };
+    }
+    if (action === 'share') { const share = await privateShareServer.share(resolved, 30); clipboard.writeText(share.url); return { action, ...share }; }
+    if (action === 'open-folder') { shell.showItemInFolder(resolved); return { action, path: resolved }; }
+    return { action, renderer: true, path: resolved };
   });
   ipcMain.handle('editor:load', async (_event, filePath) => {
     const sourcePath = assertEditableImagePath(filePath, await ensureOutputDirectory());
@@ -460,6 +872,24 @@ function registerIpc() {
     return outputDirectory;
   });
   ipcMain.handle('output:get', ensureOutputDirectory);
+  ipcMain.handle('app:autostart-get', () => app.getLoginItemSettings().openAtLogin);
+  ipcMain.handle('app:version', () => app.getVersion());
+  ipcMain.handle('app:autostart-set', (_event, enabled) => {
+    app.setLoginItemSettings({ openAtLogin: Boolean(enabled), path: process.execPath });
+    return app.getLoginItemSettings().openAtLogin;
+  });
+  ipcMain.handle('quickbar:get-state', () => ({ preferences: quickbarPreferences, expanded: quickbarExpanded, recording: Boolean(recordingSessions.size) }));
+  ipcMain.handle('quickbar:get-preferences', () => quickbarPreferences);
+  ipcMain.handle('quickbar:set-preferences', (_event, patch) => applyQuickbarPreferences(patch));
+  ipcMain.handle('quickbar:set-expanded', (_event, expanded) => { positionQuickbar(Boolean(expanded)); return { expanded: quickbarExpanded, bounds: quickbarWindow?.getBounds() || null }; });
+  ipcMain.handle('quickbar:action', (_event, action) => {
+    if (!Object.hasOwn(ACTION_DEFINITIONS, action)) throw new Error('פעולת סרגל מהיר אינה מוכרת');
+    if (['openLibrary'].includes(action)) showMainWindow('library');
+    else if (action === 'openOutput') ensureOutputDirectory().then((directory) => shell.openPath(directory));
+    else mainWindow?.webContents.send('shortcut', action, { source: 'quickbar' });
+    return true;
+  });
+  ipcMain.handle('quickbar:recording-state', (_event, active) => { quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active)); return true; });
   ipcMain.handle('shortcuts:get', () => ({ shortcuts: activeShortcuts, registration: shortcutRegistration }));
   ipcMain.handle('shortcuts:set', (_event, candidate) => {
     const shortcuts = normalizeShortcutMap(candidate);
@@ -537,9 +967,35 @@ function dispatchShortcut(action, source = 'unknown') {
   return true;
 }
 
+function showMainWindow(page = null) {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  if (page) mainWindow.webContents.send('app:navigate', page);
+}
+
+function createTray() {
+  if (tray || process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') return;
+  const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="9" fill="#c99124"/><circle cx="16" cy="16" r="7" fill="#071a34"/><circle cx="16" cy="16" r="3" fill="#fff"/></svg>').toString('base64')}`).resize({ width: 16, height: 16 });
+  tray = new Tray(icon);
+  tray.setToolTip('אורום סטודיו — צילום והקלטת מסך');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'פתיחת אורום סטודיו', click: () => showMainWindow() },
+    { type: 'separator' },
+    { label: 'התחל / עצור הקלטה', click: () => dispatchShortcut('record', 'tray') },
+    { label: 'צילום מסך מלא', click: () => dispatchShortcut('screenshot', 'tray') },
+    { label: 'פתיחת הספרייה', click: () => showMainWindow('library') },
+    { label: 'פתיחת תיקיית השמירה', click: () => ensureOutputDirectory().then((directory) => shell.openPath(directory)) },
+    { type: 'separator' },
+    { label: 'יציאה', click: () => app.quit() }
+  ]));
+  tray.on('double-click', () => showMainWindow());
+}
+
 app.whenReady().then(async () => {
   await ensureOutputDirectory();
   await recoverInterruptedRecordings();
+  await loadQuickbarPreferences();
   registerIpc();
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     try {
@@ -560,6 +1016,10 @@ app.whenReady().then(async () => {
     }
   }, { useSystemPicker: false });
   createWindow();
+  createTray();
+  await createQuickbarWindow();
+  screen.on('display-metrics-changed', () => positionQuickbar());
+  screen.on('display-removed', () => positionQuickbar());
   const devParentPid = Number(process.env.SCREEN_STUDIO_DEV_PARENT_PID);
   if (devParentPid > 0) setInterval(() => {
     try { process.kill(devParentPid, 0); } catch { app.quit(); }
@@ -568,5 +1028,17 @@ app.whenReady().then(async () => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 
+app.on('before-quit', () => { isQuitting = true; });
+
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  clearInterval(quickbarCursorTimer);
+  if (qaProcess?.pid) {
+    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(qaProcess.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+    else qaProcess.kill('SIGTERM');
+    qaProcess = null;
+  }
+  globalShortcut.unregisterAll();
+  privateShareServer.stop();
+  tray?.destroy();
+});

@@ -13,12 +13,16 @@
   <link rel="stylesheet" href="clean-theme.css">
   <link rel="stylesheet" href="theme-controls.css">
   <link rel="stylesheet" href="library.css">
+  <link rel="stylesheet" href="video-timeline.css">
   <link rel="stylesheet" href="library-views.css">
   <link rel="stylesheet" href="capture-preferences.css">
   <link rel="stylesheet" href="recent-library.css">
   <link rel="stylesheet" href="shortcut-settings.css">
+  <link rel="stylesheet" href="tool-center.css">
+  <link rel="stylesheet" href="interaction-upgrades.css">
   <link rel="stylesheet" href="live-preview.css">
   <link rel="stylesheet" href="wide-layout.css">
+  <link rel="stylesheet" href="capture-layouts.css">
   <link rel="stylesheet" href="image-editor.css">
 </head>
 <body>
@@ -26,7 +30,6 @@
     <section class="workspace">
       <header class="topbar">
         <div class="topbar-actions">
-          <button class="profile-button"><span>ד</span> דניאל⌄</button>
           <button class="icon-button" aria-label="התראות">♧</button>
           <div class="theme-picker">
             <button class="icon-button theme-button-labeled" id="theme-button" aria-label="בחירת ערכת נושא" title="בחירת ערכת נושא"><span aria-hidden="true">◉</span><b>ערכות נושא</b></button>
@@ -51,6 +54,7 @@
 
       <main class="content-shell">
         <aside class="settings-rail" id="capture-settings">
+          <div class="capture-settings-dialog-heading"><div><b>הגדרות צילום והקלטה</b><small>כל אפשרויות האיכות, הקול והתמונה</small></div><button type="button" id="close-capture-settings" aria-label="סגירת ההגדרות">×</button></div>
           <div class="settings-tabs" role="tablist">
             <button class="settings-tab active" data-settings-tab="video">וידאו</button>
             <button class="settings-tab" data-settings-tab="audio">אודיו</button>
@@ -81,7 +85,7 @@
           </section>
 
           <section class="settings-section" data-settings-section="image">
-            <fieldset class="choice-group"><legend>אזור צילום</legend><label><input type="radio" name="screenshot-mode" value="region" checked><span>אזור נבחר</span></label><label><input type="radio" name="screenshot-mode" value="full"><span>מסך מלא</span></label><label class="unavailable"><input type="radio" disabled><span>עמוד גלילה — בקרוב</span></label><label class="unavailable"><input type="radio" disabled><span>אלמנט — בקרוב</span></label></fieldset>
+            <fieldset class="choice-group"><legend>אזור צילום</legend><label><input type="radio" name="screenshot-mode" value="region" checked><span>אזור נבחר</span></label><label><input type="radio" name="screenshot-mode" value="full"><span>מסך מלא</span></label><label><input type="radio" name="screenshot-mode" value="scroll"><span>עמוד גלילה</span></label><label class="unavailable"><input type="radio" disabled><span>אלמנט — בקרוב</span></label></fieldset>
             <label class="field-row"><span><b>פורמט תמונה</b></span><select id="image-format"><option>PNG</option><option disabled>JPG — בקרוב</option><option disabled>WEBP — בקרוב</option><option disabled>PDF — בקרוב</option></select></label>
             <label class="field-row"><span><b>השהיה לפני צילום</b><small>ספירה לאחור בלי להקפיא את התצוגה</small></span><select id="capture-delay"><option value="0">ללא</option><option value="3">3 שניות</option><option value="5">5 שניות</option><option value="10">10 שניות</option></select></label>
             <label class="switch-row unavailable"><span><b>רקע מעוצב</b><small>בקרוב — צל ורקע מותג</small></span><input type="checkbox" disabled><i></i></label>
@@ -95,6 +99,15 @@
           <section id="capture-page" class="page active">
             <div class="capture-stage panel">
               <div class="source-toolbar">
+                <div class="capture-layout-picker">
+                  <button class="layout-picker-button" id="capture-layout-button" type="button" aria-label="בחירת פריסת מסך" aria-expanded="false" title="פריסת מסך">▦</button>
+                  <div class="capture-layout-menu hidden" id="capture-layout-menu" role="menu">
+                    <button type="button" data-capture-layout-choice="clean"><span>▣</span><b>נקייה</b><small>הגדרות נפתחות בדיאלוג</small></button>
+                    <button type="button" data-capture-layout-choice="professional"><span>▥</span><b>מקצועית</b><small>הגדרות קבועות לצד התצוגה</small></button>
+                    <button type="button" data-capture-layout-choice="focus"><span>□</span><b>ממוקדת</b><small>תצוגה מקדימה בלבד</small></button>
+                  </div>
+                </div>
+                <button class="layout-settings-button" id="open-capture-settings" type="button">⚙ <span>הגדרות</span></button>
                 <button class="source-type active" data-source-filter="screen">▰ <span>מסך מלא</span></button>
                 <button class="source-type" data-source-filter="window">▤ <span>חלון</span></button>
                 <button class="source-type unavailable" disabled>◉ <span>לשונית</span></button>
@@ -118,7 +131,7 @@
                 <div class="capture-chips">
                   <button id="mic-chip">♩ מיקרופון</button><button id="camera-chip">▣ מצלמה</button><button class="active">⌁ הדגשת עכבר</button>
                 </div>
-                <div class="transport-actions"><button class="pause-main" id="pause-recording">Ⅱ <span>השהה</span></button><button class="record-main" id="record-button">▷ <span>התחל הקלטה</span></button></div>
+                <div class="transport-actions"><button class="pause-main" id="pause-recording">Ⅱ <span>השהה</span></button><button class="record-main" id="record-button" data-recording="false"><i class="record-action-icon" aria-hidden="true"></i><span>התחל הקלטה</span></button></div>
               </div>
             </div>
 
@@ -148,16 +161,12 @@
               <div id="recent-library" class="clip-grid recent-view-cards"><div class="loading">טוען את הספרייה…</div></div>
             </section>
 
-            <div class="dashboard-grid">
-              <section class="quick-panel panel"><h2>⌨ קיצורי מקלדת</h2><div class="shortcut-grid"><div><span>התחל / עצור הקלטה</span><kbd data-shortcut-summary="record">Ctrl Shift 2</kbd></div><div><span>צילום מסך</span><kbd data-shortcut-summary="screenshot">Ctrl Shift 1</kbd></div><div><span>השהיה</span><kbd data-shortcut-summary="pause">Ctrl Shift P</kbd></div><div><span>השתקת מיקרופון</span><kbd data-shortcut-summary="microphone">Ctrl Shift M</kbd></div></div></section>
-              <section class="system-panel panel"><h2>מצב המערכת</h2><div><span>⚡ מקודד וידאו</span><b id="encoder-status">בודק…</b></div><div><span>▱ מקום פנוי</span><b id="storage-status">בודק…</b></div><div><span>↺ שחזור הקלטות</span><b id="recovery-status">בודק…</b></div><div><span>◔ שיתוף ענן</span><b>כבוי — פרטי</b></div></section>
-            </div>
           </section>
 
           <section id="library-page" class="page panel page-panel">
             <div class="section-heading"><div><h2>הספרייה שלי</h2><p>כל התמונות והסרטונים שנשמרו במחשב</p></div><div class="library-heading-actions"><button class="gold-button" id="edit-latest-image">✎ עריכת צילום אחרון</button><button class="ghost" id="open-output">פתיחת תיקייה</button></div></div>
             <div class="library-toolbar">
-              <label class="library-search">⌕ <input id="library-search" placeholder="חיפוש לפי שם…"></label>
+              <label class="library-search">⌕ <input id="library-search" placeholder="חיפוש בשם, OCR, תמלול, לקוח או תגית…"></label>
               <label>מיון<select id="library-sort"><option value="date-desc">החדשים תחילה</option><option value="date-asc">הישנים תחילה</option><option value="name-asc">שם א׳–ת׳</option><option value="name-desc">שם ת׳–א׳</option><option value="type">סוג הקובץ</option></select></label>
               <label>קיבוץ<select id="library-group"><option value="time">לפי זמן</option><option value="type">לפי סוג</option><option value="none">ללא קיבוץ</option></select></label>
               <div class="library-view-picker" role="group" aria-label="צורת תצוגת הספרייה">
@@ -169,27 +178,59 @@
             </div>
             <div id="library-list" class="library-list view-grid size-medium"></div>
           </section>
+          <section id="tools-page" class="page panel page-panel tools-page">
+            <div class="section-heading"><div><h2>מרכז כלים חכמים</h2><p>מנועים מקומיים קיימים בלבד — ללא ענן וללא התקנות כפולות</p></div><button class="ghost" id="refresh-engines">↻ בדיקה מחדש</button></div>
+            <div class="engine-grid" id="engine-grid"><article><small>סורק מנועים מקומיים…</small></article></div>
+            <div class="tool-action-grid">
+              <article><span>◎</span><div><h3>OCR בעברית</h3><p>זיהוי טקסט בצילום האחרון והוספתו לחיפוש בספרייה.</p></div><button class="gold-button" data-smart-action="ocr">הפעל על הצילום האחרון</button></article>
+              <article><span>◫</span><div><h3>תמלול וכתוביות</h3><p>שימוש ב־Whisper המקומי שכבר מותקן, ויצירת JSON ו־SRT.</p></div><button class="gold-button" data-smart-action="transcribe">תמלל וידאו אחרון</button></article>
+              <article><span>✓</span><div><h3>דוח איכות מדעי</h3><p>רזולוציה, FPS, פריימים, סנכרון שמע־וידאו וציון מספרי.</p></div><button class="gold-button" data-smart-action="analyze">נתח וידאו אחרון</button></article>
+              <article><span>⌑</span><div><h3>הצמדה למסך</h3><p>השארת צילום אחרון מעל חלונות אחרים לעבודה נוחה.</p></div><button class="gold-button" data-smart-action="pin">הצמד צילום אחרון</button></article>
+              <article><span>⌁</span><div><h3>שיתוף פרטי מקומי</h3><p>קישור ב־127.0.0.1 בלבד, תפוגה 30 דקות וללא ענן.</p></div><button class="gold-button" data-smart-action="share">צור קישור מקומי</button></article>
+            </div>
+            <pre class="tool-result" id="tool-result">בחר פעולה לקבלת תוצאה מפורטת.</pre>
+          </section>
           <section id="settings-page" class="page panel page-panel settings-page">
             <div class="page-tabs">
               <button class="page-tab active" data-preference-tab="general">הגדרות כלליות</button>
               <button class="page-tab" data-preference-tab="shortcuts">קיצורי דרך</button>
               <button class="page-tab" data-preference-tab="appearance">עיצוב וערכות נושא</button>
+              <button class="page-tab" data-preference-tab="workflows">אוטומציות</button>
               <button class="page-tab" data-preference-tab="development">פיתוח ו־QA</button>
             </div>
             <div class="preference-section active" data-preference-section="general">
+              <h2>פריסת המסך הראשי</h2>
+              <div class="capture-default-grid">
+                <label><span><b>פריסה מועדפת</b><small>אפשר לשנות גם מהאייקון הקטן במסך הצילום</small></span><select id="capture-layout-select"><option value="clean">נקייה — הגדרות בדיאלוג</option><option value="professional">מקצועית — הגדרות קבועות</option><option value="focus">ממוקדת — תצוגה מקדימה בלבד</option></select></label>
+              </div>
               <h2>ברירות מחדל לצילום</h2>
               <div class="capture-default-grid">
                 <label><span><b>הפעולה של הכפתור הראשי</b><small>מה יקרה בלחיצה על התחלה</small></span><select id="default-capture-kind"><option value="record">הקלטת וידאו</option><option value="screenshot">צילום תמונה</option></select></label>
-                <label><span><b>שטח הצילום</b><small>התחלה מיידית או בחירת שטח</small></span><select id="default-capture-scope"><option value="full">כל המקור — התחלה מיד</option><option value="region">בחירת אזור לפני התחלה</option></select></label>
-                <label><span><b>אחרי צילום תמונה</b><small>שמירה בלבד או מעבר לעריכה</small></span><select id="after-screenshot-action"><option value="save">שמירה בלבד</option><option value="quick">פתיחת עריכה מהירה</option><option value="professional">פתיחת עריכה מקצועית</option></select></label>
+                <label><span><b>שטח הצילום</b><small>התחלה מיידית, אזור או עמוד ארוך</small></span><select id="default-capture-scope"><option value="full">כל המקור — התחלה מיד</option><option value="region">בחירת אזור לפני התחלה</option><option value="scroll">צילום עמוד גלילה</option></select></label>
+                <label><span><b>אחרי צילום תמונה</b><small>שמירה, עריכה או פעולה חכמה</small></span><select id="after-screenshot-action"><option value="save">שמירה בלבד</option><option value="quick">פתיחת עריכה מהירה</option><option value="professional">פתיחת עריכה מקצועית</option><option value="ocr">OCR וחיפוש טקסט</option><option value="pin">הצמדה מעל החלונות</option><option value="share">קישור פרטי מקומי</option></select></label>
               </div>
-              <h2 class="settings-subheading">שמירה ופורמט</h2><p class="path" id="output-path"></p><button class="gold-button" id="choose-output">בחירת תיקייה אחרת</button><label class="check-line"><input type="checkbox" id="convert-mp4" checked> יצירת MP4 תואם לאחר שמירת מקור WebM</label>
+              <h2 class="settings-subheading">שמירה ופורמט</h2><p class="path" id="output-path"></p><button class="gold-button" id="choose-output">בחירת תיקייה אחרת</button><label class="check-line"><input type="checkbox" id="convert-mp4" checked> יצירת MP4 תואם לאחר שמירת מקור WebM</label><label class="check-line"><input type="checkbox" id="autostart-app"> הפעלת אורום סטודיו עם Windows</label>
+              <h2 class="settings-subheading">סרגל מהיר צף</h2>
+              <div class="capture-default-grid quickbar-settings">
+                <label><span><b>הצגת הסרגל</b><small>זמין מעל כל תוכנה ואינו מופיע בצילום</small></span><input id="quickbar-enabled" type="checkbox"></label>
+                <label><span><b>קצה המסך</b><small>המקום שבו תישאר לשונית הפתיחה</small></span><select id="quickbar-edge"><option value="right">ימין</option><option value="left">שמאל</option><option value="top">עליון</option></select></label>
+                <label><span><b>אופן פתיחה</b><small>לחיצה מדויקת או ריחוף מהיר</small></span><select id="quickbar-activation"><option value="click">לחיצה על הקצה</option><option value="hover">ריחוף על הקצה</option></select></label>
+                <label><span><b>בחירת מסך</b><small>מעבר לפי העכבר או הישארות במסך הראשי</small></span><select id="quickbar-display"><option value="cursor">המסך שבו נמצא העכבר</option><option value="primary">המסך הראשי</option></select></label>
+                <label><span><b>הצמדה פתוחה</b><small>השארת הסרגל גלוי עד ביטול הסיכה</small></span><input id="quickbar-pinned" type="checkbox"></label>
+              </div>
+              <h2 class="settings-subheading">מצב המערכת</h2>
+              <div class="settings-system-status">
+                <article><span>⚡ מקודד וידאו</span><b id="encoder-status">בודק…</b></article>
+                <article><span>▱ מקום פנוי</span><b id="storage-status">בודק…</b></article>
+                <article><span>↺ שחזור הקלטות</span><b id="recovery-status">בודק…</b></article>
+                <article><span>◔ שיתוף</span><b>מקומי ופרטי</b></article>
+              </div>
             </div>
             <div class="preference-section" data-preference-section="shortcuts">
               <div class="shortcut-settings-heading"><div><h2>מרכז פעולות וקיצורי דרך</h2><p>צירוף, מקש יחיד או לחיצה כפולה לפי המיקום הפיזי — בעברית ובאנגלית.</p></div><button class="ghost" id="reset-shortcuts">↺ איפוס ברירות מחדל</button></div>
               <div class="shortcut-status-banner" id="shortcut-status-banner"><span>●</span><div><b>בודק רישום קיצורים…</b><small>המערכת תתריע על התנגשות או קיצור שנתפס בידי תוכנה אחרת.</small></div></div>
               <div class="shortcut-toolbar"><input id="shortcut-search" type="search" placeholder="חיפוש פעולה…"><select id="shortcut-category"><option value="all">כל הקטגוריות</option><option value="recording">הקלטה</option><option value="capture">צילום</option><option value="audio">שמע</option><option value="camera">מצלמה</option><option value="library">ספרייה</option><option value="window">חלון</option></select><span><b id="shortcut-visible-count">0</b> פעולות</span></div>
-              <div class="shortcut-safety-note">מקש אות יחיד מוגבל כברירת מחדל לחלון האפליקציה כדי שלא יופעל בזמן הקלדה. מקשי F, ‏Print Screen ו־Numpad מתאימים להפעלה גלובלית.</div>
+              <div class="shortcut-safety-note">לחיצה כפולה: מומלץ 500–650ms. מקשי Windows, ‏Ctrl, ‏Alt ו־Shift לבדם חסומים משום שמערכת ההפעלה תופסת אותם. אות או מספר יחיד פועלים רק כשהאפליקציה ממוקדת; להפעלה גלובלית השתמש במקשי F, ‏Print Screen או Numpad.</div>
               <div class="shortcut-settings-list" id="shortcut-settings-list"></div>
               <aside class="developer-shortcuts-note"><b>קיצורי פיתוח שמורים</b><span><kbd>Ctrl Shift R</kbd> רענון עמוק</span><span><kbd>Ctrl Shift I</kbd> קונסול</span><span><kbd>F12</kbd> קונסול</span></aside>
             </div>
@@ -217,6 +258,12 @@
               </div>
               <div class="theme-editor-actions"><button class="ghost" id="reset-theme-draft">↺ שחזור ערכת הבסיס</button><span></span><button class="ghost" id="cancel-theme-edit">ביטול</button><button class="gold-button" id="save-theme-edit">שמירת הערכה</button></div>
             </div>
+            <div class="preference-section" data-preference-section="workflows">
+              <div class="workflow-heading"><div><h2>אוטומציות לאחר צילום</h2><p>שרשרת פעולות מקומית שמופעלת פעם אחת לפי הסדר, בלי כפילויות.</p></div><button class="gold-button" id="add-workflow">＋ אוטומציה חדשה</button></div>
+              <div class="workflow-templates"><button data-workflow-template="copy-ocr">צילום ← העתקה ← OCR</button><button data-workflow-template="client-edit">צילום ← תיקיית לקוח ← עורך</button><button data-workflow-template="record-share">הקלטה ← שיתוף ← תיקייה</button></div>
+              <div id="workflow-list" class="workflow-list"></div>
+              <div class="workflow-log"><div><b>הפעלה אחרונה</b><button class="copy-button" id="copy-workflow-log">⧉ העתק</button></div><pre id="workflow-log">עדיין לא הופעלה אוטומציה.</pre></div>
+            </div>
             <div class="preference-section" data-preference-section="development">
               <div class="qa-heading"><div><h2>מרכז QA מדעי</h2><p>בדיקות אוטומטיות ברקע, מדדי ביצועים והשוואת רגרסיה לריצה הקודמת</p></div><div class="qa-actions"><button class="ghost" id="refresh-qa">↻ רענון</button><button class="gold-button" id="run-qa">▷ הפעל QA מלא</button></div></div>
               <div class="qa-summary" id="qa-summary">
@@ -238,13 +285,11 @@
     </section>
 
     <aside class="sidebar">
-      <div class="logo-mark">א</div>
       <nav>
-        <button class="nav-item active" data-page="capture"><span>▣</span><small>הקלטה</small></button>
-        <button class="nav-item" data-page="capture" data-action="screenshot"><span>▱</span><small>צילומי מסך</small></button>
+        <button class="nav-item active" data-page="capture"><span>◉</span><small>צילום והקלטה</small></button>
         <button class="nav-item" data-page="editor" data-action="edit"><span>✎</span><small>עריכה</small></button>
         <button class="nav-item" data-page="library"><span>▥</span><small>ספרייה</small></button>
-        <button class="nav-item unavailable" disabled><span>✣</span><small>אפקטים</small></button>
+        <button class="nav-item" data-page="tools"><span>✣</span><small>כלים</small></button>
         <button class="nav-item" data-page="settings"><span>☷</span><small>הגדרות</small></button>
       </nav>
       <button class="help-button" title="עזרה">◉</button>
@@ -254,7 +299,7 @@
   <section class="image-editor-shell hidden" id="image-editor-shell" aria-label="עורך צילומי מסך">
     <header class="editor-topbar">
       <div class="editor-title"><button class="editor-icon" id="editor-close" title="סגירה">×</button><div><b id="editor-file-name">עורך צילום מסך</b><small id="editor-save-state">עריכה לא־הרסנית</small></div></div>
-      <div class="editor-history"><button class="editor-icon" id="editor-undo" title="ביטול Ctrl+Z">↶</button><button class="editor-icon" id="editor-redo" title="ביצוע מחדש Ctrl+Y">↷</button><button class="editor-icon" id="editor-fit" title="התאמה למסך">⛶</button><button class="editor-icon" id="editor-zoom-out">−</button><output id="editor-zoom">100%</output><button class="editor-icon" id="editor-zoom-in">＋</button></div>
+      <div class="editor-history"><button class="editor-icon" id="editor-undo" title="ביטול Ctrl+Z">↶</button><button class="editor-icon" id="editor-redo" title="ביצוע מחדש Ctrl+Y">↷</button><button class="editor-icon" id="editor-fit" title="התאמה למסך Ctrl+0">⛶</button><button class="editor-icon" id="editor-zoom-out" title="הקטנה Ctrl+-">−</button><input id="editor-zoom-range" type="range" min="5" max="400" step="5" value="100" title="זום העורך"><output id="editor-zoom">100%</output><button class="editor-icon" id="editor-zoom-in" title="הגדלה Ctrl++">＋</button></div>
       <div class="editor-save-actions"><button class="ghost" id="editor-copy">⧉ העתקה</button><button class="ghost" id="editor-save-copy">שמירת עותק</button><button class="gold-button" id="editor-save">שמירה</button></div>
     </header>
     <div class="editor-modebar"><button data-editor-mode="quick" class="active">עריכה מהירה</button><button data-editor-mode="professional">עריכה מקצועית</button><span></span><label><input type="checkbox" id="editor-snap"> הצמדה לרשת</label></div>
@@ -268,17 +313,30 @@
     <input type="file" id="editor-overlay-file" accept="image/*" hidden>
   </section>
 
-  <div class="recording-bar hidden" id="recording-bar"><span class="record-dot"></span><strong id="recording-time">00:00</strong><small id="recording-size">0 MB</small><button class="recording-tool" id="recording-mic" title="השתקת מיקרופון">🎙</button><button class="recording-tool" id="recording-camera" title="מצלמה">▣</button><button class="recording-tool" id="recording-pause" title="השהיה">Ⅱ</button><button id="stop-recording">■ עצירה</button></div>
+  <small class="app-version-badge" id="app-version" aria-label="גרסת אורום סטודיו">גרסה …</small>
+  <div class="recording-bar hidden" id="recording-bar"><span class="record-dot"></span><strong id="recording-time">00:00</strong><small id="recording-size">0 MB</small><small id="recording-segments">מקטע 1</small><button class="recording-tool" id="recording-chapter" title="הוספת סימון פרק">⚑</button><button class="recording-tool" id="recording-mic" title="השתקת מיקרופון">🎙</button><button class="recording-tool" id="recording-camera" title="מצלמה">▣</button><button class="recording-tool" id="recording-pause" title="השהיה">Ⅱ</button><button class="recording-stop" id="stop-recording"><i aria-hidden="true"></i><span>עצור הקלטה</span></button></div>
 
   <div class="modal hidden" id="video-editor-modal">
-    <div class="video-editor-dialog"><div class="modal-title"><div><h2>עריכת וידאו מהירה</h2><p id="video-editor-name"></p></div><button id="close-video-editor">×</button></div><video id="video-editor-preview" controls></video><div class="video-edit-fields"><label>התחלה בשניות<input id="video-trim-start" type="number" min="0" step="0.1" value="0"></label><label>סיום בשניות<input id="video-trim-end" type="number" min="0" step="0.1" placeholder="עד הסוף"></label><label>מהירות<select id="video-speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>רגילה</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select></label><label>עוצמת שמע<input id="video-volume" type="range" min="0" max="200" value="100"><output id="video-volume-output">100%</output></label><label>כניסת Fade<input id="video-fade-in" type="number" min="0" max="3" step="0.1" value="0"> שניות</label><label class="check-line"><input id="video-mute" type="checkbox"> הסרת קול מהעותק</label></div><div class="modal-actions"><button class="gold-button" id="save-video-edit">שמירת עותק ערוך</button><button class="ghost" id="cancel-video-edit">ביטול</button></div></div>
+    <div class="video-editor-dialog timeline-editor" data-timeline-ready="false">
+      <div class="modal-title"><div><h2>עורך וידאו מקצועי</h2><p id="video-editor-name"></p></div><button id="close-video-editor">×</button></div>
+      <div class="timeline-toolbar"><button id="video-split">✂ פיצול בסמן</button><button id="video-remove-silence">≋ הסרת מילים שקטות</button><button id="video-add-caption">T כתובית</button><button id="video-auto-zoom">⌕ זום לפי העכבר</button><label>ייצוא<select id="video-export-preset"><option value="quality">איכות גבוהה</option><option value="balanced" selected>מאוזן</option><option value="small">קובץ קטן</option><option value="social">רשתות 1080p</option></select></label></div>
+      <div class="video-editor-layout">
+        <section><div class="video-preview-stage" id="video-preview-stage"><video id="video-editor-preview" controls></video><div id="video-caption-overlay" class="video-caption-overlay hidden"></div></div><div id="video-waveform" class="video-waveform"><span>טוען צורת גל…</span></div></section>
+        <aside class="timeline-inspector"><h3>מאפייני הבחירה</h3><label>מעבר בין קליפים<select id="video-transition"><option value="none">ללא</option><option value="fade">Cross fade</option><option value="black">Fade דרך שחור</option></select></label><label>משך מעבר<input id="video-transition-duration" type="number" min="0.05" max="1" step="0.05" value="0.25"></label><label>טקסט כתובית<textarea id="video-caption-text" rows="3" placeholder="כתובית בעברית…"></textarea></label><label>התחלה<input id="video-caption-start" type="number" min="0" step="0.1"></label><label>סיום<input id="video-caption-end" type="number" min="0" step="0.1"></label><label>עוצמת שמע <output id="video-volume-output">100%</output><input id="video-volume" type="range" min="0" max="200" value="100"></label><label class="check-line"><input id="video-mute" type="checkbox"> השתקת הייצוא</label><button class="danger-button" id="video-delete-item">מחיקת פריט נבחר</button></aside>
+      </div>
+      <div class="timeline-shell" id="video-timeline"><div class="timeline-ruler" id="timeline-ruler"></div><div class="timeline-track"><b>קליפים</b><div id="video-clip-track"></div></div><div class="timeline-track"><b>כתוביות</b><div id="video-caption-track"></div></div><div class="timeline-track"><b>זום</b><div id="video-zoom-track"></div></div><i id="timeline-playhead"></i></div>
+      <div class="timeline-status" id="timeline-status">טען וידאו כדי להתחיל.</div><div class="modal-actions"><button class="gold-button" id="save-video-edit">ייצוא עותק ערוך</button><button class="ghost" id="save-video-project">שמירת פרויקט</button><button class="ghost" id="cancel-video-edit">ביטול</button></div>
+    </div>
   </div>
-  <div class="modal hidden" id="region-modal"><div class="region-dialog"><div class="modal-title"><div><h2>בחירת אזור</h2><p>גרור מלבן על התצוגה, או בחר את כל המקור.</p></div><button id="cancel-region">×</button></div><div class="preview-wrap" id="preview-wrap"><canvas id="preview-canvas"></canvas><div id="selection-box"></div></div><div class="modal-actions"><button class="ghost" id="full-region">כל המקור</button><button class="primary" id="confirm-region" disabled>אישור האזור</button></div></div></div>
+  <div class="modal hidden" id="region-modal"><div class="region-dialog"><div class="modal-title"><div><h2>בחירת אזור</h2><p>גרור מלבן, השתמש באזור האחרון או שמור אזור לשימוש חוזר.</p></div><button id="cancel-region">×</button></div><div class="preview-wrap" id="preview-wrap"><canvas id="preview-canvas"></canvas><div id="selection-box"></div></div><div class="modal-actions"><button class="ghost" id="full-region">כל המקור</button><button class="ghost" id="last-region">האזור האחרון</button><select id="saved-region" aria-label="אזורים שמורים"><option value="">אזור שמור…</option></select><button class="ghost" id="save-region" disabled>שמירת האזור</button><button class="primary" id="confirm-region" disabled>אישור האזור</button></div></div></div>
+  <div class="scroll-capture-bar hidden" id="scroll-capture-bar"><strong>⇣ צילום גלילה</strong><span id="scroll-capture-status">עבור למקור וגלול לאט כלפי מטה</span><button id="finish-scroll-capture">סיום ושמירה</button></div>
   <div class="toast hidden" id="toast"></div>
   <video id="camera-video" autoplay muted playsinline></video><canvas id="recording-canvas"></canvas>
   <script src="browser-api.js"></script>
   <script src="dev-client.js"></script>
   <script src="editor-engine.js"></script>
+  <script src="scroll-capture-engine.js"></script>
+  <script src="video-timeline-utils.cjs"></script>
   <script src="image-editor.js"></script>
   <script src="renderer.js"></script>
 </body>
