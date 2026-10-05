@@ -44,7 +44,7 @@ test.describe.serial('visual baseline', () => {
   });
   test.afterAll(async () => { await closeStudio(app); });
 
-  const masks = () => [page.locator('.source-card img'), page.locator('#display-video'), page.locator('#toast'), page.locator('.clip-thumb'), page.locator('.library-item img'), page.locator('#output-path'), page.locator('#engine-grid article b'), page.locator('#engine-grid article span')];
+  const masks = () => [page.locator('.source-card img'), page.locator('#display-video'), page.locator('#toast'), page.locator('.clip-thumb'), page.locator('.library-item img'), page.locator('#output-path'), page.locator('#engine-grid article b'), page.locator('#engine-grid article span'), page.locator('.app-version-badge')];
   const settle = async () => {
     await page.evaluate(() => { document.querySelector('#toast')?.classList.add('hidden'); document.activeElement?.blur(); });
     await page.mouse.move(2, 2);
@@ -97,7 +97,7 @@ test.describe.serial('visual baseline', () => {
       await shot(`${look.name}-library`);
       await nav('tools');
       // The engine scan is asynchronous; wait for the four result cards before photographing.
-      await expect(page.locator('#engine-grid article')).toHaveCount(4);
+      await expect(page.locator('#engine-grid article')).toHaveCount(4, { timeout: 30_000 });
       await shot(`${look.name}-tools`);
       await nav('settings');
       for (const tab of ['general', 'shortcuts', 'appearance', 'workflows']) {

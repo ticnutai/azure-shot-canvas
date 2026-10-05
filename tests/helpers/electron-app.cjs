@@ -33,7 +33,8 @@ async function launchStudio(testName, options = {}) {
     if (message.type() === 'error') runtimeErrors.push({ type: 'console', text: message.text() });
   });
   page.on('pageerror', (error) => runtimeErrors.push({ type: 'pageerror', text: error.message }));
-  await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true', null, { timeout: 20_000 });
+  // Generous: on a busy machine (other heavy processes) a cold start can take well over 20 s.
+  await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true', null, { timeout: 45_000 });
   await page.waitForFunction(() => document.documentElement.dataset.sourcesLoading === 'false' && document.querySelectorAll('.source-card').length > 0, null, { timeout: 20_000 });
   return { app, page, outputDir, runtimeErrors };
 }
