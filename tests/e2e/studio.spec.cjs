@@ -173,8 +173,10 @@ test.describe('Electron production workflow', () => {
     await page.locator('[data-settings-tab="image"]').click();
     await expect(page.locator('[data-settings-section="image"]')).toHaveClass(/active/);
     await page.locator('[data-settings-tab="video"]').click();
-    expect(await page.locator('#format-select option:disabled').count()).toBe(2);
-    metrics.push(metric('Settings tabs and capability labels', 3, 'tabs', 3, 'min', 'video/audio/image; unavailable formats disabled'));
+    // Every format is available now (MOV and GIF were 'coming soon').
+    expect(await page.locator('#format-select option:disabled').count()).toBe(0);
+    expect(await page.locator('#format-select option').count()).toBe(4);
+    metrics.push(metric('Settings tabs and capability labels', 3, 'tabs', 3, 'min', 'video/audio/image; all four video formats available'));
     await page.locator('#close-capture-settings').click();
 
     const recordNavigation = page.locator('.sidebar .nav-item[data-page="capture"]:not([data-action])');
@@ -428,6 +430,8 @@ test.describe('Electron production workflow', () => {
     // Wait for the window to finish growing: if it grows under the pointer afterwards, a real mouseenter rightly keeps it open.
     await expect.poll(() => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).getBounds().width)).toBe(356);
     await quickbarPage.waitForTimeout(300);
+    // Move the real pointer off the bar too, so it cannot re-enter and (rightly) keep the bar open.
+    await quickbarPage.mouse.move(3000, 3000);
     await quickbarPage.locator('#quickbar').dispatchEvent('mouseleave');
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'false', { timeout: 5000 });
 
