@@ -549,6 +549,14 @@ test.describe('Electron production workflow', () => {
     await page.locator('#confirm-region').click();
     const reusableRegionCapture = await waitForNewFile(outputDir, '.png', before);
 
+    // 'Capture last region' shortcut: shoots the stored area at once, without opening the picker.
+    before = new Set(await fs.readdir(outputDir));
+    await page.evaluate(() => executeShortcutAction('repeatRegion'));
+    const repeatedRegionCapture = await waitForNewFile(outputDir, '.png', before);
+    await expect(page.locator('#region-modal')).toBeHidden();
+    const [lastSize, repeatedSize] = await Promise.all([lastRegionCapture, repeatedRegionCapture].map(pngDimensions));
+    expect([repeatedSize.width, repeatedSize.height]).toEqual([lastSize.width, lastSize.height]);
+
     await setCaptureDefaults(page, 'screenshot', 'scroll');
     before = new Set(await fs.readdir(outputDir));
     await page.locator('#record-button').click();
@@ -565,7 +573,7 @@ test.describe('Electron production workflow', () => {
     const scrollHeight = Number(await page.locator('html').getAttribute('data-scroll-height'));
     const metrics = [
       metric('Guided scrolling capture', scrollFrames, 'frames sampled', 1, 'min', `${scrollParts} stitched parts; output height ${scrollHeight}px`),
-      metric('Reusable capture regions', 3, 'workflows', 3, 'min', 'saved region, last region and stored region selector all produced valid PNG files'),
+      metric('Reusable capture regions', 4, 'workflows', 4, 'min', 'saved region, last region, stored region selector and the instant repeat-last-region shortcut (same size, no picker)'),
       metric('Scrolling PNG integrity', dimensions[3].size, 'bytes', 1000, 'min', `${dimensions[3].width}x${dimensions[3].height}`)
     ];
     expect(metrics.every((item) => item.pass)).toBeTruthy();

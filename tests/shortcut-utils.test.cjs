@@ -18,9 +18,9 @@ test('legacy shortcut strings migrate to structured trigger bindings', () => {
 });
 
 test('catalog exposes recording capture audio camera library and window actions', () => {
-  assert.equal(Object.keys(ACTION_DEFINITIONS).length, 15);
+  assert.equal(Object.keys(ACTION_DEFINITIONS).length, 16);
   assert.deepEqual(new Set(Object.values(ACTION_DEFINITIONS).map((item) => item.category)), new Set(['recording', 'capture', 'audio', 'camera', 'library', 'window']));
-  assert.equal(Object.keys(DEFAULT_SHORTCUTS).length, 15);
+  assert.equal(Object.keys(DEFAULT_SHORTCUTS).length, 16);
 });
 
 test('single and double press bindings normalize and produce accelerators', () => {

@@ -1041,6 +1041,15 @@ function roundedRect(context, x, y, width, height, radius) {
   context.roundRect(x, y, width, height, radius);
 }
 
+// Regions are stored normalized (0–1) relative to the source; shared by the picker and 'capture last region'.
+function readStoredRegion(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!value || !['x', 'y', 'width', 'height'].every((field) => Number.isFinite(value[field]))) return null;
+    return value;
+  } catch { return null; }
+}
+
 function chooseRegion() {
   const modal = $('#region-modal');
   const canvas = $('#preview-canvas');
@@ -1053,13 +1062,6 @@ function chooseRegion() {
   box.style.display = 'none';
   $('#confirm-region').disabled = true;
 
-  const readStoredRegion = (key) => {
-    try {
-      const value = JSON.parse(localStorage.getItem(key) || 'null');
-      if (!value || !['x', 'y', 'width', 'height'].every((field) => Number.isFinite(value[field]))) return null;
-      return value;
-    } catch { return null; }
-  };
   const readSavedRegions = () => {
     try {
       const value = JSON.parse(localStorage.getItem('aurum-saved-regions') || '[]');
@@ -1347,7 +1349,8 @@ async function beginCapture(kind, forcedScope = null) {
     }
     stopLivePreview({ preserveDisplay: true });
     await acquireInputs(kind === 'record');
-    const region = scope === 'full' ? { x: 0, y: 0, width: 1, height: 1 } : await chooseRegion();
+    // 'last-region' reuses the area chosen last time; with none stored yet it falls back to the picker.
+    const region = scope === 'full' ? { x: 0, y: 0, width: 1, height: 1 } : (scope === 'last-region' && readStoredRegion('aurum-last-region')) || await chooseRegion();
     if (!region) {
       stopInputStreams();
       setStatus('מוכן');
@@ -1617,6 +1620,7 @@ async function executeShortcutAction(action) {
   if (action === 'pause') return togglePause();
   if (action === 'screenshot') return beginCapture('screenshot', 'full');
   if (action === 'region') return beginCapture('screenshot', 'region');
+  if (action === 'repeatRegion') return beginCapture('screenshot', 'last-region');
   if (action === 'screenshotEdit') {
     const previous = state.afterScreenshotAction;
     state.afterScreenshotAction = 'professional';
