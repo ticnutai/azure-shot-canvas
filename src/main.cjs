@@ -90,9 +90,6 @@ async function createQuickbarWindow() {
   });
   quickbarWindow.setMenuBarVisibility(false);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
-  quickbarWindow.on('blur', () => {
-    if (!quickbarPreferences.pinned && quickbarPreferences.activation === 'click') positionQuickbar(false);
-  });
   await quickbarWindow.loadFile(path.join(__dirname, 'quickbar.html'));
   quickbarWindow.setFocusable(false);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
@@ -106,7 +103,13 @@ async function createQuickbarWindow() {
 async function applyQuickbarPreferences(patch = {}) {
   await saveQuickbarPreferences(patch);
   if (!quickbarPreferences.enabled) { clearInterval(quickbarCursorTimer); quickbarCursorTimer = null; quickbarWindow?.destroy(); quickbarWindow = null; quickbarExpanded = false; }
-  else { await createQuickbarWindow(); updateQuickbarCursorTracking(); positionQuickbar(quickbarPreferences.pinned); quickbarWindow?.webContents.send('quickbar:preferences', quickbarPreferences); }
+  else {
+    await createQuickbarWindow();
+    updateQuickbarCursorTracking();
+    // Unpinning keeps the bar open under the pointer; it then closes like any unpinned bar (pointer leaves / collapse button).
+    positionQuickbar(quickbarPreferences.pinned || quickbarExpanded);
+    quickbarWindow?.webContents.send('quickbar:preferences', quickbarPreferences);
+  }
   return quickbarPreferences;
 }
 

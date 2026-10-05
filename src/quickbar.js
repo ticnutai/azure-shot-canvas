@@ -36,8 +36,11 @@
     button.setAttribute('aria-pressed', String(preferences.pinned));
   });
   document.querySelector('#quickbar').addEventListener('mouseenter', () => clearTimeout(collapseTimer));
+  // The bar window can never take focus, so the main process never sees a blur to close a click-opened bar.
+  // Click mode therefore closes after the pointer has been away for a while; hover mode closes almost at once.
   document.querySelector('#quickbar').addEventListener('mouseleave', () => {
-    if (!preferences.pinned && preferences.activation === 'hover') collapseTimer = setTimeout(() => setExpanded(false), 260);
+    if (preferences.pinned) return;
+    collapseTimer = setTimeout(() => setExpanded(false), preferences.activation === 'hover' ? 260 : 1500);
   });
   document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', async () => {
     button.disabled = true;
