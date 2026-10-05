@@ -1,6 +1,6 @@
 {
   "name": "hebrew-screen-studio",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "אולפן צילום והקלטת מסך מקומי ל-Windows",
   "main": "src/main.cjs",
   "author": "Screen Studio",
@@ -54,6 +54,13 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableCookieEncryption": true,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
     }
   },
   "dependencies": {}
