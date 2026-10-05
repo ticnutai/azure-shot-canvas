@@ -6,6 +6,11 @@ html[data-preview-fit="cover"] #display-video.live-preview-video { object-fit:co
 .capture-preview .preview-status,.capture-preview .expand-button,.capture-preview .snapshot-fab,.capture-preview .audio-meter { z-index:4; }
 .preview-display-controls { position:absolute; left:16px; top:16px; bottom:auto; z-index:5; display:flex; align-items:center; gap:5px; padding:4px; border:1px solid #ffffff33; border-radius:13px; background:#05080cbb; backdrop-filter:blur(10px); opacity:0; transition:opacity .2s; }
 .capture-preview.preview-ready .preview-display-controls { opacity:1; }
+/* Preview switched off: keep only the on/off switch, so the preview can be turned back on from here. */
+.capture-preview.preview-off .preview-display-controls { opacity:1; }
+.capture-preview.preview-off .preview-display-controls > :not(#live-preview-toggle) { display:none; }
+.capture-preview.preview-off .expand-button { display:none; }
+#live-preview-toggle[aria-pressed="false"] { color:var(--gold); }
 .preview-display-controls button { width:31px; height:29px; border:0; border-radius:8px; background:transparent; color:#ddd; cursor:pointer; }
 .preview-display-controls button.active { background:var(--gold); color:var(--accent-text); }
 .preview-display-controls label { display:flex; align-items:center; gap:5px; padding:0 5px; color:#ddd; font-size:9px; direction:ltr; }

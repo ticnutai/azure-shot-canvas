@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   qaEnabled: process.env.SCREEN_STUDIO_QA === '1',
   setUiZoom: (factor) => webFrame.setZoomFactor(Math.max(0.75, Math.min(1.5, Number(factor) || 1))),
   listSources: () => ipcRenderer.invoke('sources:list'),
+  setCaptureExclusion: (enabled) => ipcRenderer.invoke('window:capture-exclusion', Boolean(enabled)),
   getCaptureCapabilities: () => ipcRenderer.invoke('capture:capabilities'),
   prepareCapture: (options) => ipcRenderer.invoke('capture:prepare', options),
   saveScreenshot: (bytes) => ipcRenderer.invoke('file:save-screenshot', bytes),

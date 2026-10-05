@@ -671,6 +671,9 @@ function registerIpc() {
     return listener(event, ...args);
   });
   ipcMain.handle('sources:list', getSources);
+  // Hides the studio window from screen captures (Windows excludes it from capture), so a live preview of the
+  // whole screen does not show itself recursively and full-screen recordings do not include the studio.
+  ipcMain.handle('window:capture-exclusion', (_event, enabled) => { mainWindow?.setContentProtection(Boolean(enabled)); return Boolean(enabled); });
   ipcMain.handle('capture:capabilities', () => getEncoderCapabilities());
   ipcMain.handle('capture:prepare', (_event, options) => {
     pendingCapture = { sourceId: options.sourceId, includeSystemAudio: Boolean(options.includeSystemAudio) };

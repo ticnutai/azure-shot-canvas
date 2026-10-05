@@ -361,6 +361,8 @@ function applyRecentPreferences(filter = state.recentFilter, sort = state.recent
 }
 
 function restoreUserPreferences() {
+  setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') !== 'off', false);
+  setCaptureExclusion(localStorage.getItem('aurum-exclude-studio-window') !== 'off', false);
   applyCaptureLayout(localStorage.getItem('aurum-capture-layout') || 'clean', false);
   applyCapturePreferences(localStorage.getItem('aurum-default-capture-kind') || 'record', localStorage.getItem('aurum-default-capture-scope') || 'full', false);
   applyAfterScreenshotAction(localStorage.getItem('aurum-after-screenshot-action') || 'save', false);
@@ -745,6 +747,7 @@ function monitorPreviewFrames(requestId) {
 }
 
 async function startLivePreview(source = state.selectedSource) {
+  if (state.livePreviewEnabled === false) { showLivePreviewOff(); return false; }
   if (!source || state.recorder || state.busy) return false;
   const sameSource = state.previewStream?.active && document.documentElement.dataset.previewSourceId === source.id;
   if (sameSource) return true;
@@ -784,6 +787,35 @@ async function startLivePreview(source = state.selectedSource) {
     $('#selected-source-label').textContent = `לא ניתן להציג — ${source.name}`;
     return false;
   }
+}
+
+function showLivePreviewOff() {
+  setPreviewState('off', 'התצוגה החיה כבויה — הצילום וההקלטה עובדים כרגיל. הכפתור ○ בפינה מפעיל אותה.');
+  if (state.selectedSource) $('#selected-source-label').textContent = state.selectedSource.name;
+}
+
+// Live preview is optional: capture opens its own display stream, so turning the preview off only saves CPU and memory.
+function setLivePreviewEnabled(enabled, persist = true) {
+  state.livePreviewEnabled = Boolean(enabled);
+  document.documentElement.dataset.livePreview = state.livePreviewEnabled ? 'on' : 'off';
+  const button = $('#live-preview-toggle');
+  if (button) {
+    button.setAttribute('aria-pressed', String(state.livePreviewEnabled));
+    button.textContent = state.livePreviewEnabled ? '◉' : '○';
+    button.title = state.livePreviewEnabled ? 'תצוגה חיה פעילה — לחיצה לכיבוי' : 'תצוגה חיה כבויה — לחיצה להפעלה';
+  }
+  if ($('#live-preview-enabled')) $('#live-preview-enabled').checked = state.livePreviewEnabled;
+  if (persist) localStorage.setItem('aurum-live-preview', state.livePreviewEnabled ? 'on' : 'off');
+  if (state.recorder || state.busy) return;
+  if (state.livePreviewEnabled) restoreLivePreview();
+  else { stopLivePreview(); showLivePreviewOff(); }
+}
+
+function setCaptureExclusion(enabled, persist = true) {
+  if ($('#exclude-studio-window')) $('#exclude-studio-window').checked = Boolean(enabled);
+  document.documentElement.dataset.captureExclusion = enabled ? 'on' : 'off';
+  if (persist) localStorage.setItem('aurum-exclude-studio-window', enabled ? 'on' : 'off');
+  api.setCaptureExclusion?.(Boolean(enabled)).catch(() => {});
 }
 
 function restoreLivePreview() {
@@ -2035,6 +2067,9 @@ async function initialize() {
   $$('[data-preview-fit]').forEach((button) => button.addEventListener('click', () => applyVisualCapturePreferences({ previewFit: button.dataset.previewFit })));
   $('#preview-zoom').addEventListener('input', (event) => applyVisualCapturePreferences({ previewZoom: event.target.value }));
   $('#toggle-safe-area').addEventListener('click', () => applyVisualCapturePreferences({ safeArea: !state.safeArea }));
+  $('#live-preview-toggle')?.addEventListener('click', () => setLivePreviewEnabled(!state.livePreviewEnabled));
+  $('#live-preview-enabled')?.addEventListener('change', (event) => setLivePreviewEnabled(event.target.checked));
+  $('#exclude-studio-window')?.addEventListener('change', (event) => setCaptureExclusion(event.target.checked));
   $('#camera-position').addEventListener('change', (event) => applyVisualCapturePreferences({ cameraPosition: event.target.value }));
   $('#camera-size').addEventListener('input', (event) => applyVisualCapturePreferences({ cameraSize: event.target.value }));
   $('#screenshot-button').addEventListener('click', () => beginCapture('screenshot'));

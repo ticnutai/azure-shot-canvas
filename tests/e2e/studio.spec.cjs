@@ -1002,6 +1002,48 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('live preview can be switched off and the studio window is hidden from captures', async ({}, testInfo) => {
+    test.setTimeout(120_000);
+    const contentProtected = () => app.evaluate(({ BrowserWindow }) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith('index.html'));
+      return win.isContentProtected();
+    });
+    // Windows applies capture exclusion when a window is shown; the QA window starts hidden.
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith('index.html')).showInactive());
+    await expect.poll(contentProtected).toBe(true);
+    await setCaptureDefaults(page, 'screenshot', 'full');
+    await page.locator('.source-card').first().click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'ready', { timeout: 15_000 });
+    await page.locator('#live-preview-toggle').click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'off');
+    await expect(page.locator('#live-preview-toggle')).toHaveAttribute('aria-pressed', 'false');
+    expect(await page.evaluate(() => Boolean(state.previewStream))).toBe(false);
+    // Capture still works with the preview off: it opens its own display stream.
+    const before = new Set(await fs.readdir(outputDir));
+    await page.locator('#record-button').click();
+    const shot = await waitForNewFile(outputDir, '.png', before, 30_000);
+    expect((await fs.stat(shot)).size).toBeGreaterThan(1000);
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'off');
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-live-preview', 'off');
+    await page.locator('#live-preview-toggle').click();
+    await page.locator('.source-card').first().click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'ready', { timeout: 15_000 });
+    await page.locator('[data-page="settings"]').click();
+    await page.locator('[data-preference-tab="general"]').click();
+    await page.locator('#exclude-studio-window').uncheck();
+    await expect.poll(contentProtected).toBe(false);
+    await page.locator('#exclude-studio-window').check();
+    await expect.poll(contentProtected).toBe(true);
+    const metrics = [
+      metric('Live preview toggle', 4, 'assertions', 4, 'min', 'off stops the stream, capture works while off, choice survives reload, on restores the preview'),
+      metric('Studio window hidden from capture', 2, 'states', 2, 'min', 'content protection follows the setting on and off')
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
   test('window layouts, layout colours and design kits apply, persist and never overflow', async ({}, testInfo) => {
     test.setTimeout(120_000);
     await page.locator('.nav-item[data-page="settings"]').click();
