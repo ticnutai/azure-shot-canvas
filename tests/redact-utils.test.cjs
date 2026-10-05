@@ -58,3 +58,9 @@ test('padding grows the box but never below zero; kinds filter and summary', () 
   assert.deepEqual(findSensitiveRegions(line('a@b.co 054-1234567'), { kinds: ['phone'] }).map((item) => item.kind), ['phone']);
   assert.equal(summarizeRegions([{ label: 'טלפון' }, { label: 'טלפון' }, { label: 'דוא"ל' }]), '2 טלפון, 1 דוא"ל');
 });
+
+test('OCR noise between digit groups does not hide a phone or card number', () => {
+  assert.deepEqual(findSensitiveRegions(line('Phone: 052-/7654321')).map((item) => item.kind), ['phone']);
+  assert.deepEqual(findSensitiveRegions(line('Card: 4111 /1111 1111 |1111')).map((item) => item.kind), ['card']);
+  assert.deepEqual(findSensitiveRegions(line('Order 2026/10/05 total 120.50')), []);
+});

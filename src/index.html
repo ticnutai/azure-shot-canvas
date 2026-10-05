@@ -91,8 +91,9 @@
             <fieldset class="choice-group"><legend>אזור צילום</legend><label><input type="radio" name="screenshot-mode" value="region" checked><span>אזור נבחר</span></label><label><input type="radio" name="screenshot-mode" value="full"><span>מסך מלא</span></label><label><input type="radio" name="screenshot-mode" value="scroll"><span>עמוד גלילה</span></label><label class="unavailable"><input type="radio" disabled><span>אלמנט — בקרוב</span></label></fieldset>
             <label class="field-row"><span><b>פורמט תמונה</b></span><select id="image-format"><option>PNG</option><option disabled>JPG — בקרוב</option><option disabled>WEBP — בקרוב</option><option disabled>PDF — בקרוב</option></select></label>
             <label class="field-row"><span><b>השהיה לפני צילום</b><small>ספירה לאחור בלי להקפיא את התצוגה</small></span><select id="capture-delay"><option value="0">ללא</option><option value="3">3 שניות</option><option value="5">5 שניות</option><option value="10">10 שניות</option></select></label>
-            <label class="switch-row unavailable"><span><b>רקע מעוצב</b><small>בקרוב — צל ורקע מותג</small></span><input type="checkbox" disabled><i></i></label>
-            <label class="switch-row unavailable"><span><b>טשטוש מידע רגיש</b><small>בקרוב — זיהוי אוטומטי</small></span><input type="checkbox" disabled><i></i></label>
+            <label class="switch-row"><span><b>רקע מעוצב</b><small>כל צילום נשמר מוכן לשיתוף: ריפוד, פינות מעוגלות, צל ורקע</small></span><input type="checkbox" id="auto-beautify"><i></i></label>
+            <label class="field-row"><span><b>רקע לצילום המעוצב</b></span><select id="auto-beautify-style"><option value="ocean">ים</option><option value="sunset">שקיעה</option><option value="slate">אפור</option></select></label>
+            <label class="switch-row"><span><b>השחרת מידע רגיש</b><small>דוא"ל, טלפונים, כרטיסי אשראי, תעודות זהות וקישורים מושחרים לפני השמירה — המקור לא נשמר</small></span><input type="checkbox" id="auto-redact"><i></i></label>
           </section>
 
           <div class="legacy-quality" id="quality-options" aria-hidden="true"><button data-quality="text"></button><button data-quality="balanced"></button><button class="active" data-quality="motion"></button></div>
@@ -350,6 +351,7 @@
   <script src="editor-engine.js"></script>
   <script src="scroll-capture-engine.js"></script>
   <script src="video-timeline-utils.cjs"></script>
+  <script src="image-finish.js"></script>
   <script src="image-editor.js"></script>
   <script src="appearance.js"></script>
   <script src="renderer.js"></script>

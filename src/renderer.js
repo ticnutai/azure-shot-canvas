@@ -360,7 +360,23 @@ function applyRecentPreferences(filter = state.recentFilter, sort = state.recent
   }
 }
 
+function applyImageFinishPreferences(patch = {}, persist = true) {
+  if ('autoBeautify' in patch) state.autoBeautify = Boolean(patch.autoBeautify);
+  if ('autoRedact' in patch) state.autoRedact = Boolean(patch.autoRedact);
+  if (window.aurumImageFinish?.backgrounds.includes(patch.autoBeautifyStyle)) state.autoBeautifyStyle = patch.autoBeautifyStyle;
+  state.autoBeautifyStyle ||= 'ocean';
+  if ($('#auto-beautify')) $('#auto-beautify').checked = Boolean(state.autoBeautify);
+  if ($('#auto-beautify-style')) { $('#auto-beautify-style').value = state.autoBeautifyStyle; $('#auto-beautify-style').disabled = !state.autoBeautify; }
+  if ($('#auto-redact')) $('#auto-redact').checked = Boolean(state.autoRedact);
+  if (persist) {
+    localStorage.setItem('aurum-auto-beautify', state.autoBeautify ? 'on' : 'off');
+    localStorage.setItem('aurum-auto-beautify-style', state.autoBeautifyStyle);
+    localStorage.setItem('aurum-auto-redact', state.autoRedact ? 'on' : 'off');
+  }
+}
+
 function restoreUserPreferences() {
+  applyImageFinishPreferences({ autoBeautify: localStorage.getItem('aurum-auto-beautify') === 'on', autoRedact: localStorage.getItem('aurum-auto-redact') === 'on', autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean' }, false);
   setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') !== 'off', false);
   setCaptureExclusion(localStorage.getItem('aurum-exclude-studio-window') !== 'off', false);
   applyCaptureLayout(localStorage.getItem('aurum-capture-layout') || 'clean', false);
@@ -1375,9 +1391,24 @@ async function beginCapture(kind, forcedScope = null) {
 
 async function saveScreenshot() {
   drawFrame();
-  const blob = await new Promise((resolve) => recordingCanvas.toBlob(resolve, 'image/png'));
-  const result = await api.saveScreenshot(await blob.arrayBuffer());
+  // Freeze the frame, release the screen, then finish the image before anything touches the disk.
+  let canvas = document.createElement('canvas');
+  canvas.width = recordingCanvas.width;
+  canvas.height = recordingCanvas.height;
+  canvas.getContext('2d').drawImage(recordingCanvas, 0, 0);
   stopInputStreams();
+  const finish = window.aurumImageFinish;
+  if (state.autoRedact && api.detectSensitiveRegions) {
+    setStatus('מאתר מידע רגיש…', 'busy');
+    const detection = await api.detectSensitiveRegions(canvas.toDataURL('image/png'));
+    if (detection.regions.length) {
+      canvas = finish.redact(canvas, detection.regions);
+      document.documentElement.dataset.lastAutoRedactions = String(detection.regions.length);
+      showToast(`הושחרו לפני השמירה: ${detection.summary}`, 6000);
+    } else document.documentElement.dataset.lastAutoRedactions = '0';
+  }
+  const image = state.autoBeautify ? await finish.beautify(canvas.toDataURL('image/png'), state.autoBeautifyStyle) : await finish.toPng(canvas);
+  const result = await api.saveScreenshot(image.bytes);
   // The file is safe on disk: free the capture now, so library refresh, OCR and automations never block the next shot.
   state.busy = false;
   runAfterScreenshot(result);
@@ -2089,6 +2120,9 @@ async function initialize() {
   $('#preview-zoom').addEventListener('input', (event) => applyVisualCapturePreferences({ previewZoom: event.target.value }));
   $('#toggle-safe-area').addEventListener('click', () => applyVisualCapturePreferences({ safeArea: !state.safeArea }));
   $('#live-preview-toggle')?.addEventListener('click', () => setLivePreviewEnabled(!state.livePreviewEnabled));
+  $('#auto-beautify')?.addEventListener('change', (event) => applyImageFinishPreferences({ autoBeautify: event.target.checked }));
+  $('#auto-beautify-style')?.addEventListener('change', (event) => applyImageFinishPreferences({ autoBeautifyStyle: event.target.value }));
+  $('#auto-redact')?.addEventListener('change', (event) => applyImageFinishPreferences({ autoRedact: event.target.checked }));
   $('#live-preview-enabled')?.addEventListener('change', (event) => setLivePreviewEnabled(event.target.checked));
   $('#exclude-studio-window')?.addEventListener('change', (event) => setCaptureExclusion(event.target.checked));
   $('#camera-position').addEventListener('change', (event) => applyVisualCapturePreferences({ cameraPosition: event.target.value }));

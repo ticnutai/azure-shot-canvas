@@ -943,10 +943,14 @@ function registerIpc() {
   // Smart redact: OCR the editor's current background (it may already be cropped), return boxes in its pixels.
   ipcMain.handle('editor:detect-sensitive', async (_event, dataUrl) => {
     const imagePath = path.join(os.tmpdir(), `aurum-redact-${crypto.randomUUID()}.png`);
-    await fs.writeFile(imagePath, dataUrlBytes(dataUrl));
+    // OCR reads small interface text far better enlarged; boxes are scaled back to the original pixels.
+    const image = nativeImage.createFromBuffer(dataUrlBytes(dataUrl));
+    const { width } = image.getSize();
+    const scale = width && width < 2200 ? 2 : 1;
+    await fs.writeFile(imagePath, scale === 1 ? image.toPNG() : image.resize({ width: width * scale, quality: 'best' }).toPNG());
     try {
       const words = parseTesseractTsv(await runOcrWords(imagePath, { tessdataDirectory: await ensureOcrLanguageData() }));
-      const regions = findSensitiveRegions(words, { padding: 6 });
+      const regions = findSensitiveRegions(words, { padding: 6 }).map((region) => ({ ...region, left: region.left / scale, top: region.top / scale, width: region.width / scale, height: region.height / scale }));
       return { regions, summary: summarizeRegions(regions), words: words.length };
     } finally {
       await fs.rm(imagePath, { force: true }).catch(() => {});

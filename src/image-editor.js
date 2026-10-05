@@ -127,47 +127,12 @@
   $('#editor-save').addEventListener('click', () => save());
   $('#editor-save-copy').addEventListener('click', () => save('copy'));
   $('#editor-copy').addEventListener('click', () => copyToClipboard());
-  // Share-ready export: the flattened edit on a gradient with padding, rounded corners and a soft shadow.
-  const BEAUTIFY_BACKGROUNDS = { ocean: ['#2b5876', '#4e4376'], sunset: ['#ee9ca7', '#ffdde1'], slate: ['#e2e8f0', '#94a3b8'] };
-  const loadImage = (src) => new Promise((resolve, reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = () => reject(new Error('טעינת התמונה נכשלה')); image.src = src; });
-  async function beautifiedPng(dataUrl, style) {
-    const image = await loadImage(dataUrl);
-    const padding = Math.round(Math.max(image.width, image.height) * 0.06);
-    const radius = Math.round(Math.min(image.width, image.height) * 0.025) + 6;
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width + padding * 2;
-    canvas.height = image.height + padding * 2;
-    const context = canvas.getContext('2d');
-    const [from, to] = BEAUTIFY_BACKGROUNDS[style] || BEAUTIFY_BACKGROUNDS.ocean;
-    const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, from);
-    gradient.addColorStop(1, to);
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.save();
-    context.shadowColor = 'rgba(0, 0, 0, 0.35)';
-    context.shadowBlur = padding * 0.6;
-    context.shadowOffsetY = padding * 0.15;
-    context.beginPath();
-    context.roundRect(padding, padding, image.width, image.height, radius);
-    context.fillStyle = '#ffffff';
-    context.fill();
-    context.restore();
-    context.save();
-    context.beginPath();
-    context.roundRect(padding, padding, image.width, image.height, radius);
-    context.clip();
-    context.drawImage(image, padding, padding);
-    context.restore();
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
-    return { bytes: await blob.arrayBuffer(), width: canvas.width, height: canvas.height };
-  }
   $('#editor-beautify')?.addEventListener('click', async () => {
     if (!engine) return;
     const button = $('#editor-beautify');
     button.disabled = true;
     try {
-      const result = await beautifiedPng(engine.exportDataUrl(), $('#editor-beautify-style').value);
+      const result = await window.aurumImageFinish.beautify(engine.exportDataUrl(), $('#editor-beautify-style').value);
       const saved = await api.saveScreenshot(result.bytes);
       shell.dataset.beautifiedPath = saved.path;
       $('#editor-save-state').textContent = `נשמרה תמונה מעוצבת חדשה (${result.width}×${result.height})`;

@@ -469,17 +469,9 @@ class AurumImageEditorEngine {
     this.pushHistory();
   }
 
-  // OCR reads small UI text far better when enlarged; region coordinates are divided back by the same scale.
+  // The current background as PNG (after any crop); OCR enlargement happens in the main process.
   backgroundForOcr() {
-    const image = this.backgroundImageElement;
-    const scale = image.naturalWidth < 2200 ? 2 : 1;
-    const canvas = document.createElement('canvas');
-    canvas.width = image.naturalWidth * scale;
-    canvas.height = image.naturalHeight * scale;
-    const context = canvas.getContext('2d');
-    context.imageSmoothingQuality = 'high';
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return { dataUrl: canvas.toDataURL('image/png'), scale };
+    return { dataUrl: this.backgrounds.get(this.currentBackgroundKey), scale: 1 };
   }
 
   addRedactions(regions, scale = 1) {

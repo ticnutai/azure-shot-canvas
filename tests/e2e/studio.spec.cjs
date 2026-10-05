@@ -1159,6 +1159,57 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('automatic finishing: designed background and sensitive-data blackout before saving', async ({}, testInfo) => {
+    test.setTimeout(150_000);
+    await setCaptureDefaults(page, 'screenshot', 'full');
+    // Baseline size without finishing.
+    let before = new Set(await fs.readdir(outputDir));
+    await page.locator('#record-button').click();
+    const plain = await pngDimensions(await waitForNewFile(outputDir, '.png', before, 30_000));
+    await page.locator('#open-capture-settings').click();
+    await page.locator('[data-settings-tab="image"]').click();
+    await setCheckbox(page, '#auto-beautify', true);
+    await page.locator('#auto-beautify-style').selectOption('sunset');
+    await setCheckbox(page, '#auto-redact', true);
+    await page.locator('#close-capture-settings').click();
+    before = new Set(await fs.readdir(outputDir));
+    await page.locator('#record-button').click();
+    const finished = await pngDimensions(await waitForNewFile(outputDir, '.png', before, 90_000));
+    expect(finished.width).toBeGreaterThan(plain.width);
+    expect(finished.height).toBeGreaterThan(plain.height);
+    await expect(page.locator('html')).toHaveAttribute('data-last-auto-redactions', '0');
+    // The same blackout path on real text: only the e-mail and phone lines turn black.
+    const blackout = await page.evaluate(async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 900;
+      canvas.height = 300;
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, 900, 300);
+      context.fillStyle = '#000000';
+      context.font = '36px Arial';
+      context.fillText('Mail: noa.cohen@example.com', 30, 70);
+      context.fillText('Phone: 052-7654321', 30, 160);
+      context.fillText('Hello and welcome', 30, 250);
+      const detection = await window.screenStudio.detectSensitiveRegions(canvas.toDataURL('image/png'));
+      const result = window.aurumImageFinish.redact(canvas, detection.regions).getContext('2d');
+      const dark = (x, y) => result.getImageData(x, y, 1, 1).data[0] < 40;
+      return { count: detection.regions.length, mail: dark(420, 58), phone: dark(260, 148), greeting: dark(120, 238) };
+    });
+    expect(blackout).toEqual({ count: 2, mail: true, phone: true, greeting: false });
+    await page.locator('#open-capture-settings').click();
+    await page.locator('[data-settings-tab="image"]').click();
+    await setCheckbox(page, '#auto-beautify', false);
+    await setCheckbox(page, '#auto-redact', false);
+    await page.locator('#close-capture-settings').click();
+    const metrics = [
+      metric('Automatic designed background', finished.width - plain.width, 'px', 1, 'min', `${plain.width}×${plain.height} → ${finished.width}×${finished.height}`),
+      metric('Automatic sensitive-data blackout', blackout.count, 'regions', 2, 'min', 'e-mail and phone burned black before saving; plain sentence untouched')
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
   test('smart redact finds e-mail, phone and card numbers with real OCR and blacks them out', async ({}, testInfo) => {
     test.setTimeout(150_000);
     const dataUrl = await page.evaluate(() => {

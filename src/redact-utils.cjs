@@ -41,10 +41,11 @@ function israeliIdValid(digits) {
 const PATTERNS = [
   { kind: 'email', label: 'דוא"ל', regex: /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g },
   { kind: 'url', label: 'קישור', regex: /\b(?:https?:\/\/|www\.)[^\s]+/gi },
-  { kind: 'card', label: 'כרטיס אשראי', regex: /\b(?:\d[ -]?){12,18}\d\b/g, check: (value) => luhnValid(value.replace(/\D/g, '')) },
+  { kind: 'card', label: 'כרטיס אשראי', regex: /\b(?:\d[ \-\/.|]{0,2}){12,18}\d\b/g, check: (value) => luhnValid(value.replace(/\D/g, '')) },
   { kind: 'id', label: 'תעודת זהות', regex: /\b\d{9}\b/g, check: israeliIdValid },
   { kind: 'ip', label: 'כתובת רשת', regex: /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g },
-  { kind: 'phone', label: 'טלפון', regex: /(?:\+972[ -]?|\b0)(?:[2-9]\d?)[ -]?\d{3}[ -]?\d{3,4}\b/g }
+  // OCR often adds noise between digit groups ("052-/7654321"), so up to two separator characters are tolerated.
+  { kind: 'phone', label: 'טלפון', regex: /(?:\+972[ \-\/.|]{0,2}|\b0)(?:[2-9]\d?)[ \-\/.|]{0,2}\d{3}[ \-\/.|]{0,2}\d{3,4}\b/g }
 ];
 
 function findSensitiveRegions(words, { padding = 4, kinds = null } = {}) {
