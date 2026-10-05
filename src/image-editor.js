@@ -127,6 +127,26 @@
   $('#editor-save').addEventListener('click', () => save());
   $('#editor-save-copy').addEventListener('click', () => save('copy'));
   $('#editor-copy').addEventListener('click', () => copyToClipboard());
+  const smartRedact = $('#editor-smart-redact');
+  if (!api.detectSensitiveRegions) smartRedact?.classList.add('hidden');
+  smartRedact?.addEventListener('click', async () => {
+    if (!engine) return;
+    smartRedact.disabled = true;
+    shell.dataset.smartRedact = 'running';
+    $('#editor-save-state').textContent = 'מאתר מידע רגיש בתמונה…';
+    try {
+      const { dataUrl, scale } = engine.backgroundForOcr();
+      const result = await api.detectSensitiveRegions(dataUrl);
+      const added = engine.addRedactions(result.regions, scale);
+      $('#editor-save-state').textContent = added ? `הושחרו ${added} פריטים: ${result.summary}` : 'לא נמצא מידע רגיש בתמונה';
+      shell.dataset.smartRedact = String(added);
+    } catch (error) {
+      $('#editor-save-state').textContent = `האיתור נכשל: ${error.message}`;
+      shell.dataset.smartRedact = 'error';
+    } finally {
+      smartRedact.disabled = false;
+    }
+  });
   $('#editor-undo').addEventListener('click', () => engine.undo()); $('#editor-redo').addEventListener('click', () => engine.redo());
   const setManualZoom = (zoom) => { $('#editor-workspace').dataset.manualZoom = 'true'; engine.setZoom(zoom); };
   const fitEditor = () => { $('#editor-workspace').dataset.manualZoom = 'false'; engine.fitToViewport(); };

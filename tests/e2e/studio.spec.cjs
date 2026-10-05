@@ -1045,6 +1045,47 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('smart redact finds e-mail, phone and card numbers with real OCR and blacks them out', async ({}, testInfo) => {
+    test.setTimeout(150_000);
+    const dataUrl = await page.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1400;
+      canvas.height = 420;
+      const context = canvas.getContext('2d');
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#000000';
+      context.font = '40px Arial';
+      context.fillText('Contact: dana.levi@example.com', 40, 90);
+      context.fillText('Phone: 054-1234567', 40, 190);
+      context.fillText('Card: 4111 1111 1111 1111', 40, 290);
+      context.fillText('Notes: nothing secret here', 40, 390);
+      return canvas.toDataURL('image/png');
+    });
+    const imagePath = path.join(outputDir, 'smart-redact-fixture.png');
+    await fs.writeFile(imagePath, Buffer.from(dataUrl.split(',')[1], 'base64'));
+    await page.evaluate((file) => window.aurumEditor.open(file, 'professional'), imagePath);
+    await expect(page.locator('#image-editor-shell')).toHaveAttribute('data-editor-ready', 'true');
+    const started = performance.now();
+    await page.locator('#editor-smart-redact').click();
+    await expect.poll(() => page.locator('#image-editor-shell').getAttribute('data-smart-redact'), { timeout: 120_000 }).not.toBe('running');
+    const elapsed = performance.now() - started;
+    const redactions = await page.evaluate(() => window.aurumEditor.objects().filter((object) => object.secureRedaction));
+    expect(redactions.length).toBe(3);
+    // The ordinary sentence at the bottom (y≈350–400) must stay readable.
+    expect(redactions.every((box) => box.top + box.height < 340)).toBeTruthy();
+    await page.locator('#editor-undo').click();
+    await expect.poll(() => page.evaluate(() => window.aurumEditor.stats().secureRedactions)).toBe(0);
+    await page.evaluate(() => window.aurumEditor.close(true));
+    const metrics = [
+      metric('Smart redact detections', redactions.length, 'regions', 3, 'min', 'e-mail, mobile phone and Luhn-valid card found by heb+eng OCR; plain sentence untouched'),
+      metric('Smart redact duration', elapsed, 'ms', 60_000, 'max', 'click to boxes on canvas, including local OCR'),
+      metric('Smart redact single undo', 1, 'steps', 1, 'min', 'all boxes removed by one undo')
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
   test('window layouts, layout colours and design kits apply, persist and never overflow', async ({}, testInfo) => {
     test.setTimeout(120_000);
     await page.locator('.nav-item[data-page="settings"]').click();

@@ -11,9 +11,10 @@ const { assertEditableImagePath, dataUrlBytes, editedCopyPath, projectPathFor } 
 const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
-const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, transcribeMedia } = require('./studio-tools.cjs');
+const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
 const { DEFAULT_QUICKBAR_PREFERENCES, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
 const { normalizeTimelineProject } = require('./video-timeline-utils.cjs');
+const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
 
 if (process.env.SCREEN_STUDIO_USER_DATA_DIR) app.setPath('userData', path.resolve(process.env.SCREEN_STUDIO_USER_DATA_DIR));
@@ -825,6 +826,18 @@ function registerIpc() {
     const quality = await analyzeMedia(resolved);
     await updateMetadata(resolved, { quality });
     return quality;
+  });
+  // Smart redact: OCR the editor's current background (it may already be cropped), return boxes in its pixels.
+  ipcMain.handle('editor:detect-sensitive', async (_event, dataUrl) => {
+    const imagePath = path.join(os.tmpdir(), `aurum-redact-${crypto.randomUUID()}.png`);
+    await fs.writeFile(imagePath, dataUrlBytes(dataUrl));
+    try {
+      const words = parseTesseractTsv(await runOcrWords(imagePath, { tessdataDirectory: await ensureOcrLanguageData() }));
+      const regions = findSensitiveRegions(words, { padding: 6 });
+      return { regions, summary: summarizeRegions(regions), words: words.length };
+    } finally {
+      await fs.rm(imagePath, { force: true }).catch(() => {});
+    }
   });
   ipcMain.handle('library:ocr', async (_event, filePath) => {
     const resolved = await assertLibraryFile(filePath, /\.png$/i);

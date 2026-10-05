@@ -445,6 +445,32 @@ class AurumImageEditorEngine {
     this.pushHistory();
   }
 
+  // OCR reads small UI text far better when enlarged; region coordinates are divided back by the same scale.
+  backgroundForOcr() {
+    const image = this.backgroundImageElement;
+    const scale = image.naturalWidth < 2200 ? 2 : 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth * scale;
+    canvas.height = image.naturalHeight * scale;
+    const context = canvas.getContext('2d');
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL('image/png'), scale };
+  }
+
+  addRedactions(regions, scale = 1) {
+    const rects = regions.map((region) => new Rect({
+      left: region.left / scale, top: region.top / scale, width: region.width / scale, height: region.height / scale,
+      originX: 'left', originY: 'top', fill: '#000000', stroke: '#000000', strokeWidth: 0, objectCaching: false
+    }));
+    rects.forEach((rect) => { rect.toolType = 'redact'; rect.secureRedaction = true; });
+    if (!rects.length) return 0;
+    this.canvas.add(...rects);
+    this.canvas.requestRenderAll();
+    this.pushHistory();
+    return rects.length;
+  }
+
   annotationsJson() {
     // canvas.toObject realizes multi-selection transforms; per-object toObject would store selection-relative positions.
     return this.canvas.toObject(CUSTOM_PROPERTIES).objects.filter((object) => object.dataRole !== 'background');

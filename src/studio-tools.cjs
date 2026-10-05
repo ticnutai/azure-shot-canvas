@@ -161,6 +161,19 @@ async function runOcr(filePath, options = {}) {
   return { text: result.stdout.trim(), language: result.stdout.trim() ? (language.includes('heb') && !/Failed loading language 'heb'/.test(result.error || '') ? language : 'eng') : language };
 }
 
+// Word boxes (TSV) for smart redact. Sparse-text mode suits screenshots, where text sits in scattered UI pieces.
+async function runOcrWords(filePath, options = {}) {
+  const tesseractCommand = existingExecutable('tesseract');
+  const base = [filePath, 'stdout', '--psm', '11'];
+  if (options.tessdataDirectory) base.push('--tessdata-dir', options.tessdataDirectory);
+  // -c tessedit_create_tsv=1 instead of the 'tsv' config name: a custom --tessdata-dir has no configs folder,
+  // and tesseract then silently falls back to plain text.
+  let result = await runHidden(tesseractCommand, [...base, '-l', 'heb+eng', '-c', 'tessedit_create_tsv=1'], { timeoutMs: 120_000 });
+  if (!result.ok) result = await runHidden(tesseractCommand, [filePath, 'stdout', '--psm', '11', '-l', 'eng', '-c', 'tessedit_create_tsv=1'], { timeoutMs: 120_000 });
+  if (!result.ok) throw new Error(`OCR נכשל: ${result.error}`);
+  return result.stdout;
+}
+
 function contentType(filePath) {
   const extension = path.extname(filePath).toLowerCase();
   return ({ '.png': 'image/png', '.mp4': 'video/mp4', '.webm': 'video/webm', '.srt': 'text/plain; charset=utf-8' })[extension] || 'application/octet-stream';
@@ -197,4 +210,4 @@ class PrivateShareServer {
   stop() { if (this.server) this.server.close(); this.server = null; this.port = null; this.shares.clear(); }
 }
 
-module.exports = { DEFAULT_TRANSCRIPTION_URL, PrivateShareServer, analyzeMedia, discoverLocalEngines, existingExecutable, qualitySummary, rationalNumber, runHidden, runOcr, srtTimestamp, transcribeMedia, wordsToSrt };
+module.exports = { runOcrWords, DEFAULT_TRANSCRIPTION_URL, PrivateShareServer, analyzeMedia, discoverLocalEngines, existingExecutable, qualitySummary, rationalNumber, runHidden, runOcr, srtTimestamp, transcribeMedia, wordsToSrt };

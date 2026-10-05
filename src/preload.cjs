@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   shareLocal: (filePath) => ipcRenderer.invoke('library:share-local', filePath),
   analyzeMedia: (filePath) => ipcRenderer.invoke('library:analyze', filePath),
   runOcr: (filePath) => ipcRenderer.invoke('library:ocr', filePath),
+  detectSensitiveRegions: (dataUrl) => ipcRenderer.invoke('editor:detect-sensitive', dataUrl),
   transcribeMedia: (filePath) => ipcRenderer.invoke('library:transcribe', filePath),
   getWaveform: (filePath) => ipcRenderer.invoke('library:waveform', filePath),
   pinImage: (filePath) => ipcRenderer.invoke('library:pin', filePath),
