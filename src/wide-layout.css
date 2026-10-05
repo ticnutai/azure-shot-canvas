@@ -8,6 +8,7 @@
 #capture-page .dashboard-grid { grid-column: 1 / -1; grid-row: 3; width: 100%; }
 
 #library-page.active,
+#tools-page.active,
 #settings-page.active { grid-column: 1 / -1; grid-row: 1; width: 100%; min-width: 0; }
 
 .recent-utility-actions {
