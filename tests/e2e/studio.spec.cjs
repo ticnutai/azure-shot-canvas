@@ -933,13 +933,18 @@ test.describe('Electron production workflow', () => {
     await page.locator('#library-group').selectOption('type');
     await expect(page.locator('.library-group-title')).toContainText(['סרטונים']);
     const renamedExtension = await page.locator('.library-item').first().locator('.file-details strong').textContent().then((name) => path.extname(name));
+    // Less frequent actions live in the card's "more" menu.
+    await page.locator('.library-item').first().locator('.more').click();
+    await expect(page.locator('.library-item').first().locator('.more-menu')).toBeVisible();
     await page.locator('.library-item').first().locator('.rename').click();
+    await expect(page.locator('.library-item .more-menu:visible')).toHaveCount(0);
     await page.locator('.library-item').first().locator('.rename-editor input').fill('וידאו לקוח אלף');
     await page.locator('.library-item').first().locator('.save-name').click();
     await expect(page.locator('.library-item .file-details strong').filter({ hasText: `וידאו לקוח אלף${renamedExtension}` })).toHaveCount(1);
     const diskNames = await fs.readdir(outputDir);
     expect(diskNames).toContain(`וידאו לקוח אלף${renamedExtension}`);
     const renamedRow = page.locator('.library-item', { hasText: `וידאו לקוח אלף${renamedExtension}` });
+    await renamedRow.locator('.more').click();
     await renamedRow.locator('.metadata').click();
     await renamedRow.locator('.meta-client').fill('לקוח אלף');
     await renamedRow.locator('.meta-tags').fill('הדרכה, דחוף');

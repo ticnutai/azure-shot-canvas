@@ -27,6 +27,7 @@
   <link rel="stylesheet" href="image-editor.css">
   <link rel="stylesheet" href="app-design.css">
   <link rel="stylesheet" href="capture-sections.css">
+  <link rel="stylesheet" href="library-cards.css">
 </head>
 <body>
   <div class="app-shell">
@@ -172,7 +173,7 @@
           <section id="library-page" class="page panel page-panel">
             <div class="section-heading"><div><h2>הספרייה שלי</h2><p>כל התמונות והסרטונים שנשמרו במחשב</p></div><div class="library-heading-actions"><button class="gold-button" id="edit-latest-image">✎ עריכת צילום אחרון</button><button class="ghost" id="open-output">פתיחת תיקייה</button></div></div>
             <div class="library-toolbar">
-              <label class="library-search">⌕ <input id="library-search" placeholder="חיפוש בשם, OCR, תמלול, לקוח או תגית…"></label>
+              <label class="library-search">⌕ <input id="library-search" placeholder="חיפוש בשם, טקסט בתמונה, תמלול, לקוח או תגית…"></label>
               <label>מיון<select id="library-sort"><option value="date-desc">החדשים תחילה</option><option value="date-asc">הישנים תחילה</option><option value="name-asc">שם א׳–ת׳</option><option value="name-desc">שם ת׳–א׳</option><option value="type">סוג הקובץ</option></select></label>
               <label>קיבוץ<select id="library-group"><option value="time">לפי זמן</option><option value="type">לפי סוג</option><option value="none">ללא קיבוץ</option></select></label>
               <div class="library-view-picker" role="group" aria-label="צורת תצוגת הספרייה">
@@ -188,7 +189,7 @@
             <div class="section-heading"><div><h2>מרכז כלים חכמים</h2><p>מנועים מקומיים קיימים בלבד — ללא ענן וללא התקנות כפולות</p></div><button class="ghost" id="refresh-engines">↻ בדיקה מחדש</button></div>
             <div class="engine-grid" id="engine-grid"><article><small>סורק מנועים מקומיים…</small></article></div>
             <div class="tool-action-grid">
-              <article><span>◎</span><div><h3>OCR בעברית</h3><p>זיהוי טקסט בצילום האחרון והוספתו לחיפוש בספרייה.</p></div><button class="gold-button" data-smart-action="ocr">הפעל על הצילום האחרון</button></article>
+              <article><span>◎</span><div><h3>זיהוי טקסט בעברית</h3><p>זיהוי טקסט בצילום האחרון והוספתו לחיפוש בספרייה.</p></div><button class="gold-button" data-smart-action="ocr">הפעל על הצילום האחרון</button></article>
               <article><span>◫</span><div><h3>תמלול וכתוביות</h3><p>שימוש ב־Whisper המקומי שכבר מותקן, ויצירת JSON ו־SRT.</p></div><button class="gold-button" data-smart-action="transcribe">תמלל וידאו אחרון</button></article>
               <article><span>✓</span><div><h3>דוח איכות מדעי</h3><p>רזולוציה, FPS, פריימים, סנכרון שמע־וידאו וציון מספרי.</p></div><button class="gold-button" data-smart-action="analyze">נתח וידאו אחרון</button></article>
               <article><span>⌑</span><div><h3>הצמדה למסך</h3><p>השארת צילום אחרון מעל חלונות אחרים לעבודה נוחה.</p></div><button class="gold-button" data-smart-action="pin">הצמד צילום אחרון</button></article>
@@ -276,7 +277,7 @@
             </div>
             <div class="preference-section" data-preference-section="workflows">
               <div class="workflow-heading"><div><h2>אוטומציות לאחר צילום</h2><p>שרשרת פעולות מקומית שמופעלת פעם אחת לפי הסדר, בלי כפילויות.</p></div><button class="gold-button" id="add-workflow">＋ אוטומציה חדשה</button></div>
-              <div class="workflow-templates"><button data-workflow-template="copy-ocr">צילום ← העתקה ← OCR</button><button data-workflow-template="client-edit">צילום ← תיקיית לקוח ← עורך</button><button data-workflow-template="record-share">הקלטה ← שיתוף ← תיקייה</button></div>
+              <div class="workflow-templates"><button data-workflow-template="copy-ocr">צילום ← העתקה ← זיהוי טקסט</button><button data-workflow-template="client-edit">צילום ← תיקיית לקוח ← עורך</button><button data-workflow-template="record-share">הקלטה ← שיתוף ← תיקייה</button></div>
               <div id="workflow-list" class="workflow-list"></div>
               <div class="workflow-log"><div><b>הפעלה אחרונה</b><button class="copy-button" id="copy-workflow-log">⧉ העתק</button></div><pre id="workflow-log">עדיין לא הופעלה אוטומציה.</pre></div>
             </div>

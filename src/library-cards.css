@@ -1,0 +1,56 @@
+/* Library file cards: thumbnail first, one clear primary action, icon buttons and a "more" menu for the rest. */
+
+.ui-icon { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Card */
+.library-list .library-item { position: relative; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.library-list .library-item:hover { border-color: color-mix(in srgb, var(--gold) 40%, var(--line)); box-shadow: 0 6px 22px var(--shadow); }
+.library-list .library-item.menu-open { z-index: 5; }
+
+/* Thumbnail */
+.library-list .file-icon { position: relative; cursor: pointer; background: color-mix(in srgb, var(--bg) 70%, var(--panel-2)); border-color: var(--line-soft); }
+.library-list .file-icon img { transition: transform .25s; }
+.library-list .library-item:hover .file-icon img { transform: scale(1.03); }
+.thumb-placeholder { width: 100%; height: 100%; display: grid; place-items: center; color: var(--muted); }
+.thumb-placeholder .ui-icon { width: 34%; height: 34%; max-width: 44px; max-height: 44px; stroke-width: 1.3; }
+.thumb-play { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.thumb-play svg { width: 34px; height: 34px; padding: 9px 8px 9px 10px; border-radius: 50%; background: #000a; fill: #fff; backdrop-filter: blur(4px); box-shadow: 0 2px 10px #0006; transition: transform .15s; }
+.library-item:hover .thumb-play svg { transform: scale(1.1); }
+.format-chip { position: absolute; top: 7px; left: 7px; padding: 2px 7px; border-radius: 6px; background: #000b; color: #fff; font-size: 9px; font-weight: 700; letter-spacing: .4px; direction: ltr; backdrop-filter: blur(4px); }
+
+/* Name and details */
+.library-list .file-details strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 600; line-height: 1.35; }
+.library-list .file-details small { font-size: 10px; margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+/* Actions: primary button, icon buttons, more menu */
+.library-list .library-actions { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.library-list .library-actions .card-primary { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; font-size: 11px; }
+.library-list .library-actions .card-primary .ui-icon { width: 15px; height: 15px; }
+.icon-action { flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; }
+.icon-action:hover, .icon-action[aria-expanded="true"] { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); border-color: var(--line); }
+.icon-action:focus-visible, .card-primary:focus-visible, .more-menu button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.more-wrap { position: relative; display: inline-flex; }
+.more-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 190px; padding: 5px; display: grid; gap: 1px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 38px var(--shadow), 0 2px 6px var(--shadow); }
+.more-menu button { display: flex; align-items: center; gap: 10px; width: 100%; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font-size: 12px; text-align: right; cursor: pointer; }
+.more-menu button:hover { background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.more-menu button .ui-icon { width: 16px; height: 16px; color: var(--muted); }
+.more-menu button:hover .ui-icon { color: var(--gold); }
+
+/* Grid view: actions sit in a row under the details */
+.library-list.view-grid .library-item { gap: 9px; padding: 10px; border-radius: 14px; }
+.library-list.view-grid .file-icon { border-radius: 10px; }
+.library-list.view-grid .library-actions { margin-top: auto; padding-top: 2px; }
+.library-list.view-grid .library-actions button { flex: 0 0 auto; padding-inline: 0; }
+.library-list.view-grid .library-actions .card-primary { flex: 1 1 auto; padding-inline: 12px; }
+.library-list.view-grid .library-item[data-kind="document"] .library-actions { justify-content: flex-end; }
+
+/* List and table views: compact actions on the side */
+.library-list:is(.view-list, .view-table) .library-actions .card-primary { flex: 0 0 auto; }
+.library-list.view-table .library-actions button { padding: 0; font-size: 11px; }
+.library-list.view-table .library-actions .card-primary { padding: 0 12px; height: 30px; }
+.library-list.view-table .icon-action { width: 30px; height: 30px; }
+.library-list.view-table .format-chip, .library-list.view-table .thumb-play { display: none; }
+
+/* A page full of cards stays calm: the primary button is tinted, and fills with gold only on the card under the pointer. */
+.library-list .library-actions .card-primary { background: color-mix(in srgb, var(--gold) 14%, transparent); border: 1px solid color-mix(in srgb, var(--gold) 38%, transparent); color: var(--gold); font-weight: 600; transition: background .15s, color .15s; }
+.library-list .library-item:hover .card-primary, .library-list .card-primary:focus-visible { background: var(--gold); border-color: var(--gold); color: var(--accent-text); }

@@ -1779,11 +1779,38 @@ function libraryGroups(items) {
   return [...groups.entries()];
 }
 
+// Line icons for library cards (drawn with the current text colour).
+const LIBRARY_ICONS = {
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  share: '<path d="M4 13v6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6"/><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/>',
+  folder: '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/>',
+  more: '<path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3"/>',
+  open: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  text: '<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>',
+  pin: '<path d="M9 4h6l-1 5 4 4H6l4-4z"/><path d="M12 13v7"/>',
+  gauge: '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/>',
+  captions: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h4M13 11h4M7 15h6"/>',
+  tag: '<path d="M3 12V4h8l10 10-8 8z"/><path d="M7.5 7.5h.01" stroke-width="3"/>',
+  rename: '<path d="M4 20h16"/><path d="M6 16l9-9 3 3-9 9H6z"/>',
+  image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/>',
+  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>',
+  document: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'
+};
+const icon = (name) => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">${LIBRARY_ICONS[name]}</svg>`;
+
 function thumbnailMarkup(item, compact = false) {
   const isImage = item.kind === 'image';
   if (!item.thumbnail) return item.kind === 'document' ? '▤' : `${isImage ? '▣' : '▷'}`;
   return `<img src="${item.thumbnail}" alt="תמונה מקדימה של ${escapeHtml(item.name)}">${!isImage && compact ? '<span class="play-overlay">▷</span>' : ''}`;
 }
+
+function closeLibraryMenus() {
+  document.querySelectorAll('.library-item .more-menu:not(.hidden)').forEach((menu) => menu.classList.add('hidden'));
+  document.querySelectorAll('.library-item .more[aria-expanded="true"]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+  document.querySelectorAll('.library-item.menu-open').forEach((row) => row.classList.remove('menu-open'));
+}
+document.addEventListener('click', (event) => { if (!event.target.closest?.('.more-wrap')) closeLibraryMenus(); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeLibraryMenus(); });
 
 function renderLibrary() {
   const container = $('#library-list');
@@ -1803,18 +1830,33 @@ function renderLibrary() {
       row.className = 'library-item';
       const baseName = item.name.replace(/\.[^.]+$/, '');
       const isImage = item.kind === 'image';
-      const editButton = isImage ? '<button class="gold-button edit-image">עריכה</button><button class="ghost ocr">OCR</button><button class="ghost pin">הצמדה</button>' : '<button class="gold-button edit-video">עריכת וידאו</button><button class="ghost analyze">איכות</button><button class="ghost transcribe">תמלול</button>';
+      const menuItem = (name, className, label) => `<button type="button" role="menuitem" class="${className}">${icon(name)}<span>${label}</span></button>`;
+      const editButton = isImage ? `<button class="gold-button card-primary edit-image">${icon('edit')}<span>עריכה</span></button>` : item.kind === 'document' ? '' : `<button class="gold-button card-primary edit-video">${icon('edit')}<span>עריכה</span></button>`;
+      const kindMenu = isImage ? menuItem('text', 'ocr', 'זיהוי טקסט') + menuItem('pin', 'pin', 'הצמדה מעל החלונות') : item.kind === 'document' ? '' : menuItem('gauge', 'analyze', 'בדיקת איכות') + menuItem('captions', 'transcribe', 'תמלול לכתוביות');
+      const kindIcon = isImage ? 'image' : item.kind === 'document' ? 'document' : 'video';
       const metadata = item.metadata || {};
       const metaBadges = [metadata.favorite ? '★ מועדף' : '', metadata.client ? `לקוח: ${escapeHtml(metadata.client)}` : '', ...(metadata.tags || []).map((tag) => `#${escapeHtml(tag)}`)].filter(Boolean).map((label) => `<span>${label}</span>`).join('');
       row.classList.toggle('favorite', Boolean(metadata.favorite));
-      row.innerHTML = `<span class="file-icon">${thumbnailMarkup(item)}</span><div class="file-details"><strong>${escapeHtml(item.name)}${item.edited ? ' <em class="edited-badge">נערך</em>' : ''}</strong><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)} · ${item.extension.toUpperCase()}</small><div class="library-meta">${metaBadges}</div><div class="rename-editor hidden"><input maxlength="120" value="${escapeHtml(baseName)}" aria-label="שם קובץ חדש"><button class="gold-button save-name">שמירה</button><button class="ghost cancel-name">ביטול</button></div></div><div class="library-actions">${editButton}<button class="ghost metadata">פרטים</button><button class="ghost share">שיתוף פרטי</button><button class="ghost rename">שם</button><button class="ghost open">פתיחה</button><button class="ghost show">בתיקייה</button></div><div class="metadata-editor hidden"><input class="meta-client" maxlength="80" placeholder="לקוח / פרויקט" value="${escapeHtml(metadata.client || '')}"><input class="meta-tags" maxlength="160" placeholder="תגיות מופרדות בפסיק" value="${escapeHtml((metadata.tags || []).join(', '))}"><label><input class="meta-favorite" type="checkbox" ${metadata.favorite ? 'checked' : ''}> מועדף</label><button class="gold-button save-metadata">שמירה</button></div>`;
+      row.dataset.kind = item.kind;
+      const modified = new Date(item.modified).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      row.innerHTML = `<span class="file-icon" title="פתיחה בלחיצה כפולה">${item.thumbnail ? thumbnailMarkup(item) : `<span class="thumb-placeholder">${icon(kindIcon)}</span>`}${!isImage && item.kind !== 'document' ? '<span class="thumb-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>' : ''}<span class="format-chip">${escapeHtml(item.extension.replace('.', '').toUpperCase())}</span></span><div class="file-details"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${item.edited ? ' <em class="edited-badge">נערך</em>' : ''}</strong><small>${modified} · ${formatBytes(item.size)}</small><div class="library-meta">${metaBadges}</div><div class="rename-editor hidden"><input maxlength="120" value="${escapeHtml(baseName)}" aria-label="שם קובץ חדש"><button class="gold-button save-name">שמירה</button><button class="ghost cancel-name">ביטול</button></div></div><div class="library-actions">${editButton}<button class="icon-action share" title="שיתוף פרטי" aria-label="שיתוף פרטי">${icon('share')}</button><button class="icon-action show" title="הצגה בתיקייה" aria-label="הצגה בתיקייה">${icon('folder')}</button><span class="more-wrap"><button class="icon-action more" title="פעולות נוספות" aria-label="פעולות נוספות" aria-haspopup="menu" aria-expanded="false">${icon('more')}</button><span class="more-menu hidden" role="menu">${menuItem('open', 'open', 'פתיחה')}${kindMenu}${menuItem('tag', 'metadata', 'פרטים ותגיות')}${menuItem('rename', 'rename', 'שינוי שם')}</span></span></div><div class="metadata-editor hidden"><input class="meta-client" maxlength="80" placeholder="לקוח / פרויקט" value="${escapeHtml(metadata.client || '')}"><input class="meta-tags" maxlength="160" placeholder="תגיות מופרדות בפסיק" value="${escapeHtml((metadata.tags || []).join(', '))}"><label><input class="meta-favorite" type="checkbox" ${metadata.favorite ? 'checked' : ''}> מועדף</label><button class="gold-button save-metadata">שמירה</button></div>`;
       row.querySelector('.edit-image')?.addEventListener('click', () => window.aurumEditor?.open(item.path, 'professional'));
       row.querySelector('.edit-video')?.addEventListener('click', () => openVideoEditor(item));
-      row.querySelector('.ocr')?.addEventListener('click', async () => { try { showToast('מזהה טקסט מקומית…'); const result = await api.runOcr(item.path); showToast(`OCR הושלם: ${result.text.length} תווים`); await loadLibrary(); } catch (error) { showToast(`OCR נכשל: ${error.message}`); } });
+      row.querySelector('.ocr')?.addEventListener('click', async () => { try { showToast('מזהה טקסט מקומית…'); const result = await api.runOcr(item.path); showToast(`זיהוי הטקסט הושלם: ${result.text.length} תווים`); await loadLibrary(); } catch (error) { showToast(`זיהוי הטקסט נכשל: ${error.message}`); } });
       row.querySelector('.pin')?.addEventListener('click', async () => { try { await api.pinImage(item.path); showToast('הצילום הוצמד מעל החלונות'); } catch (error) { showToast(`הצמדה נכשלה: ${error.message}`); } });
       row.querySelector('.analyze')?.addEventListener('click', async () => { try { const result = await api.analyzeMedia(item.path); showToast(`ציון איכות ${result.score}/100 · ${result.fps} FPS · סנכרון ${result.avSyncOffsetMs ?? '—'}ms`, 9000); await loadLibrary(); } catch (error) { showToast(`ניתוח נכשל: ${error.message}`); } });
       row.querySelector('.transcribe')?.addEventListener('click', async () => { try { showToast('מתמלל במנוע המקומי הקיים…', 9000); const result = await api.transcribeMedia(item.path); showToast(`התמלול הושלם: ${result.wordCount} מילים וקובץ SRT נוצר`, 9000); await loadLibrary(); } catch (error) { showToast(`התמלול נכשל: ${error.message}`, 9000); } });
       row.querySelector('.open').addEventListener('click', () => api.openFile(item.path));
+      row.querySelector('.file-icon').addEventListener('dblclick', () => api.openFile(item.path));
+      const menu = row.querySelector('.more-menu');
+      const moreButton = row.querySelector('.more');
+      moreButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const opening = menu.classList.contains('hidden');
+        closeLibraryMenus();
+        if (opening) { menu.classList.remove('hidden'); moreButton.setAttribute('aria-expanded', 'true'); row.classList.add('menu-open'); }
+      });
+      menu.addEventListener('click', () => closeLibraryMenus());
       row.querySelector('.show').addEventListener('click', () => api.showFile(item.path));
       row.querySelector('.share').addEventListener('click', async () => { const share = await api.shareLocal(item.path); showToast(`שיתוף פרטי מקומי הועתק · תפוגה ${new Date(share.expiresAt).toLocaleTimeString('he-IL')}`); });
       row.querySelector('.metadata').addEventListener('click', () => row.querySelector('.metadata-editor').classList.toggle('hidden'));
