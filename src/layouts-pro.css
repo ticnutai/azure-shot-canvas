@@ -1,0 +1,137 @@
+/* =====================================================================
+   שכבת המקצועיות: טיפוגרפיה וקווים לכל המראות, שלוש פריסות נוספות ושלוש ערכות נוספות.
+   נטען אחרי app-design.css. הבורר ‎:root:root‎ מעלה את המשקל מעל השכבה המשותפת של app-design.css.
+   ===================================================================== */
+
+/* ---------- 1. טיפוגרפיה וקווים — בכל הפריסות, גם המקורית ---------- */
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body { font-size: 13px; line-height: 1.45; }
+/* טקסט עזר: לא פחות מ-11 פיקסלים, כמו בתוכנות משרד (המקור השתמש ב-7 עד 10) */
+html[data-layout="lemaan"] :is(.field-row small, .switch-row small, .section-heading p, .clip-card > small, .library-item small, .countdown-note, .preview-status span, .wordmark p, .settings-cards small, .empty-preview p, .system-panel > div, .shortcut-grid div, .choice-group label, .source-card em, .clip-thumb small, .nav-item small) { font-size: 11px; }
+html[data-layout="lemaan"] :is(.field-row b, .switch-row b, .range-field b, .source-type, .refresh-button, .capture-chips button, .clip-card b, .text-button, .settings-cards b, .source-card span) { font-size: 12px; }
+/* משקלים: רגיל ומודגש־למחצה בלבד — בלי 750–900 שנראים "צעקניים" */
+:is(.source-type.active, .pro-badge, .primary, .gold-button, .record-main, .pause-main, .settings-tab, .choice-group legend, .profile-button span, .range-field output) { font-weight: 600; }
+.logo-mark { font-weight: 700; }
+:is(h1, h2, h3) { font-weight: 600; letter-spacing: 0; }
+.section-heading h2, .page-panel h2, .quick-panel h2, .system-panel h2 { font-size: 15px; }
+/* מספרים מיושרים בעמודות */
+:is(small, output, .preview-status span, .library-item small, .clip-card > small) { font-variant-numeric: tabular-nums; }
+/* קווים: קו אחד דק ועקבי. מפרידים פנימיים בגוון רך יותר */
+:is(.field-row, .switch-row, .range-field) { border-bottom-color: var(--line-soft); }
+hr { border: 0; border-top: 1px solid var(--line); }
+.pro-badge { letter-spacing: 0; }
+.sidebar .help-button .glyph-icon { width: 20px; height: 20px; }
+
+/* ---------- 2. צבעים לפריסות החדשות (זוג בהיר + כהה) ---------- */
+[data-theme="ribbon-light"] { color-scheme: light; --bg: #f0f0f0; --top: #2b579a; --panel: #ffffff; --panel-2: #f7f7f7; --line: #d6d6d6; --line-soft: #e6e6e6; --text: #252423; --muted: #605e5c; --gold: #2b579a; --gold-2: #224a85; --accent-text: #ffffff; --success: #107c10; --danger: #c4314b; --shadow: #0000001a; --ribbon: #2b579a; --ribbon-text: #ffffff; }
+[data-theme="ribbon-dark"] { color-scheme: dark; --bg: #1f1f1f; --top: #2b2b2b; --panel: #292929; --panel-2: #303030; --line: #474747; --line-soft: #383838; --text: #f3f2f1; --muted: #b3b0ad; --gold: #6ea0ef; --gold-2: #5a8ee0; --accent-text: #111111; --success: #54b054; --danger: #f1707b; --shadow: #00000080; --ribbon: #2b2b2b; --ribbon-text: #f3f2f1; }
+[data-theme="fluent-light"] { color-scheme: light; --bg: #f3f3f3; --top: #f3f3f3; --panel: #fbfbfb; --panel-2: #f6f6f6; --line: #e5e5e5; --line-soft: #ededed; --text: #1b1b1b; --muted: #5f5f5f; --gold: #005fb8; --gold-2: #004c94; --accent-text: #ffffff; --success: #0f7b0f; --danger: #c42b1c; --shadow: #00000014; }
+[data-theme="fluent-dark"] { color-scheme: dark; --bg: #202020; --top: #202020; --panel: #2b2b2b; --panel-2: #323232; --line: #3d3d3d; --line-soft: #333333; --text: #ffffff; --muted: #a8a8a8; --gold: #60cdff; --gold-2: #4cc2ff; --accent-text: #000000; --success: #6ccb5f; --danger: #ff99a4; --shadow: #00000066; }
+[data-theme="studio-light"] { color-scheme: light; --bg: #e4e4e4; --top: #f0f0f0; --panel: #f4f4f4; --panel-2: #ebebeb; --line: #c8c8c8; --line-soft: #d8d8d8; --text: #1e1e1e; --muted: #5c5c5c; --gold: #1473e6; --gold-2: #0d66d0; --accent-text: #ffffff; --success: #268e6c; --danger: #d7373f; --shadow: #0000001f; }
+[data-theme="studio-dark"] { color-scheme: dark; --bg: #161616; --top: #1e1e1e; --panel: #1f1f1f; --panel-2: #262626; --line: #333333; --line-soft: #2a2a2a; --text: #d8d8d8; --muted: #8a8a8a; --gold: #2d8ceb; --gold-2: #1f7ad6; --accent-text: #ffffff; --success: #3fb950; --danger: #f85149; --shadow: #000000a0; }
+
+/* ---------- 3. פריסה: רצועת כלים (כמו מעבד התמלילים של אופיס) ----------
+   הניווט עובר מהצד ללשוניות אופקיות מתחת לשורת הכותרת הכחולה; הלשונית הפעילה "מתחברת" לדף. */
+html[data-layout="ribbon"] {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 0px; --ui-topbar-h: 46px; --ui-page-pad: 18px; --ui-gap: 16px;
+  --ui-radius-panel: 4px; --ui-radius-card: 4px; --ui-radius-control: 4px; --ui-control-h: 30px;
+  --ui-shadow: 0 1px 2px #00000014, 0 0 0 1px #00000008;
+  --ribbon-h: 40px;
+}
+:root:root[data-layout="ribbon"] .app-shell { grid-template-columns: minmax(0, 1fr); }
+:root:root[data-layout="ribbon"] .topbar { position: sticky; top: 0; z-index: 17; margin-bottom: var(--ribbon-h); background: var(--ribbon, var(--gold)); border-bottom: 0; }
+:root:root[data-layout="ribbon"] .topbar :is(.wordmark h1, .wordmark h1 b, .wordmark p, .icon-button, .theme-button-labeled, .profile-button) { color: var(--ribbon-text, var(--accent-text)); }
+:root:root[data-layout="ribbon"] .topbar .wordmark p { opacity: .8; }
+:root:root[data-layout="ribbon"] .topbar .search-box { background: color-mix(in srgb, var(--ribbon-text, #fff) 16%, transparent); border-color: transparent; color: var(--ribbon-text, #fff); }
+:root:root[data-layout="ribbon"] .topbar .search-box input { color: var(--ribbon-text, #fff); }
+:root:root[data-layout="ribbon"] .topbar .search-box input::placeholder { color: color-mix(in srgb, var(--ribbon-text, #fff) 75%, transparent); }
+:root:root[data-layout="ribbon"] .topbar .pro-badge { background: color-mix(in srgb, var(--ribbon-text, #fff) 20%, transparent); color: var(--ribbon-text, #fff); }
+:root:root[data-layout="ribbon"] .sidebar { position: fixed; top: var(--ui-topbar-h); left: 0; right: 0; width: auto; height: var(--ribbon-h); flex-direction: row; align-items: flex-end; gap: 8px; padding: 0 22px; background: var(--ribbon, var(--gold)); border: 0; box-shadow: 0 1px 0 var(--line); z-index: 16; }
+:root:root[data-layout="ribbon"] .logo-mark { display: none; }
+:root:root[data-layout="ribbon"] .sidebar nav { display: flex; gap: 2px; width: auto; }
+:root:root[data-layout="ribbon"] .nav-item { height: 34px; display: flex; flex-direction: row; align-items: center; gap: 7px; padding: 0 16px; border: 0; border-radius: 4px 4px 0 0; color: color-mix(in srgb, var(--ribbon-text, #fff) 82%, transparent); }
+:root:root[data-layout="ribbon"] .nav-item span { font-size: 15px; }
+:root:root[data-layout="ribbon"] .nav-item small { font-size: 13px; font-weight: 400; }
+:root:root[data-layout="ribbon"] .nav-item:hover:not(.active):not(:disabled) { background: color-mix(in srgb, var(--ribbon-text, #fff) 14%, transparent); color: var(--ribbon-text, #fff); }
+:root:root[data-layout="ribbon"] .nav-item.active { background: var(--bg); color: var(--gold); box-shadow: none; }
+:root:root[data-layout="ribbon"] .nav-item.active small { font-weight: 600; }
+:root:root[data-layout="ribbon"] .help-button { margin: 0 auto 0 0; align-self: center; color: var(--ribbon-text, #fff); }
+:root:root[data-layout="ribbon"] .content-shell { max-width: none; }
+
+/* ---------- 4. פריסה: חלונות 11 (כמו מסך ההגדרות של חלונות) ----------
+   סרגל ניווט רחב עם איקון ושם בשורה אחת, וקו הדגשה קטן ליד הפריט הפעיל. */
+html[data-layout="fluent"] {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 232px; --ui-sidebar-pad: 14px 10px; --ui-nav-h: 38px; --ui-nav-icon: 16px;
+  --ui-topbar-h: 52px; --ui-page-pad: 20px; --ui-gap: 16px;
+  --ui-radius-panel: 8px; --ui-radius-card: 6px; --ui-radius-control: 4px; --ui-control-h: 32px;
+  --ui-shadow: 0 2px 4px #0000000a; --ui-border: 1px solid var(--line);
+}
+:root:root[data-layout="fluent"] .sidebar { align-items: stretch; background: var(--bg); border-left: 0; }
+:root:root[data-layout="fluent"] .logo-mark { width: 30px; height: 30px; font-size: 14px; margin: 4px 10px 22px; }
+:root:root[data-layout="fluent"] .sidebar nav { gap: 3px; }
+:root:root[data-layout="fluent"] .nav-item { position: relative; display: flex; flex-direction: row; justify-content: flex-start; align-items: center; gap: 13px; padding: 0 14px; border: 0; border-radius: 4px; color: var(--text); }
+:root:root[data-layout="fluent"] .nav-item small { font-size: 13px; font-weight: 400; text-align: start; }
+:root:root[data-layout="fluent"] .nav-item:hover:not(.active):not(:disabled) { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+:root:root[data-layout="fluent"] .nav-item.active { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); box-shadow: none; }
+:root:root[data-layout="fluent"] .nav-item.active::before { content: ""; position: absolute; inset-inline-start: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--gold); }
+:root:root[data-layout="fluent"] .nav-item.active span { color: var(--gold); }
+:root:root[data-layout="fluent"] .topbar { background: var(--bg); border-bottom-color: transparent; }
+:root:root[data-layout="fluent"] .help-button { align-self: flex-start; margin-inline-start: 6px; }
+:root:root[data-layout="fluent"] .content-shell { max-width: none; padding-inline-end: 8px; }
+
+/* ---------- 5. פריסה: אולפן עריכה (כמו תוכנות עריכת וידאו) ----------
+   אפור פחם, צפוף, סרגל איקונים צר, פינות כמעט ישרות וקווים דקים בין לוחות. */
+html[data-layout="studio"] {
+  --ui-font: "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 52px; --ui-sidebar-pad: 8px 6px; --ui-nav-h: 44px; --ui-nav-icon: 18px;
+  --ui-topbar-h: 42px; --ui-page-pad: 10px; --ui-gap: 10px;
+  --ui-radius-panel: 3px; --ui-radius-card: 2px; --ui-radius-control: 3px; --ui-control-h: 28px;
+  --ui-shadow: none; --ui-border: 1px solid var(--line);
+}
+:root:root[data-layout="studio"] .sidebar { background: var(--top); border-left: 1px solid var(--line); }
+:root:root[data-layout="studio"] .logo-mark { width: 30px; height: 30px; font-size: 14px; margin-bottom: 16px; border-radius: 6px; }
+:root:root[data-layout="studio"] .nav-item small { display: none; }
+:root:root[data-layout="studio"] .nav-item { border: 0; border-radius: 3px; color: var(--muted); }
+:root:root[data-layout="studio"] .nav-item:hover:not(.active):not(:disabled) { color: var(--text); background: color-mix(in srgb, var(--text) 7%, transparent); }
+:root:root[data-layout="studio"] .nav-item.active { color: var(--text); background: color-mix(in srgb, var(--text) 9%, transparent); box-shadow: inset 2px 0 0 var(--gold); }
+:root:root[data-layout="studio"] .topbar { background: var(--top); }
+:root:root[data-layout="studio"] .content-shell { max-width: none; }
+:root:root[data-layout="studio"] :is(.source-toolbar, .transport-bar) { background: var(--top); }
+
+/* מיניאטורות הפריסות החדשות בגלריה */
+.layout-mini[data-theme="ribbon-light"], .layout-mini[data-theme="ribbon-dark"] { --m-top: var(--ribbon); --m-side: var(--ribbon); }
+.layout-mini[data-layout-preview="ribbon"] i { top: var(--m-top-h); left: 0; right: 0; bottom: auto; width: auto; height: 9px; }
+.layout-mini[data-layout-preview="ribbon"] i::before { top: 3px; left: auto; right: 10px; width: 16px; height: 6px; border-radius: 2px 2px 0 0; background: var(--m-bg); }
+.layout-mini[data-layout-preview="ribbon"]::before { right: 0; }
+.layout-mini[data-layout-preview="ribbon"] :is(em, u) { top: calc(var(--m-top-h) + 15px); }
+.layout-mini[data-layout-preview="ribbon"] u { right: 7px; }
+.layout-mini[data-layout-preview="fluent"] { --m-side: var(--m-bg); }
+.layout-mini[data-layout-preview="fluent"] i::before { left: 12%; right: 12%; height: 6px; }
+.layout-mini[data-layout-preview="studio"] { --m-side: var(--m-top); }
+
+/* ---------- 6. ערכות עיצוב חדשות (צורה בלבד) ---------- */
+/* חד ומדויק: פינות ישרות וקווים דקים, בלי צללים — כמו גיליונות ומסמכים */
+html[data-kit][data-kit="sharp"] { --ui-radius-panel: 2px; --ui-radius-card: 2px; --ui-radius-control: 3px; --ui-shadow: none; --ui-border: 1px solid var(--line); }
+html[data-kit][data-kit="sharp"] :is(.nav-item, .settings-tab, .pro-badge, .profile-button span, .snapshot-fab, .expand-button, .empty-preview > span) { border-radius: 3px; }
+/* זכוכית: לוחות שקופים־למחצה מעל רקע עם הילה עדינה בצבע ההדגשה */
+html[data-kit][data-kit="glass"] { --ui-radius-panel: 16px; --ui-radius-card: 12px; --ui-radius-control: 10px; --ui-shadow: 0 8px 30px -12px var(--shadow); --ui-border: 1px solid color-mix(in srgb, var(--text) 10%, transparent); }
+html[data-kit][data-kit="glass"] body { background: radial-gradient(1100px 620px at 85% -10%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 62%), radial-gradient(900px 600px at 0% 110%, color-mix(in srgb, var(--gold) 10%, transparent), transparent 60%), var(--bg); background-attachment: fixed; }
+html[data-kit][data-kit="glass"] :is(.panel, .settings-rail, .page-panel, .topbar, .sidebar) { background: color-mix(in srgb, var(--panel) 70%, transparent); backdrop-filter: blur(18px) saturate(1.4); }
+/* ניגודיות גבוהה: קווים ברורים, טקסט עזר כהה יותר ומסגרת מיקוד עבה */
+html[data-kit][data-kit="contrast"] { --ui-radius-panel: 8px; --ui-radius-card: 6px; --ui-radius-control: 6px; --ui-shadow: none; --line: color-mix(in srgb, var(--text) 42%, var(--panel)); --line-soft: color-mix(in srgb, var(--text) 25%, var(--panel)); --muted: color-mix(in srgb, var(--text) 80%, var(--bg)); --ui-border: 1px solid var(--line); }
+html[data-kit][data-kit="contrast"] :focus-visible { outline-width: 3px; }
+html[data-kit][data-kit="contrast"] :is(.field-row b, .switch-row b, .nav-item small, .source-type, .settings-tab) { font-weight: 600; }
+
+/* ---------- 7. ליטושים משותפים ---------- */
+/* קיצור המקלדת בתיבת החיפוש: מקש אמיתי בשורה אחת */
+.search-box kbd { white-space: nowrap; font-family: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--muted); background: var(--panel); }
+/* כפתורי הפריסה וההגדרות במסך הצילום עוקבים אחרי פינות הפריסה (במקור היו עגולים בכל מצב) */
+html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="auto"])) :is(.layout-picker-button, .layout-settings-button, .collapse-toggle, .preview-display-controls button, .preview-display-controls label, .preview-status span) { border-radius: var(--ui-radius-control); }
+/* בקרי התצוגה כהים כשהם מעל וידאו; כשהתצוגה כבויה הם על רקע הלוח, אז בצבעי הלוח */
+.capture-preview.preview-off .preview-display-controls { background: var(--panel); border-color: var(--line); backdrop-filter: none; }
+.capture-preview.preview-off .preview-display-controls button { color: var(--muted); }
+.capture-preview.preview-off .preview-display-controls button:hover { color: var(--text); }
+/* באולפן העריכה שורת הכותרת נמוכה — בלי שורת המשנה */
+:root:root[data-layout="studio"] .wordmark p { display: none; }

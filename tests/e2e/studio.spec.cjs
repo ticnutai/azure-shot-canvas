@@ -1469,14 +1469,15 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
   test('window layouts, layout colours and design kits apply, persist and never overflow', async ({}, testInfo) => {
-    test.setTimeout(120_000);
+    // Ten layouts × three screens in a hidden window that paints slowly.
+    test.setTimeout(240_000);
     await page.locator('.nav-item[data-page="settings"]').click();
     await page.locator('[data-preference-tab="appearance"]').click();
-    await expect(page.locator('#layout-gallery [role="radio"]')).toHaveCount(7);
-    await expect(page.locator('#kit-switch [role="radio"]')).toHaveCount(6);
+    await expect(page.locator('#layout-gallery [role="radio"]')).toHaveCount(10);
+    await expect(page.locator('#kit-switch [role="radio"]')).toHaveCount(9);
     await page.locator('[data-layout-mode="light"]').click();
     const switchTimes = [];
-    for (const layout of ['acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'lemaan']) {
+    for (const layout of ['acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio', 'lemaan']) {
       await page.locator(`[data-layout-choice="${layout}"]`).click();
       await expect(page.locator('html')).toHaveAttribute('data-layout', layout);
       // Measured in-page (apply + style recalculation): the hidden QA window paints at ~1 fps, so click latency is not representative.
@@ -1498,7 +1499,7 @@ test.describe('Electron production workflow', () => {
     await page.locator('[data-layout-mode="dark"]').click();
     await page.locator('[data-layout-choice="office"]').click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'office-dark');
-    for (const kit of ['compact', 'tiles', 'list', 'icons', 'minimal']) {
+    for (const kit of ['compact', 'tiles', 'list', 'icons', 'sharp', 'glass', 'contrast', 'minimal']) {
       await page.locator(`[data-kit-choice="${kit}"]`).click();
       await expect(page.locator('html')).toHaveAttribute('data-kit', kit);
     }
@@ -1513,9 +1514,9 @@ test.describe('Electron production workflow', () => {
     await page.evaluate(() => { window.aurumAppearance.applyKit('auto'); window.aurumAppearance.applyMode('keep'); window.aurumAppearance.applyLayout('lemaan'); applyThemeChoice('midnight', true); });
     await expect(page.locator('html')).toHaveAttribute('data-layout', 'lemaan');
     const metrics = [
-      metric('Window layouts applied', 7, 'layouts', 7, 'min', 'acrobat, finereader, classic, apple, office, modern, lemaan × capture/library/settings without sideways scroll'),
-      metric('Design kits applied', 5, 'kits', 5, 'min', 'compact, tiles, list, icons, minimal; minimal panel radius 0'),
-      metric('Layout switch response', Math.max(...switchTimes), 'ms', 500, 'max', 'click to data-layout on <html>, slowest of 7'),
+      metric('Window layouts applied', 10, 'layouts', 10, 'min', 'acrobat, finereader, classic, apple, office, modern, ribbon, fluent, studio, lemaan × capture/library/settings without sideways scroll'),
+      metric('Design kits applied', 8, 'kits', 8, 'min', 'compact, tiles, list, icons, sharp, glass, contrast, minimal; minimal panel radius 0'),
+      metric('Layout switch response', Math.max(...switchTimes), 'ms', 500, 'max', 'click to data-layout on <html>, slowest of 10'),
       metric('Appearance persistence after reload', 3, 'attributes', 3, 'min', 'layout, kit and layout dark colours restored before first paint')
     ];
     await attachMetrics(testInfo, metrics);

@@ -821,7 +821,7 @@ async function startLivePreview(source = state.selectedSource) {
 }
 
 function showLivePreviewOff() {
-  setPreviewState('off', 'התצוגה החיה כבויה — הצילום וההקלטה עובדים כרגיל. הכפתור ○ בפינה מפעיל אותה.');
+  setPreviewState('off', 'התצוגה החיה כבויה — הצילום וההקלטה עובדים כרגיל. כפתור העין בפינה מפעיל אותה.');
   if (state.selectedSource) $('#selected-source-label').textContent = state.selectedSource.name;
 }
 
@@ -832,7 +832,7 @@ function setLivePreviewEnabled(enabled, persist = true) {
   const button = $('#live-preview-toggle');
   if (button) {
     button.setAttribute('aria-pressed', String(state.livePreviewEnabled));
-    button.textContent = state.livePreviewEnabled ? '◉' : '○';
+    button.textContent = state.livePreviewEnabled ? '◍' : '◌';
     button.title = state.livePreviewEnabled ? 'תצוגה חיה פעילה — לחיצה לכיבוי' : 'תצוגה חיה כבויה — לחיצה להפעלה';
   }
   if ($('#live-preview-enabled')) $('#live-preview-enabled').checked = state.livePreviewEnabled;
@@ -1779,28 +1779,13 @@ function libraryGroups(items) {
   return [...groups.entries()];
 }
 
-// Line icons for library cards (drawn with the current text colour).
-const LIBRARY_ICONS = {
-  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
-  share: '<path d="M4 13v6a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-6"/><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/>',
-  folder: '<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/>',
-  more: '<path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3"/>',
-  open: '<path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
-  text: '<path d="M5 7V5h14v2"/><path d="M12 5v14"/><path d="M9 19h6"/>',
-  pin: '<path d="M9 4h6l-1 5 4 4H6l4-4z"/><path d="M12 13v7"/>',
-  gauge: '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/>',
-  captions: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 11h4M13 11h4M7 15h6"/>',
-  tag: '<path d="M3 12V4h8l10 10-8 8z"/><path d="M7.5 7.5h.01" stroke-width="3"/>',
-  rename: '<path d="M4 20h16"/><path d="M6 16l9-9 3 3-9 9H6z"/>',
-  image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/>',
-  video: '<rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/>',
-  document: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'
-};
-const icon = (name) => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true">${LIBRARY_ICONS[name]}</svg>`;
+// Library cards use the shared icon set (icons.js); a few card actions have their own names.
+const LIBRARY_ICON_NAMES = { edit: 'pencil', text: 'textScan', video: 'camera', open: 'external' };
+const icon = (name) => window.aurumIcons.markup(LIBRARY_ICON_NAMES[name] || name);
 
 function thumbnailMarkup(item, compact = false) {
   const isImage = item.kind === 'image';
-  if (!item.thumbnail) return item.kind === 'document' ? '▤' : `${isImage ? '▣' : '▷'}`;
+  if (!item.thumbnail) return item.kind === 'document' ? '▯' : `${isImage ? '▣' : '▷'}`;
   return `<img src="${item.thumbnail}" alt="תמונה מקדימה של ${escapeHtml(item.name)}">${!isImage && compact ? '<span class="play-overlay">▷</span>' : ''}`;
 }
 

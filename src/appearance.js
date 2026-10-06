@@ -15,7 +15,10 @@
     { id: 'classic', name: 'קלאסי', description: 'סרגל צד כהה וכרטיסים לבנים', light: 'classic-light', dark: 'classic-dark', mini: [18, 12, 4] },
     { id: 'apple', name: 'אלגנטי', description: 'סרגל צד שקוף־למחצה, מרווח ושקט', light: 'elegant-light', dark: 'elegant-dark', mini: [18, 12, 5] },
     { id: 'office', name: 'משרדי', description: 'סרגל עליון צף ומעוגל, דף במרכז', light: 'office-light', dark: 'office-dark', mini: [15, 12, 4] },
-    { id: 'modern', name: 'מודרני', description: 'קווים דקים, צפוף וחד, בלי תוויות בסרגל', light: 'modern-light', dark: 'modern-dark', mini: [11, 10, 3] }
+    { id: 'modern', name: 'מודרני', description: 'קווים דקים, צפוף וחד, בלי תוויות בסרגל', light: 'modern-light', dark: 'modern-dark', mini: [11, 10, 3] },
+    { id: 'ribbon', name: 'רצועת כלים', description: 'כמו מעבד התמלילים: לשוניות למעלה ושורת כותרת כחולה', light: 'ribbon-light', dark: 'ribbon-dark', mini: [0, 10, 2] },
+    { id: 'fluent', name: 'חלונות 11', description: 'סרגל ניווט רחב עם שמות, כמו מסך ההגדרות של חלונות', light: 'fluent-light', dark: 'fluent-dark', mini: [28, 10, 4] },
+    { id: 'studio', name: 'אולפן עריכה', description: 'אפור פחם וצפוף, כמו תוכנות עריכת וידאו', light: 'studio-light', dark: 'studio-dark', mini: [9, 8, 1] }
   ];
   const MODES = [
     { id: 'match', name: 'לפי המצב הנוכחי' },
@@ -29,7 +32,10 @@
     { id: 'tiles', name: 'אריחים', hint: 'מרווח ומרומם' },
     { id: 'list', name: 'רשימה', hint: 'שטוח ומסודר' },
     { id: 'icons', name: 'אייקונים', hint: 'צבעוני לפי מסך' },
-    { id: 'minimal', name: 'מינימלי', hint: 'טקסט ורווח לבן' }
+    { id: 'minimal', name: 'מינימלי', hint: 'טקסט ורווח לבן' },
+    { id: 'sharp', name: 'חד ומדויק', hint: 'פינות ישרות וקווים דקים' },
+    { id: 'glass', name: 'זכוכית', hint: 'שקוף ורך עם הילה' },
+    { id: 'contrast', name: 'ניגודיות גבוהה', hint: 'קווים וטקסט ברורים' }
   ];
   const layoutThemes = new Set(LAYOUTS.flatMap((layout) => [layout.light, layout.dark]));
   const findLayout = (id) => LAYOUTS.find((layout) => layout.id === id) || LAYOUTS[0];

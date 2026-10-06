@@ -3,8 +3,8 @@
 (() => {
   const root = document.documentElement;
   const read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
-  const layouts = ['lemaan', 'acrobat', 'finereader', 'classic', 'apple', 'office', 'modern'];
-  const kits = ['auto', 'compact', 'tiles', 'list', 'icons', 'minimal'];
+  const layouts = ['lemaan', 'acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio'];
+  const kits = ['auto', 'compact', 'tiles', 'list', 'icons', 'minimal', 'sharp', 'glass', 'contrast'];
   const layout = read('aurum-layout');
   const kit = read('aurum-kit');
   root.dataset.layout = layouts.includes(layout) ? layout : 'lemaan';

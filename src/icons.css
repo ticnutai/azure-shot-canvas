@@ -1,0 +1,15 @@
+/* The shared line-icon set (icons.js): same stroke, same proportions everywhere, sized by the surrounding text. */
+.ui-icon { flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.glyph-icon { width: 1.15em; height: 1.15em; vertical-align: -.22em; }
+.glyph-icon.icon-before-label { margin-inline-end: .45em; }
+.glyph-icon.icon-after-label { margin-inline-start: .4em; }
+.icon-play { fill: currentColor; stroke: none; }
+
+/* Navigation, editor tools and tool cards: the icon is the whole symbol, 1em of its slot. */
+.nav-item span .glyph-icon, .editor-tools span .glyph-icon, .tool-action-grid article > span .glyph-icon, .capture-layout-choice span .glyph-icon { width: 1em; height: 1em; vertical-align: 0; }
+.nav-item span { display: grid; place-items: center; }
+.editor-icon .glyph-icon, .icon-button .glyph-icon, .expand-button .glyph-icon { width: 18px; height: 18px; vertical-align: -4px; }
+.snapshot-fab .glyph-icon { width: 26px; height: 26px; }
+.empty-preview > span .glyph-icon { width: 28px; height: 28px; }
+:is(.source-type, .refresh-button, .capture-chips button, .ghost, .gold-button, .primary, .danger-button, .copy-button, .text-button, .layout-settings-button, .theme-manage-button, .timeline-toolbar button) .glyph-icon { width: 15px; height: 15px; vertical-align: -3px; }
+.collapse-toggle i .glyph-icon { width: 13px; height: 13px; vertical-align: -2px; }
