@@ -1,0 +1,96 @@
+/* =====================================================================
+   סגנון קווים — html[data-lines]. ציר נפרד מהפריסה ומהערכה: משנה רק איך מצוירים מסגרות וקווים מפרידים.
+   ‎:root:root‎ גובר על הצל והמסגרת שהפריסה והערכה קובעות (שכבה משותפת ב-app-design.css).
+   השראה: קו שערה — תוכנות ניהול חדשות; זוהר פנימי — לוחות הפקודות ותוכנות המק; קו מבטא תחתון כהה בכפתורים — חלונות 11;
+   מסגרת מדורגת — דפדפנים ואתרי מפתחים; מפרידים דועכים — תוכנות כתיבה ופתקים; קו מבטא — לוחות בקרה.
+   ===================================================================== */
+
+/* ---------- קו שערה: חצי פיקסל במסכים חדים, גוון רך במסכים רגילים ---------- */
+:root:root[data-lines="hairline"] :is(.panel, .settings-rail, .page-panel, .library-item, .clip-thumb, .settings-cards button, .shortcut-grid div, .layout-card, .ghost, .source-type:not(.active), .refresh-button, .collapse-toggle, .layout-settings-button, .layout-picker-button, .search-box, .field-row select, .kit-switch button, .mode-switch button, .lines-switch button, .capture-chips button) { border-color: color-mix(in srgb, var(--line) 72%, transparent); }
+:root:root[data-lines="hairline"] :is(.field-row, .switch-row, .range-field, .source-toolbar, .source-drawer, .topbar) { border-bottom-color: var(--line-soft); }
+@media (min-resolution: 1.4dppx) {
+  :root:root[data-lines="hairline"] :is(.panel, .settings-rail, .page-panel, .library-item, .clip-thumb, .settings-cards button, .shortcut-grid div, .layout-card, .ghost, .source-type:not(.active), .refresh-button, .collapse-toggle, .layout-settings-button, .layout-picker-button, .search-box, .field-row select, .kit-switch button, .mode-switch button, .lines-switch button, .capture-chips button) { border-width: .5px; border-color: var(--line); }
+  :root:root[data-lines="hairline"] :is(.field-row, .switch-row, .range-field, .source-toolbar, .source-drawer, .topbar) { border-bottom-width: .5px; border-bottom-color: var(--line); }
+  :root:root[data-lines="hairline"] .transport-bar { border-top-width: .5px; }
+}
+
+/* ---------- זוהר פנימי: הבהקה דקה בראש כל לוח, טבעת חיצונית שקופה ועומק רך ---------- */
+:root:root[data-lines="glow"] :is(.panel, .settings-rail, .page-panel, .region-dialog, .video-editor-dialog, .theme-menu, .more-menu) {
+  border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 9%, transparent), 0 0 0 .5px color-mix(in srgb, var(--text) 6%, transparent), 0 1px 2px var(--shadow), 0 12px 32px -20px var(--shadow);
+}
+:root:root[data-lines="glow"] :is(.library-item, .clip-thumb, .settings-cards button, .shortcut-grid div, .layout-card) { border-color: color-mix(in srgb, var(--text) 9%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent), 0 1px 2px var(--shadow); }
+/* כפתורים: קו תחתון כהה מעט יותר — כמו כפתורי חלונות 11 */
+:root:root[data-lines="glow"] :is(.ghost, .source-type:not(.active), .refresh-button, .collapse-toggle, .layout-settings-button, .layout-picker-button, .field-row select, .kit-switch button, .mode-switch button, .lines-switch button, .search-box) { border-color: color-mix(in srgb, var(--text) 11%, transparent); border-bottom-color: color-mix(in srgb, var(--text) 24%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent); }
+:root:root[data-lines="glow"] :is(.gold-button, .primary, .source-type.active, .record-main, .card-primary:hover) { box-shadow: inset 0 1px 0 #ffffff38, inset 0 -1px 0 #00000026, 0 1px 3px color-mix(in srgb, var(--gold) 30%, transparent); }
+:root:root[data-lines="glow"] .nav-item.active { box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent), 0 0 0 .5px color-mix(in srgb, var(--text) 10%, transparent); }
+
+/* ---------- מסגרת מדורגת: הקו מתחיל בגוון ההדגשה בפינה ודועך לאפור ---------- */
+:root:root[data-lines="gradient"] :is(.panel, .settings-rail, .page-panel) {
+  border-color: transparent;
+  background: linear-gradient(var(--panel), var(--panel)) padding-box, linear-gradient(145deg, color-mix(in srgb, var(--gold) 65%, var(--line)), var(--line) 28%, var(--line) 72%, color-mix(in srgb, var(--gold) 35%, var(--line))) border-box;
+}
+:root:root[data-lines="gradient"] :is(.library-item, .settings-cards button, .layout-card) {
+  border-color: transparent;
+  background: linear-gradient(var(--panel-2), var(--panel-2)) padding-box, linear-gradient(145deg, color-mix(in srgb, var(--gold) 40%, var(--line)), var(--line) 40%) border-box;
+}
+:root:root[data-lines="gradient"] :is(.library-item:hover, .layout-card:hover, .layout-card[aria-checked="true"]) {
+  background: linear-gradient(var(--panel-2), var(--panel-2)) padding-box, linear-gradient(145deg, var(--gold), color-mix(in srgb, var(--gold) 30%, var(--line)) 55%, var(--gold)) border-box;
+}
+:root:root[data-lines="gradient"] :is(.topbar, .source-toolbar) { border-image: linear-gradient(90deg, color-mix(in srgb, var(--gold) 55%, var(--line)), var(--line) 30%, var(--line) 70%, color-mix(in srgb, var(--gold) 55%, var(--line))) 1; }
+:root:root[data-lines="gradient"][data-layout="office"] .topbar { border-image: none; }
+
+/* ---------- מפרידים דועכים: קווים שנעלמים בקצוות, מסגרות רכות ---------- */
+:root:root[data-lines="fade"] :is(.field-row, .switch-row, .range-field, .source-toolbar, .source-drawer, .appearance-picker) { border-image: linear-gradient(90deg, transparent, var(--line) 14%, var(--line) 86%, transparent) 1; }
+:root:root[data-lines="fade"]:not([data-layout="office"]) .topbar { border-image: linear-gradient(90deg, transparent, var(--line) 22%, var(--line) 78%, transparent) 1; }
+:root:root[data-lines="fade"] .transport-bar { border-image: linear-gradient(90deg, transparent, var(--line) 14%, var(--line) 86%, transparent) 1; }
+:root:root[data-lines="fade"] .sidebar { border-image: linear-gradient(180deg, transparent, var(--line) 18%, var(--line) 82%, transparent) 1; }
+:root:root[data-lines="fade"] .library-group-title::after { height: 1px; background: linear-gradient(90deg, var(--line), transparent); }
+:root:root[data-lines="fade"] :is(.panel, .settings-rail, .page-panel, .library-item, .layout-card, .settings-cards button) { border-color: color-mix(in srgb, var(--line) 55%, transparent); }
+
+/* ---------- קו מבטא: פס צבע דק בראש כל לוח, קו תחתון ללשונית הפעילה וקו קצר מתחת לכותרות ---------- */
+:root:root[data-lines="accent"] :is(.panel, .settings-rail, .page-panel) { box-shadow: inset 0 2px 0 var(--gold), var(--ui-shadow, 0 0 #0000); }
+:root:root[data-lines="accent"] .settings-tab.active { box-shadow: inset 0 -2px 0 var(--gold); }
+:root:root[data-lines="accent"] :is(.section-heading h2, .page-panel > h2, .appearance-picker h3)::after { content: ""; display: block; width: 26px; height: 2px; margin-top: 6px; border-radius: 2px; background: var(--gold); }
+:root:root[data-lines="accent"] .library-item:hover { border-color: var(--gold); }
+:root:root[data-lines="accent"] .nav-item.active { box-shadow: inset 0 -2px 0 var(--gold); }
+:root:root[data-lines="accent"][data-layout="fluent"] .nav-item.active { box-shadow: none; }
+
+/* ---------- מסך הבחירה: דוגמה קטנה לכל סגנון ---------- */
+.lines-switch { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+.lines-switch button { display: grid; justify-items: start; gap: 2px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); color: var(--text); text-align: right; cursor: default; }
+.lines-switch button b { font-size: 12px; font-weight: 600; }
+.lines-switch button small { color: var(--muted); font-size: 10px; }
+.lines-switch button[aria-checked="true"] { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+.lines-sample { position: relative; width: 100%; height: 40px; margin-bottom: 6px; border-radius: 7px; background: var(--bg); overflow: hidden; }
+.lines-sample i { --sample-fill: color-mix(in srgb, var(--panel) 88%, var(--text) 8%); position: absolute; inset: 8px 10px; border-radius: 6px; background: var(--sample-fill); border: 1px solid color-mix(in srgb, var(--line) 70%, var(--text) 20%); }
+.lines-sample[data-lines-sample="hairline"] i { border-width: .5px; border-color: color-mix(in srgb, var(--line) 80%, transparent); }
+.lines-sample[data-lines-sample="glow"] i { border-color: color-mix(in srgb, var(--text) 10%, transparent); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 14%, transparent), 0 4px 10px -4px var(--shadow); }
+.lines-sample[data-lines-sample="gradient"] i { border-color: transparent; background: linear-gradient(var(--sample-fill), var(--sample-fill)) padding-box, linear-gradient(145deg, var(--gold), var(--line) 40%, var(--line) 60%, color-mix(in srgb, var(--gold) 50%, var(--line))) border-box; }
+.lines-sample[data-lines-sample="fade"] i { border: 0; background: transparent; }
+.lines-sample[data-lines-sample="fade"] i::before, .lines-sample[data-lines-sample="fade"] i::after { content: ""; position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--muted) 25%, var(--muted) 75%, transparent); opacity: .6; }
+.lines-sample[data-lines-sample="fade"] i::before { top: 30%; }
+.lines-sample[data-lines-sample="fade"] i::after { top: 70%; }
+.lines-sample[data-lines-sample="accent"] i { box-shadow: inset 0 2px 0 var(--gold); }
+
+/* ---------- פריסה: איים צפים — סרגל צד ושורת כותרת צפים ומעוגלים, לוחות עם זוהר עדין ---------- */
+[data-theme="islands-light"] { color-scheme: light; --bg: #eceef1; --top: #ffffff; --panel: #ffffff; --panel-2: #f6f7f9; --line: #dfe2e7; --line-soft: #eceef1; --text: #15171a; --muted: #656b75; --gold: #0d9488; --gold-2: #0f766e; --accent-text: #ffffff; --success: #16a34a; --danger: #dc2626; --shadow: #15171a1a; }
+[data-theme="islands-dark"] { color-scheme: dark; --bg: #0b0c0e; --top: #121316; --panel: #131417; --panel-2: #191a1e; --line: #26282d; --line-soft: #1d1f23; --text: #e8e8eb; --muted: #8a8f98; --gold: #2dd4bf; --gold-2: #14b8a6; --accent-text: #04201c; --success: #4ade80; --danger: #f87171; --shadow: #000000b3; }
+html[data-layout="islands"] {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 84px; --ui-sidebar-pad: 12px 8px; --ui-nav-h: 54px; --ui-nav-icon: 18px;
+  --ui-topbar-h: 54px; --ui-page-pad: 14px; --ui-gap: 14px;
+  --ui-radius-panel: 14px; --ui-radius-card: 10px; --ui-radius-control: 8px; --ui-control-h: 32px;
+  --ui-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent), 0 1px 2px var(--shadow), 0 14px 34px -22px var(--shadow);
+  --ui-border: 1px solid color-mix(in srgb, var(--text) 9%, transparent);
+}
+:root:root[data-layout="islands"] .sidebar { top: 10px; height: calc(100vh - 20px); margin: 10px 10px 10px 0; border: 1px solid color-mix(in srgb, var(--text) 9%, transparent); border-radius: 16px; background: var(--panel); box-shadow: var(--ui-shadow); }
+:root:root[data-layout="islands"] .nav-item { border: 0; border-radius: 10px; }
+:root:root[data-layout="islands"] .nav-item small { font-size: 10px; }
+:root:root[data-layout="islands"] .nav-item:hover:not(.active):not(:disabled) { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+:root:root[data-layout="islands"] .nav-item.active { color: var(--gold); background: color-mix(in srgb, var(--gold) 13%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 28%, transparent); }
+:root:root[data-layout="islands"] .topbar { margin: 10px 10px 0 14px; border: 1px solid color-mix(in srgb, var(--text) 9%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--top) 86%, transparent); backdrop-filter: blur(16px); box-shadow: var(--ui-shadow); }
+:root:root[data-layout="islands"] .search-box { background: var(--panel-2); }
+:root:root[data-layout="islands"] .content-shell { max-width: none; padding-inline-end: 10px; }
+.layout-mini[data-layout-preview="islands"] i { top: 4px; bottom: 4px; right: 4px; border-radius: 4px; box-shadow: 0 0 0 1px #0000001a; }
+.layout-mini[data-layout-preview="islands"]::before { inset: 4px calc(var(--m-side-w) + 8px) auto 4px; border-radius: 4px; box-shadow: 0 0 0 1px #0000001a; }

@@ -1469,15 +1469,16 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
   test('window layouts, layout colours and design kits apply, persist and never overflow', async ({}, testInfo) => {
-    // Ten layouts × three screens in a hidden window that paints slowly.
+    // Eleven layouts × three screens in a hidden window that paints slowly.
     test.setTimeout(240_000);
     await page.locator('.nav-item[data-page="settings"]').click();
     await page.locator('[data-preference-tab="appearance"]').click();
-    await expect(page.locator('#layout-gallery [role="radio"]')).toHaveCount(10);
+    await expect(page.locator('#layout-gallery [role="radio"]')).toHaveCount(11);
     await expect(page.locator('#kit-switch [role="radio"]')).toHaveCount(9);
+    await expect(page.locator('#lines-switch [role="radio"]')).toHaveCount(6);
     await page.locator('[data-layout-mode="light"]').click();
     const switchTimes = [];
-    for (const layout of ['acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio', 'lemaan']) {
+    for (const layout of ['acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio', 'islands', 'lemaan']) {
       await page.locator(`[data-layout-choice="${layout}"]`).click();
       await expect(page.locator('html')).toHaveAttribute('data-layout', layout);
       // Measured in-page (apply + style recalculation): the hidden QA window paints at ~1 fps, so click latency is not representative.
@@ -1503,21 +1504,34 @@ test.describe('Electron production workflow', () => {
       await page.locator(`[data-kit-choice="${kit}"]`).click();
       await expect(page.locator('html')).toHaveAttribute('data-kit', kit);
     }
+    // Line styles: each one changes how panel frames are drawn, and the choice survives a reload.
+    // Measured with the default kit: the minimal kit removes panel frames on purpose.
+    await page.locator('[data-kit-choice="auto"]').click();
+    const panelFrames = new Set();
+    for (const style of ['hairline', 'glow', 'gradient', 'fade', 'accent', 'plain']) {
+      await page.locator(`[data-lines-choice="${style}"]`).click();
+      await expect(page.locator('html')).toHaveAttribute('data-lines', style);
+      panelFrames.add(await page.locator('#settings-page').evaluate((node) => { const css = getComputedStyle(node); return `${css.borderTopColor}|${css.boxShadow}|${css.backgroundImage}`; }));
+    }
+    await page.locator('[data-lines-choice="glow"]').click();
+    await page.locator('[data-kit-choice="minimal"]').click();
     const panelRadius = await page.locator('#settings-page').evaluate((node) => parseFloat(getComputedStyle(node).borderTopLeftRadius));
     expect(panelRadius).toBe(0);
     await page.reload();
     await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
     await expect(page.locator('html')).toHaveAttribute('data-layout', 'office');
     await expect(page.locator('html')).toHaveAttribute('data-kit', 'minimal');
+    await expect(page.locator('html')).toHaveAttribute('data-lines', 'glow');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'office-dark');
     // Restore the original look for any later test.
-    await page.evaluate(() => { window.aurumAppearance.applyKit('auto'); window.aurumAppearance.applyMode('keep'); window.aurumAppearance.applyLayout('lemaan'); applyThemeChoice('midnight', true); });
+    await page.evaluate(() => { window.aurumAppearance.applyKit('auto'); window.aurumAppearance.applyLines('plain'); window.aurumAppearance.applyMode('keep'); window.aurumAppearance.applyLayout('lemaan'); applyThemeChoice('midnight', true); });
     await expect(page.locator('html')).toHaveAttribute('data-layout', 'lemaan');
     const metrics = [
-      metric('Window layouts applied', 10, 'layouts', 10, 'min', 'acrobat, finereader, classic, apple, office, modern, ribbon, fluent, studio, lemaan × capture/library/settings without sideways scroll'),
+      metric('Window layouts applied', 11, 'layouts', 11, 'min', 'acrobat, finereader, classic, apple, office, modern, ribbon, fluent, studio, islands, lemaan × capture/library/settings without sideways scroll'),
       metric('Design kits applied', 8, 'kits', 8, 'min', 'compact, tiles, list, icons, sharp, glass, contrast, minimal; minimal panel radius 0'),
-      metric('Layout switch response', Math.max(...switchTimes), 'ms', 500, 'max', 'click to data-layout on <html>, slowest of 10'),
-      metric('Appearance persistence after reload', 3, 'attributes', 3, 'min', 'layout, kit and layout dark colours restored before first paint')
+      metric('Layout switch response', Math.max(...switchTimes), 'ms', 500, 'max', 'click to data-layout on <html>, slowest of 11'),
+      metric('Line styles draw differently', panelFrames.size, 'styles', 5, 'min', 'distinct panel frame (colour, shadow, gradient) per line style, default kit'),
+      metric('Appearance persistence after reload', 4, 'attributes', 4, 'min', 'layout, kit, line style and layout dark colours restored before first paint')
     ];
     await attachMetrics(testInfo, metrics);
     expect(metrics.every((item) => item.pass)).toBeTruthy();

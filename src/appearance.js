@@ -18,7 +18,8 @@
     { id: 'modern', name: 'מודרני', description: 'קווים דקים, צפוף וחד, בלי תוויות בסרגל', light: 'modern-light', dark: 'modern-dark', mini: [11, 10, 3] },
     { id: 'ribbon', name: 'רצועת כלים', description: 'כמו מעבד התמלילים: לשוניות למעלה ושורת כותרת כחולה', light: 'ribbon-light', dark: 'ribbon-dark', mini: [0, 10, 2] },
     { id: 'fluent', name: 'חלונות 11', description: 'סרגל ניווט רחב עם שמות, כמו מסך ההגדרות של חלונות', light: 'fluent-light', dark: 'fluent-dark', mini: [28, 10, 4] },
-    { id: 'studio', name: 'אולפן עריכה', description: 'אפור פחם וצפוף, כמו תוכנות עריכת וידאו', light: 'studio-light', dark: 'studio-dark', mini: [9, 8, 1] }
+    { id: 'studio', name: 'אולפן עריכה', description: 'אפור פחם וצפוף, כמו תוכנות עריכת וידאו', light: 'studio-light', dark: 'studio-dark', mini: [9, 8, 1] },
+    { id: 'islands', name: 'איים צפים', description: 'סרגלים צפים ומעוגלים עם זוהר עדין, כמו הדפדפנים החדשים', light: 'islands-light', dark: 'islands-dark', mini: [14, 12, 6] }
   ];
   const MODES = [
     { id: 'match', name: 'לפי המצב הנוכחי' },
@@ -36,6 +37,15 @@
     { id: 'sharp', name: 'חד ומדויק', hint: 'פינות ישרות וקווים דקים' },
     { id: 'glass', name: 'זכוכית', hint: 'שקוף ורך עם הילה' },
     { id: 'contrast', name: 'ניגודיות גבוהה', hint: 'קווים וטקסט ברורים' }
+  ];
+  // Line style: how frames and dividers are drawn. Independent of layout and kit.
+  const LINES = [
+    { id: 'plain', name: 'רגיל', hint: 'קו אחד אחיד' },
+    { id: 'hairline', name: 'קו שערה', hint: 'דק ועדין במיוחד' },
+    { id: 'glow', name: 'זוהר פנימי', hint: 'הבהקה עליונה ועומק' },
+    { id: 'gradient', name: 'מסגרת מדורגת', hint: 'קו שמחליף גוון' },
+    { id: 'fade', name: 'מפרידים דועכים', hint: 'קווים שנעלמים בקצוות' },
+    { id: 'accent', name: 'קו מבטא', hint: 'פס צבע בראש כל לוח' }
   ];
   const layoutThemes = new Set(LAYOUTS.flatMap((layout) => [layout.light, layout.dark]));
   const findLayout = (id) => LAYOUTS.find((layout) => layout.id === id) || LAYOUTS[0];
@@ -68,6 +78,13 @@
     const kit = KITS.find((item) => item.id === id) || KITS[0];
     root.dataset.kit = kit.id;
     store.set('aurum-kit', kit.id);
+    render();
+  }
+
+  function applyLines(id) {
+    const style = LINES.find((item) => item.id === id) || LINES[0];
+    root.dataset.lines = style.id;
+    store.set('aurum-lines', style.id);
     render();
   }
 
@@ -135,11 +152,28 @@
       button.addEventListener('click', () => applyKit(kit.id));
       return button;
     }));
+    const lines = document.querySelector('#lines-switch');
+    lines?.replaceChildren(...LINES.map((style) => {
+      const button = radio(document.createElement('button'), root.dataset.lines === style.id);
+      button.type = 'button';
+      button.dataset.linesChoice = style.id;
+      const sample = document.createElement('span');
+      sample.className = 'lines-sample';
+      sample.dataset.linesSample = style.id;
+      sample.append(document.createElement('i'));
+      const name = document.createElement('b');
+      name.textContent = style.name;
+      const hint = document.createElement('small');
+      hint.textContent = style.hint;
+      button.append(sample, name, hint);
+      button.addEventListener('click', () => applyLines(style.id));
+      return button;
+    }));
   }
 
   // Arrow keys move between options inside each radio group, like native Windows radio buttons.
   document.addEventListener('keydown', (event) => {
-    const group = event.target.closest?.('#layout-gallery, #layout-mode-switch, #kit-switch');
+    const group = event.target.closest?.('#layout-gallery, #layout-mode-switch, #kit-switch, #lines-switch');
     if (!group || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
     const buttons = [...group.querySelectorAll('[role="radio"]')];
     const index = buttons.indexOf(event.target);
@@ -153,6 +187,7 @@
   function initializeAppearance() {
     root.dataset.layout = findLayout(root.dataset.layout).id;
     if (!KITS.some((kit) => kit.id === root.dataset.kit)) root.dataset.kit = 'auto';
+    if (!LINES.some((style) => style.id === root.dataset.lines)) root.dataset.lines = 'plain';
     const zoomSection = document.querySelector('#ui-zoom-section');
     if (!window.screenStudio?.setUiZoom) zoomSection?.classList.add('hidden');
     else {
@@ -164,9 +199,9 @@
   }
 
   window.aurumAppearance = {
-    layouts: LAYOUTS, kits: KITS, modes: MODES,
+    layouts: LAYOUTS, kits: KITS, modes: MODES, lines: LINES,
     isLayoutTheme: (theme) => layoutThemes.has(theme),
-    applyLayout, applyKit, applyMode, applyZoom, render
+    applyLayout, applyKit, applyMode, applyLines, applyZoom, render
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializeAppearance, { once: true });
   else initializeAppearance();
