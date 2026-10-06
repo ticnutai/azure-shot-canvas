@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   setCaptureExclusion: (enabled) => ipcRenderer.invoke('window:capture-exclusion', Boolean(enabled)),
   getCaptureCapabilities: () => ipcRenderer.invoke('capture:capabilities'),
   prepareCapture: (options) => ipcRenderer.invoke('capture:prepare', options),
+  captureStill: (sourceId, maxWidth) => ipcRenderer.invoke('capture:still', sourceId, maxWidth),
   saveScreenshot: (bytes, options) => ipcRenderer.invoke('file:save-screenshot', bytes, options),
   saveRecording: (bytes, convertToMp4) => ipcRenderer.invoke('file:save-recording', bytes, convertToMp4),
   beginRecordingFile: (details) => ipcRenderer.invoke('recording:begin', details),

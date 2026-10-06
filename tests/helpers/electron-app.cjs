@@ -2,9 +2,16 @@ const { _electron: electron } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { rmSync } = require('node:fs');
+
+// Folders this helper created are removed when the test process ends (not at app close: some tests restart
+// the app on the same folder). Without this every run left its captures behind in the temp folder.
+const createdDirectories = new Set();
+process.once('exit', () => { for (const directory of createdDirectories) { try { rmSync(directory, { recursive: true, force: true, maxRetries: 2 }); } catch {} } });
 
 async function launchStudio(testName, options = {}) {
   const outputDir = options.outputDir || await fs.mkdtemp(path.join(os.tmpdir(), `screen-studio-${testName}-`));
+  if (!options.outputDir) createdDirectories.add(outputDir);
   const qaReportDir = path.join(outputDir, 'qa-report');
   await fs.mkdir(qaReportDir, { recursive: true });
   const previous = qaFixture('2026-08-11T10:00:00.000Z', 1500, 1920);

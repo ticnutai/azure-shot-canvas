@@ -525,6 +525,25 @@ async function convertToGif(webmPath) {
   return { path: gifPath, webmPath, converted: true, encoder: 'gif', hardwareEncoder: false, quality };
 }
 
+// Still image of a source through the thumbnail route. Some Windows setups refuse the live screen stream
+// ("Could not start video source") while this route keeps working, so screenshots and the preview fall back to it.
+async function captureStill(sourceId, maxWidth = 0) {
+  const id = String(sourceId || '');
+  const isScreen = id.startsWith('screen:');
+  const displays = screen.getAllDisplays();
+  const largest = displays.reduce((best, display) => (display.size.width * display.scaleFactor > best.size.width * best.scaleFactor ? display : best), displays[0]);
+  const fullWidth = Math.round(largest.size.width * largest.scaleFactor);
+  const fullHeight = Math.round(largest.size.height * largest.scaleFactor);
+  const width = maxWidth > 0 ? Math.min(fullWidth, Math.round(maxWidth)) : fullWidth;
+  const height = Math.round(width * fullHeight / fullWidth);
+  const sources = await desktopCapturer.getSources({ types: [isScreen ? 'screen' : 'window'], thumbnailSize: { width, height }, fetchWindowIcons: false });
+  const source = sources.find((item) => item.id === id);
+  if (!source || source.thumbnail.isEmpty()) throw new Error('המקור שנבחר לא נמצא — בחרו מסך או חלון אחר');
+  const size = source.thumbnail.getSize();
+  const preview = maxWidth > 0;
+  return { bytes: preview ? source.thumbnail.toJPEG(82) : source.thumbnail.toPNG(), type: preview ? 'image/jpeg' : 'image/png', width: size.width, height: size.height };
+}
+
 async function getSources() {
   if (Date.now() - sourceCache.at < 750 && sourceCache.public.length) return sourceCache.public;
   const sources = await desktopCapturer.getSources({
@@ -810,6 +829,7 @@ function registerIpc() {
   // whole screen does not show itself recursively and full-screen recordings do not include the studio.
   ipcMain.handle('window:capture-exclusion', (_event, enabled) => { mainWindow?.setContentProtection(Boolean(enabled)); return Boolean(enabled); });
   ipcMain.handle('capture:capabilities', () => getEncoderCapabilities());
+  ipcMain.handle('capture:still', (_event, sourceId, maxWidth) => captureStill(sourceId, Number(maxWidth) || 0));
   ipcMain.handle('capture:prepare', (_event, options) => {
     pendingCapture = { sourceId: options.sourceId, includeSystemAudio: Boolean(options.includeSystemAudio) };
     return true;

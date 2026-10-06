@@ -1078,6 +1078,35 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('when Windows refuses the live screen stream, screenshots and the preview fall back to still images', async ({}, testInfo) => {
+    test.setTimeout(120_000);
+    await page.locator('[data-page="capture"]').click();
+    await setCaptureDefaults(page, 'screenshot', 'full');
+    // Same failure Windows gives when its graphics capture service is stuck: "Could not start video source".
+    await page.evaluate(() => {
+      window.__realGetDisplayMedia = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getDisplayMedia = async () => { throw new DOMException('Could not start video source', 'NotReadableError'); };
+    });
+    await page.locator('.source-card').first().click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'ready', { timeout: 20_000 });
+    await expect(page.locator('html')).toHaveAttribute('data-preview-mode', 'still');
+    await expect(page.locator('#selected-source-label')).toContainText('תצוגה איטית');
+    const before = new Set(await fs.readdir(outputDir));
+    const started = Date.now();
+    await page.locator('#record-button').click();
+    const shot = await waitForNewFile(outputDir, '.png', before, 30_000);
+    const elapsed = Date.now() - started;
+    const png = await pngDimensions(shot);
+    await page.evaluate(() => { navigator.mediaDevices.getDisplayMedia = window.__realGetDisplayMedia; });
+    await page.locator('.source-card').first().click();
+    const metrics = [
+      metric('Screenshot saved without a live stream', png.width, 'px', 320, 'min', `${png.width}×${png.height} from the still route`),
+      metric('Fallback screenshot time', elapsed, 'ms', 15000, 'max', 'click to file on disk')
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
   test('capture-screen sections collapse, stay collapsed after reload, and a collapsed preview holds no screen stream', async ({}, testInfo) => {
     test.setTimeout(120_000);
     await page.locator('[data-page="capture"]').click();

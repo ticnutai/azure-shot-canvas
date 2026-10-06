@@ -752,14 +752,24 @@ async function startLivePreview(source = state.selectedSource) {
   if (state.collapsed?.preview) return false;
   if (!source || state.recorder || state.busy) return false;
   const sameSource = state.previewStream?.active && document.documentElement.dataset.previewSourceId === source.id;
-  if (sameSource) return true;
+  if (sameSource) {
+    $('#selected-source-label').textContent = `${state.previewStream.isStillFallback ? 'תצוגה איטית (תמונה בשנייה)' : 'תצוגה חיה'} — ${source.name}`;
+    return true;
+  }
   stopLivePreview();
   const requestId = ++state.previewRequestId;
   setPreviewState('loading', `פותח תצוגה חיה של ${source.name}…`);
   $('#selected-source-label').textContent = `מתחבר — ${source.name}`;
   try {
     await api.prepareCapture({ sourceId: source.id, includeSystemAudio: false });
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+    } catch (error) {
+      if (!api.captureStill || !STREAM_REFUSED.has(error?.name)) throw error;
+      // Slow preview (one picture a second) instead of none; capture and editing are unaffected.
+      stream = await stillImageStream(source.id, { maxWidth: 1600, refreshMs: 1000 });
+    }
     if (requestId !== state.previewRequestId) {
       stream.getTracks().forEach((track) => track.stop());
       return false;
@@ -773,7 +783,8 @@ async function startLivePreview(source = state.selectedSource) {
     document.documentElement.dataset.previewSourceId = source.id;
     document.documentElement.dataset.previewWidth = String(displayVideo.videoWidth);
     document.documentElement.dataset.previewHeight = String(displayVideo.videoHeight);
-    $('#selected-source-label').textContent = `תצוגה חיה — ${source.name}`;
+    $('#selected-source-label').textContent = stream.isStillFallback ? `תצוגה איטית (תמונה בשנייה) — ${source.name}` : `תצוגה חיה — ${source.name}`;
+    document.documentElement.dataset.previewMode = stream.isStillFallback ? 'still' : 'live';
     setPreviewState('ready');
     monitorPreviewFrames(requestId);
     stream.getVideoTracks()[0]?.addEventListener('ended', () => {
@@ -825,11 +836,13 @@ function mediaErrorText(error) {
   const known = {
     NotAllowedError: 'אין הרשאה לצלם את המסך — אשרו את הבקשה או בחרו מקור שוב',
     NotFoundError: 'המקור שנבחר לא נמצא — בחרו מסך או חלון אחר',
-    NotReadableError: 'המקור תפוס או לא זמין כרגע (אולי המחשב נעול)',
+    NotReadableError: 'חלונות לא מאפשר כרגע הקלטת מסך חיה (מחשב נעול, או שירות הצילום של חלונות נתקע — הפעלה מחדש של המחשב פותרת בדרך כלל). צילומי מסך ממשיכים לעבוד',
     AbortError: 'הבחירה בוטלה',
     OverconstrainedError: 'המקור לא תומך בהגדרות האיכות שנבחרו'
   };
-  return known[error?.name] || (/permission denied/i.test(error?.message || '') ? known.NotAllowedError : error?.message || 'שגיאה לא ידועה');
+  // Errors from the main process arrive wrapped: "Error invoking remote method 'x': Error: <message>" — keep only the message.
+  const message = String(error?.message || '').replace(/^Error invoking remote method '[^']*':\s*(?:\w*Error:\s*)?/, '');
+  return known[error?.name] || (/permission denied/i.test(message) ? known.NotAllowedError : message || 'שגיאה לא ידועה');
 }
 
 // Capture-screen sections that can be collapsed, remembered per user. Collapsing the preview stops its screen stream.
@@ -907,13 +920,48 @@ function waitForVideo(video) {
   });
 }
 
+// When Windows refuses the live screen stream, a still of the same source (thumbnail route in the main process)
+// is painted on a canvas whose stream stands in for the screen: region selection, finishing and saving run unchanged.
+// With refreshMs the still is re-taken on that interval (a slow but working live preview).
+const STREAM_REFUSED = new Set(['NotReadableError', 'AbortError']);
+async function stillImageStream(sourceId, { maxWidth = 0, refreshMs = 0 } = {}) {
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  const paint = async () => {
+    const still = await api.captureStill(sourceId, maxWidth);
+    const bitmap = await createImageBitmap(new Blob([still.bytes], { type: still.type }));
+    if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) { canvas.width = bitmap.width; canvas.height = bitmap.height; }
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
+  };
+  await paint();
+  const stream = canvas.captureStream(refreshMs ? Math.max(1, Math.round(1000 / refreshMs)) : 5);
+  const [track] = stream.getVideoTracks();
+  let painting = false;
+  const timer = setInterval(async () => {
+    if (track.readyState === 'ended') return clearInterval(timer);
+    if (!refreshMs) return context.drawImage(canvas, 0, 0);
+    if (painting) return;
+    painting = true;
+    try { await paint(); } catch {} finally { painting = false; }
+  }, refreshMs || 200);
+  stream.isStillFallback = true;
+  return stream;
+}
+
 async function acquireInputs(includeRecordingInputs) {
   const includeSystemAudio = includeRecordingInputs && $('#system-audio').checked;
   await api.prepareCapture({ sourceId: state.selectedSource.id, includeSystemAudio });
-  state.displayStream = await navigator.mediaDevices.getDisplayMedia({
-    video: { frameRate: qualityPresets[state.quality].fps },
-    audio: includeSystemAudio
-  });
+  try {
+    state.displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: qualityPresets[state.quality].fps },
+      audio: includeSystemAudio
+    });
+  } catch (error) {
+    // A screenshot needs one frame: take it through the still route. A recording needs the live stream.
+    if (includeRecordingInputs || !api.captureStill || !STREAM_REFUSED.has(error?.name)) throw error;
+    state.displayStream = await stillImageStream(state.selectedSource.id);
+  }
   displayVideo.srcObject = state.displayStream;
   await waitForVideo(displayVideo);
   setPreviewState('ready');
@@ -1400,7 +1448,7 @@ async function beginCapture(kind, forcedScope = null) {
     if (state.recorder && state.recorder.state === 'inactive') { state.recorder = null; state.recordingSession = null; }
     stopInputStreams();
     setStatus('שגיאה', 'error');
-    showToast(`לא ניתן להתחיל צילום: ${error.message}`, 7000);
+    showToast(`לא ניתן להתחיל צילום: ${mediaErrorText(error)}`, 9000);
     restoreLivePreview();
   } finally {
     if (!state.scrollCapture) state.busy = false;
