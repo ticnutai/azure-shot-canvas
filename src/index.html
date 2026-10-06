@@ -54,7 +54,7 @@
               <button class="theme-manage-button" id="manage-themes-shortcut">✎ ניהול ועריכת ערכות</button>
             </div>
           </div>
-          <span class="pro-badge">✦ מקצועי</span>
+          <span class="pro-badge">✪ מקצועי</span>
         </div>
         <label class="search-box"><span>⌕</span><input id="global-search" placeholder="חיפוש הקלטות, קליפים ותבניות…"><kbd>Ctrl K</kbd></label>
         <div class="wordmark"><h1><b>אורום</b> סטודיו</h1><p>הקלטת מסך, מצלמה וצילום — בשליטה מלאה</p></div>
@@ -109,18 +109,17 @@
             <div class="capture-stage panel">
               <div class="source-toolbar">
                 <div class="capture-layout-picker">
-                  <button class="layout-picker-button" id="capture-layout-button" type="button" aria-label="בחירת פריסת מסך" aria-expanded="false" title="פריסת מסך">▦</button>
+                  <button class="layout-picker-button" id="capture-layout-button" type="button" aria-label="בחירת פריסת מסך" aria-expanded="false" title="פריסת מסך">⊟</button>
                   <div class="capture-layout-menu hidden" id="capture-layout-menu" role="menu">
                     <button type="button" data-capture-layout-choice="clean"><span>▣</span><b>נקייה</b><small>הגדרות נפתחות בדיאלוג</small></button>
                     <button type="button" data-capture-layout-choice="professional"><span>▥</span><b>מקצועית</b><small>הגדרות קבועות לצד התצוגה</small></button>
                     <button type="button" data-capture-layout-choice="focus"><span>□</span><b>ממוקדת</b><small>תצוגה מקדימה בלבד</small></button>
                   </div>
                 </div>
-                <button class="layout-settings-button" id="open-capture-settings" type="button">⚙ <span>הגדרות</span></button>
+                <button class="layout-settings-button" id="open-capture-settings" type="button">⚙ <span>הגדרות צילום</span></button>
                 <button class="source-type active" data-source-filter="screen">▰ <span>מסך מלא</span></button>
                 <button class="source-type" data-source-filter="window">▤ <span>חלון</span></button>
                 <button class="source-type unavailable" disabled>▭ <span>לשונית</span></button>
-                <button class="source-type" id="camera-source-shortcut">◘ <span>מצלמה</span></button>
                 <button class="refresh-button" id="refresh-sources">↻ רענון</button>
                 <span class="countdown-note" id="countdown-note">◷ צילום מיידי</span>
                 <span class="collapse-toggles" role="group" aria-label="הצגה והסתרה של חלקי המסך"><button type="button" class="collapse-toggle" data-collapse-toggle="sources" aria-expanded="true"><i aria-hidden="true">▴</i> מקורות</button><button type="button" class="collapse-toggle" data-collapse-toggle="preview" aria-expanded="true"><i aria-hidden="true">▴</i> תצוגה</button></span>
@@ -130,9 +129,9 @@
                 <video id="display-video" class="live-preview-video" autoplay muted playsinline></video>
                 <div class="preview-shade" id="preview-shade"></div>
                 <div class="preview-safe-area" id="preview-safe-area" aria-hidden="true"></div>
-                <div class="preview-display-controls" aria-label="בקרי תצוגה מקדימה"><button id="live-preview-toggle" aria-pressed="true" title="תצוגה חיה פעילה — לחיצה לכיבוי">◍</button><button class="active" data-preview-fit="contain" title="התאמה מלאה">▣</button><button data-preview-fit="cover" title="מילוי השטח">▰</button><label title="זום תצוגה"><span>⌕</span><input id="preview-zoom" type="range" min="100" max="200" value="100"><output id="preview-zoom-output">100%</output></label><button id="toggle-safe-area" aria-pressed="false" title="קווי שטח בטוח">⌗</button></div>
+                <div class="preview-display-controls" aria-label="בקרי תצוגה מקדימה"><button id="live-preview-toggle" aria-pressed="true" title="תצוגה חיה פעילה — לחיצה לכיבוי">◍</button><button class="active" data-preview-fit="contain" title="התאמה מלאה">⊡</button><button data-preview-fit="cover" title="מילוי השטח">⤢</button><label title="זום תצוגה"><span>⌕</span><input id="preview-zoom" type="range" min="100" max="200" value="100"><output id="preview-zoom-output">100%</output></label><button id="toggle-safe-area" aria-pressed="false" title="קווי שטח בטוח">⊞</button></div>
                 <div class="preview-status"><span id="quality-status">4K · 60fps</span><span id="stage-time">00:00</span></div>
-                <button class="expand-button" id="expand-preview" aria-label="הגדלת התצוגה המקדימה">↗</button>
+                <button class="expand-button" id="expand-preview" aria-label="הגדלת התצוגה המקדימה">⛶</button>
                 <div class="empty-preview"><span>▰</span><b id="selected-source-label">תצוגה מקדימה — מסך מלא</b><p>בחר מקור למעלה, כוון את ההגדרות ולחץ על הקלטה כדי להתחיל</p></div>
                 <button class="snapshot-fab" id="screenshot-button" title="צילום תמונה">▣</button>
                 <div class="audio-meter" aria-label="מד עוצמת קול"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -151,7 +150,7 @@
                 <div class="recent-controls">
                   <div class="recent-utility-actions" role="group" aria-label="פעולות קבצים מהירות">
                     <button id="quick-edit-latest" type="button" title="עריכת הצילום האחרון" aria-label="עריכת הצילום האחרון">✎</button>
-                    <button type="button" data-page-link="library" title="פתיחת כל הספרייה" aria-label="פתיחת כל הספרייה">▦</button>
+                    <button type="button" data-page-link="library" title="פתיחת כל הספרייה" aria-label="פתיחת כל הספרייה">▥</button>
                     <button id="quick-open-output" type="button" title="פתיחת תיקיית השמירה" aria-label="פתיחת תיקיית השמירה">⌑</button>
                   </div>
                   <div class="recent-tabs" role="tablist" aria-label="סינון המדיה האחרונה">
@@ -236,7 +235,7 @@
               <div class="settings-system-status">
                 <article><span>⚡ מקודד וידאו</span><b id="encoder-status">בודק…</b></article>
                 <article><span>▱ מקום פנוי</span><b id="storage-status">בודק…</b></article>
-                <article><span>↺ שחזור הקלטות</span><b id="recovery-status">בודק…</b></article>
+                <article><span>⟲ שחזור הקלטות</span><b id="recovery-status">בודק…</b></article>
                 <article><span>⇪ שיתוף</span><b>מקומי ופרטי</b></article>
               </div>
             </div>
@@ -257,7 +256,7 @@
                 <section id="ui-zoom-section"><h3>גודל תצוגה</h3><p>הגדלה או הקטנה של כל הממשק.</p><label class="ui-zoom-row"><input type="range" id="ui-zoom" min="75" max="150" step="5" value="100" aria-label="גודל תצוגה"><output id="ui-zoom-output">100%</output><button type="button" class="ghost" id="ui-zoom-reset">איפוס</button></label></section>
               </div>
               <div class="theme-editor-heading"><div><h2>עורך ערכות נושא</h2><p>בחר ערכת בסיס והתאם את הצבעים. כל שינוי מוצג מיד לפני השמירה.</p></div><span class="draft-badge" id="theme-draft-status">אין שינויים</span></div>
-              <div class="theme-library-toolbar"><label><span>ערכה אישית</span><select id="custom-theme-select"><option value="">יצירת ערכה חדשה</option></select></label><button class="gold-button" id="new-custom-theme">＋ חדשה</button><button class="ghost" id="duplicate-custom-theme" disabled>⧉ שכפול</button><button class="danger-button" id="delete-custom-theme" disabled>⌫ מחיקה</button></div>
+              <div class="theme-library-toolbar"><label><span>ערכה אישית</span><select id="custom-theme-select"><option value="">יצירת ערכה חדשה</option></select></label><button class="gold-button" id="new-custom-theme">＋ חדשה</button><button class="ghost" id="duplicate-custom-theme" disabled>❐ שכפול</button><button class="danger-button" id="delete-custom-theme" disabled>⌫ מחיקה</button></div>
               <label class="theme-name-field"><span><b>שם הערכה</b><small>השם שיופיע בתפריט הבחירה</small></span><input id="custom-theme-name" maxlength="40" placeholder="לדוגמה: כחול המשרד שלי"></label>
               <label class="theme-base-field"><span><b>ערכת בסיס</b><small>התחל מאחת משש הערכות המובנות</small></span><select id="theme-base-select"><option value="midnight">נייבי זהב</option><option value="porcelain">פורצלן בהיר</option><option value="sky">תכלת שמיים</option><option value="sand">חול חמים</option><option value="mint">מנטה רענן</option><option value="ivory">שנהב דק ונקי</option></select></label>
               <div class="theme-editor-layout">
@@ -319,17 +318,17 @@
 
   <section class="image-editor-shell hidden" id="image-editor-shell" aria-label="עורך צילומי מסך">
     <header class="editor-topbar">
-      <div class="editor-title"><button class="editor-icon" id="editor-close" title="סגירה">×</button><div><b id="editor-file-name">עורך צילום מסך</b><small id="editor-save-state">עריכה לא־הרסנית</small></div></div>
+      <div class="editor-title"><button class="editor-icon" id="editor-close" title="סגירה" aria-label="סגירה">✕</button><div><b id="editor-file-name">עורך צילום מסך</b><small id="editor-save-state">עריכה לא־הרסנית</small></div></div>
       <div class="editor-history"><button class="editor-icon" id="editor-undo" title="ביטול Ctrl+Z">↶</button><button class="editor-icon" id="editor-redo" title="ביצוע מחדש Ctrl+Y">↷</button><button class="editor-icon" id="editor-fit" title="התאמה למסך Ctrl+0">⛶</button><button class="editor-icon" id="editor-zoom-out" title="הקטנה Ctrl+-">−</button><input id="editor-zoom-range" type="range" min="5" max="400" step="5" value="100" title="זום העורך"><output id="editor-zoom">100%</output><button class="editor-icon" id="editor-zoom-in" title="הגדלה Ctrl++">＋</button></div>
       <div class="editor-save-actions"><button class="ghost" id="editor-copy">⧉ העתקה</button><select id="editor-beautify-style" class="editor-beautify-style" title="רקע לייצוא המעוצב" aria-label="רקע לייצוא המעוצב"><option value="ocean">רקע ים</option><option value="sunset">רקע שקיעה</option><option value="slate">רקע אפור</option></select><button class="ghost" id="editor-beautify" title="יוצר תמונה חדשה לשיתוף: ריפוד, פינות מעוגלות, צל ורקע — המקור לא משתנה">✦ ייצוא מעוצב</button><button class="ghost" id="editor-save-copy">שמירת עותק</button><button class="gold-button" id="editor-save">שמירה</button></div>
     </header>
     <div class="editor-modebar"><button data-editor-mode="quick" class="active">עריכה מהירה</button><button data-editor-mode="professional">עריכה מקצועית</button><span></span><label><input type="checkbox" id="editor-snap"> הצמדה לרשת</label></div>
     <div class="editor-layout">
       <nav class="editor-tools" aria-label="כלי עריכה">
-        <button data-editor-tool="select" class="active" title="בחירה (V)"><span>⌖</span><small>בחירה</small></button><button data-editor-tool="arrow" title="חץ (A)"><span>➜</span><small>חץ</small></button><button data-editor-tool="double-arrow" title="חץ כפול (Shift לזווית ישרה)"><span>↔</span><small>דו־חץ</small></button><button data-editor-tool="line" title="קו (L) · Shift לזווית ישרה"><span>╱</span><small>קו</small></button><button data-editor-tool="rect" title="מלבן (R) · Shift לריבוע"><span>□</span><small>מלבן</small></button><button data-editor-tool="ellipse" title="עיגול (O) · Shift לעיגול מושלם"><span>⬭</span><small>עיגול</small></button><button data-editor-tool="polygon" title="פוליגון (P) · לחיצה כפולה לסיום"><span>⬡</span><small>פוליגון</small></button><button data-editor-tool="pen" title="עט (D)"><span>✎</span><small>עט</small></button><button data-editor-tool="highlighter" title="מרקר (H)"><span>▰</span><small>מרקר</small></button><button data-editor-tool="text" title="טקסט (T)"><span>T</span><small>טקסט</small></button><button data-editor-tool="callout" title="הערה מודגשת"><span>▣</span><small>הערה</small></button><button data-editor-tool="counter" title="מספור (N)"><span>①</span><small>מספור</small></button><button data-editor-tool="blur" data-editor-advanced title="טשטוש (B) — לעיצוב בלבד; להסתרת מידע רגיש השתמשו בהשחרה"><span>▧</span><small>טשטוש</small></button><button data-editor-tool="pixelate" data-editor-advanced title="פיקסול — לעיצוב בלבד; טקסט מפוקסל ניתן לעיתים לשחזור"><span>▦</span><small>פיקסול</small></button><button data-editor-tool="redact" title="השחרה מלאה — הדרך הבטוחה להסתיר מידע רגיש"><span>██</span><small>השחרה</small></button><button type="button" id="editor-smart-redact" class="editor-smart-redact" title="השחרה חכמה — מאתרת דוא&quot;ל, טלפונים, כרטיסי אשראי, תעודות זהות, כתובות רשת וקישורים ומשחירה אותם"><span>✱</span><small>השחרה חכמה</small></button><button data-editor-tool="crop" data-editor-advanced title="חיתוך (C)"><span>⌗</span><small>חיתוך</small></button><button data-editor-tool="spotlight" data-editor-advanced title="זרקור (S) — מחשיך את כל מה שמחוץ לאזור שנבחר"><span>◎</span><small>זרקור</small></button><button data-editor-tool="magnify" data-editor-advanced title="זכוכית מגדלת"><span>⌕</span><small>הגדלה</small></button><button data-editor-tool="image" data-editor-advanced title="הוספת תמונה (או הדבקה Ctrl+V)"><span>⧉</span><small>תמונה</small></button>
+        <button data-editor-tool="select" class="active" title="בחירה (V)"><span>⌖</span><small>בחירה</small></button><button data-editor-tool="arrow" title="חץ (A)"><span>➜</span><small>חץ</small></button><button data-editor-tool="double-arrow" title="חץ כפול (Shift לזווית ישרה)"><span>↔</span><small>דו־חץ</small></button><button data-editor-tool="line" title="קו (L) · Shift לזווית ישרה"><span>╱</span><small>קו</small></button><button data-editor-tool="rect" title="מלבן (R) · Shift לריבוע"><span>□</span><small>מלבן</small></button><button data-editor-tool="ellipse" title="עיגול (O) · Shift לעיגול מושלם"><span>⬭</span><small>עיגול</small></button><button data-editor-tool="polygon" title="פוליגון (P) · לחיצה כפולה לסיום"><span>⬡</span><small>פוליגון</small></button><button data-editor-tool="pen" title="עט (D)"><span>✒</span><small>עט</small></button><button data-editor-tool="highlighter" title="מרקר (H)"><span>▬</span><small>מרקר</small></button><button data-editor-tool="text" title="טקסט (T)"><span>⊤</span><small>טקסט</small></button><button data-editor-tool="callout" title="הערה מודגשת"><span>❝</span><small>הערה</small></button><button data-editor-tool="counter" title="מספור (N)"><span>①</span><small>מספור</small></button><button data-editor-tool="blur" data-editor-advanced title="טשטוש (B) — לעיצוב בלבד; להסתרת מידע רגיש השתמשו בהשחרה"><span>▧</span><small>טשטוש</small></button><button data-editor-tool="pixelate" data-editor-advanced title="פיקסול — לעיצוב בלבד; טקסט מפוקסל ניתן לעיתים לשחזור"><span>▩</span><small>פיקסול</small></button><button data-editor-tool="redact" title="השחרה מלאה — הדרך הבטוחה להסתיר מידע רגיש"><span>██</span><small>השחרה</small></button><button type="button" id="editor-smart-redact" class="editor-smart-redact" title="השחרה חכמה — מאתרת דוא&quot;ל, טלפונים, כרטיסי אשראי, תעודות זהות, כתובות רשת וקישורים ומשחירה אותם"><span>✱</span><small>השחרה חכמה</small></button><button data-editor-tool="crop" data-editor-advanced title="חיתוך (C)"><span>⌗</span><small>חיתוך</small></button><button data-editor-tool="spotlight" data-editor-advanced title="זרקור (S) — מחשיך את כל מה שמחוץ לאזור שנבחר"><span>◎</span><small>זרקור</small></button><button data-editor-tool="magnify" data-editor-advanced title="זכוכית מגדלת"><span>⊕</span><small>הגדלה</small></button><button data-editor-tool="image" data-editor-advanced title="הוספת תמונה (או הדבקה Ctrl+V)"><span>⧈</span><small>תמונה</small></button>
       </nav>
       <main class="editor-workspace" id="editor-workspace"><div class="editor-canvas-wrap" id="editor-canvas-wrap"><canvas id="editor-canvas"></canvas></div></main>
-      <aside class="editor-properties"><h3>עיצוב הכלי</h3><label><span>צבע קו</span><input type="color" id="editor-stroke" value="#ef3340"></label><label><span>צבע מילוי</span><div class="fill-control"><input type="color" id="editor-fill" value="#ffffff"><button id="editor-fill-none" class="ghost">ללא</button></div></label><label><span>עובי <output id="editor-width-output">6</output></span><input type="range" id="editor-width" min="1" max="40" value="6"></label><label><span>שקיפות <output id="editor-opacity-output">100%</output></span><input type="range" id="editor-opacity" min="10" max="100" value="100"></label><label><span>גודל כתב <output id="editor-font-output">42</output></span><input type="range" id="editor-font-size" min="14" max="140" value="42"></label><label class="editor-text-property"><span>תוכן טקסט</span><textarea id="editor-text" dir="rtl" rows="3"></textarea></label><div class="editor-object-actions"><button class="ghost" id="editor-duplicate">⧉ שכפול</button><button class="ghost danger-text" id="editor-delete">⌫ מחיקה</button></div><div class="editor-advanced-actions" data-editor-advanced><h3>שכבות ויישור</h3><div><button class="ghost" data-editor-layer="front">קדימה ביותר</button><button class="ghost" data-editor-layer="back">אחורה ביותר</button><button class="ghost" data-editor-align="horizontal">מרכוז אופקי</button><button class="ghost" data-editor-align="vertical">מרכוז אנכי</button></div></div><div class="editor-stats" id="editor-stats"></div></aside>
+      <aside class="editor-properties"><h3>עיצוב הכלי</h3><label><span>צבע קו</span><input type="color" id="editor-stroke" value="#ef3340"></label><label><span>צבע מילוי</span><div class="fill-control"><input type="color" id="editor-fill" value="#ffffff"><button id="editor-fill-none" class="ghost">ללא</button></div></label><label><span>עובי <output id="editor-width-output">6</output></span><input type="range" id="editor-width" min="1" max="40" value="6"></label><label><span>שקיפות <output id="editor-opacity-output">100%</output></span><input type="range" id="editor-opacity" min="10" max="100" value="100"></label><label><span>גודל כתב <output id="editor-font-output">42</output></span><input type="range" id="editor-font-size" min="14" max="140" value="42"></label><label class="editor-text-property"><span>תוכן טקסט</span><textarea id="editor-text" dir="rtl" rows="3"></textarea></label><div class="editor-object-actions"><button class="ghost" id="editor-duplicate">❐ שכפול</button><button class="ghost danger-text" id="editor-delete">⌫ מחיקה</button></div><div class="editor-advanced-actions" data-editor-advanced><h3>שכבות ויישור</h3><div><button class="ghost" data-editor-layer="front">קדימה ביותר</button><button class="ghost" data-editor-layer="back">אחורה ביותר</button><button class="ghost" data-editor-align="horizontal">מרכוז אופקי</button><button class="ghost" data-editor-align="vertical">מרכוז אנכי</button></div></div><div class="editor-stats" id="editor-stats"></div></aside>
     </div>
     <input type="file" id="editor-overlay-file" accept="image/*" hidden>
   </section>
@@ -358,6 +357,7 @@
   <script src="editor-engine.js"></script>
   <script src="scroll-capture-engine.js"></script>
   <script src="video-timeline-utils.cjs"></script>
+  <script src="shortcut-utils.cjs"></script>
   <script src="image-finish.js"></script>
   <script src="image-editor.js"></script>
   <script src="icons.js"></script>

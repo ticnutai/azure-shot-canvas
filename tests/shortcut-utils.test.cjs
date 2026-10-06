@@ -8,8 +8,9 @@ const {
 
 test('physical shortcut codes are independent of English and Hebrew key values', () => {
   for (const key of ['2', 'Unidentified']) assert.equal(actionForInput({ type: 'keyDown', control: true, shift: true, key, code: 'Digit2' }), 'record');
-  for (const key of ['P', 'פ', 'Unidentified']) assert.equal(actionForInput({ type: 'keyDown', control: true, shift: true, key, code: 'KeyP' }), 'pause');
-  for (const key of ['M', 'צ', 'Unidentified']) assert.equal(actionForInput({ type: 'keyDown', control: true, shift: true, key, code: 'KeyM' }), 'microphone');
+  for (const key of ['5', '%', 'Unidentified']) assert.equal(actionForInput({ type: 'keyDown', control: true, shift: true, key, code: 'Digit5' }), 'pause');
+  for (const key of ['6', '^', 'Unidentified']) assert.equal(actionForInput({ type: 'keyDown', control: true, shift: true, key, code: 'Digit6' }), 'microphone');
+  for (const key of ['M', 'צ']) assert.equal(actionForInput({ type: 'keyDown', control: true, shift: true, key, code: 'KeyM' }), null);
 });
 
 test('legacy shortcut strings migrate to structured trigger bindings', () => {
@@ -56,4 +57,11 @@ test('shortcut conflicts and developer reservations are deterministic', () => {
   assert.equal(shortcutConflicts(shortcuts)[0][1], 'camera');
   const reserved = { ...DEFAULT_SHORTCUTS, camera: { kind: 'chord', code: 'KeyR', modifiers: ['Ctrl', 'Shift'], scope: 'global' } };
   assert.equal(reservedShortcutConflicts(reserved)[0][1], 'רענון עמוק');
+});
+
+test('default system-wide shortcuts never take over keys that popular programs rely on', () => {
+  const { COMMON_APP_SHORTCUTS, commonAppConflict } = require('../src/shortcut-utils.cjs');
+  for (const [action, binding] of Object.entries(DEFAULT_SHORTCUTS)) if (binding) assert.equal(commonAppConflict(binding), '', action);
+  assert.match(commonAppConflict({ kind: 'chord', code: 'KeyC', modifiers: ['Ctrl', 'Shift'] }), /חלון הפקודות/);
+  assert.ok(Object.keys(COMMON_APP_SHORTCUTS).length >= 8);
 });

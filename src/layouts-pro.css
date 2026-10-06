@@ -135,3 +135,6 @@ html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="aut
 .capture-preview.preview-off .preview-display-controls button:hover { color: var(--text); }
 /* באולפן העריכה שורת הכותרת נמוכה — בלי שורת המשנה */
 :root:root[data-layout="studio"] .wordmark p { display: none; }
+/* אזהרה בהגדרות הקיצורים: צירוף שתוכנות נפוצות משתמשות בו */
+.shortcut-warning { display: block; margin-top: 4px; color: var(--danger); font-size: 11px; }
+.shortcut-warning:empty { display: none; }

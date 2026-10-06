@@ -242,10 +242,16 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#settings-page')).toHaveClass(/active/);
     await expect(page.locator('#output-path')).toContainText(outputDir);
     await page.locator('[data-preference-tab="shortcuts"]').click();
-    await expect(page.locator('[data-shortcut-action]')).toHaveCount(15);
-    await expect(page.locator('#shortcut-visible-count')).toHaveText('15');
+    await expect(page.locator('[data-shortcut-action]')).toHaveCount(16);
+    await expect(page.locator('#shortcut-visible-count')).toHaveText('16');
     await expect(page.locator('#shortcut-status-banner')).toContainText('כל הקיצורים רשומים ופעילים');
     await expect(page.locator('[data-shortcut-action="record"]')).toHaveText('Ctrl + Shift + 2');
+    await expect(page.locator('[data-shortcut-row="repeatRegion"]')).toHaveCount(1);
+    await expect(page.locator('[data-shortcut-warning]:not(:empty)')).toHaveCount(0);
+    // Ctrl+K, shown in the search box, jumps to search.
+    await page.locator('body').dispatchEvent('keydown', { key: 'k', code: 'KeyK', ctrlKey: true });
+    await expect(page.locator('#global-search')).toBeFocused();
+    await page.locator('#global-search').blur();
     await page.locator('[data-shortcut-action="camera"]').click();
     await page.locator('body').dispatchEvent('keydown', { key: 'ב', code: 'KeyC', ctrlKey: true, altKey: true });
     await expect(page.locator('[data-shortcut-action="camera"]')).toHaveText('Ctrl + Alt + C');
@@ -311,10 +317,10 @@ test.describe('Electron production workflow', () => {
     await startRow.locator('[data-shortcut-clear]').click();
     await expect(startRow.locator('[data-shortcut-action]')).toHaveText('לא מוגדר');
     await page.locator('#reset-shortcuts').click();
-    await expect(page.locator('[data-shortcut-action="camera"]')).toHaveText('Ctrl + Shift + C');
-    await expect(page.locator('[data-shortcut-action="openOutput"]')).toHaveText('Ctrl + Shift + O');
+    await expect(page.locator('[data-shortcut-action="camera"]')).toHaveText('Ctrl + Shift + 7');
+    await expect(page.locator('[data-shortcut-action="openOutput"]')).toHaveText('Ctrl + Shift + 8');
     await expect(page.locator('[data-shortcut-action="toggleWindow"]')).toHaveText('פעמיים F9');
-    metrics.push(metric('Bilingual configurable shortcut center', 28, 'assertions', 28, 'min', '15 actions, safe chord/single/double triggers, 650ms interval, global and focused E2E dispatch, Hebrew/English physical code, unsafe Windows-key rejection, persistence, IPC test and reset'));
+    metrics.push(metric('Bilingual configurable shortcut center', 28, 'assertions', 28, 'min', '16 actions, safe chord/single/double triggers, 650ms interval, global and focused E2E dispatch, Hebrew/English physical code, unsafe Windows-key rejection, persistence, IPC test and reset'));
     await page.locator('[data-preference-tab="general"]').click();
     await expect(page.locator('#default-capture-kind')).toHaveValue('record');
     await expect(page.locator('#default-capture-scope')).toHaveValue('full');

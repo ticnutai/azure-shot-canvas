@@ -78,56 +78,22 @@ let workflowExecutionLog = [];
 let shortcutRegistrationState = {};
 const shortcutDoublePressState = new Map();
 
-const defaultShortcuts = {
-  record: { kind: 'chord', code: 'Digit2', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
-  recordStart: null, recordStop: { kind: 'single', code: 'F10', modifiers: [], scope: 'global', intervalMs: 300 },
-  pause: { kind: 'chord', code: 'KeyP', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
-  screenshot: { kind: 'chord', code: 'Digit1', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
-  region: { kind: 'chord', code: 'Digit3', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }, screenshotEdit: null,
-  microphone: { kind: 'chord', code: 'KeyM', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }, systemAudio: null,
-  camera: { kind: 'chord', code: 'KeyC', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
-  openOutput: { kind: 'chord', code: 'KeyO', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
-  openLibrary: null, openLatest: null, editLatest: null,
-  toggleWindow: { kind: 'double', code: 'F9', modifiers: [], scope: 'global', intervalMs: 500 }
-};
-const shortcutActions = {
-  record: ['recording', 'התחלה / עצירת הקלטה', 'מחליף מצב לפי מצב ההקלטה הנוכחי'], recordStart: ['recording', 'התחלת הקלטה', 'מתחיל רק אם אין הקלטה פעילה'], recordStop: ['recording', 'עצירת הקלטה', 'עוצר ושומר רק הקלטה פעילה'], pause: ['recording', 'השהיה / המשך', 'מחליף בין השהיה להמשך'],
-  screenshot: ['capture', 'צילום מסך מלא', 'מצלם מיד את המקור שנבחר'], region: ['capture', 'צילום אזור', 'פותח בחירת שטח לפני הצילום'], screenshotEdit: ['capture', 'צילום ופתיחה בעורך', 'מצלם ופותח עריכה מקצועית'],
-  microphone: ['audio', 'השתקת מיקרופון', 'הפעלה או השתקה של המיקרופון'], systemAudio: ['audio', 'קול המחשב', 'הפעלה או השתקה של שמע המחשב'], camera: ['camera', 'הפעלת מצלמה', 'הצגה או הסתרה של המצלמה'],
-  openOutput: ['library', 'פתיחת תיקיית השמירה', 'פותח ישירות את תיקיית הקבצים'], openLibrary: ['library', 'פתיחת הספרייה', 'עובר לעמוד כל הצילומים והווידאו'], openLatest: ['library', 'פתיחת הקובץ האחרון', 'פותח את הקובץ האחרון שנשמר'], editLatest: ['library', 'עריכת הצילום האחרון', 'פותח את התמונה האחרונה בעורך'], toggleWindow: ['window', 'הצגה / הסתרת האפליקציה', 'מסתיר או מחזיר את חלון האולפן']
-};
+// One shortcut catalog for the whole app (shortcut-utils.cjs, also used by the main process).
+const shortcutCatalog = window.AurumShortcuts;
+const defaultShortcuts = JSON.parse(JSON.stringify(shortcutCatalog.DEFAULT_SHORTCUTS));
+const shortcutActions = Object.fromEntries(Object.entries(shortcutCatalog.ACTION_DEFINITIONS).map(([action, item]) => [action, [item.category, item.label, item.description]]));
+const keyboardInput = (event) => ({ code: event.code, ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey, metaKey: event.metaKey });
 
 function shortcutLabel(binding) {
-  if (!binding) return 'לא מוגדר';
-  if (typeof binding === 'string') return binding.replace(/Key([A-Z])/g, '$1').replace(/Digit([0-9])/g, '$1').replaceAll('+', ' + ');
-  const key = String(binding.code || '').replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'Num ');
-  return `${binding.kind === 'double' ? 'פעמיים ' : ''}${[...(binding.modifiers || []), key].join(' + ')}`;
+  return shortcutCatalog.bindingLabel(binding);
 }
 
 function shortcutBindingFromEvent(event, template = {}) {
-  if (!/^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|PrintScreen|Numpad[0-9]|Space|Enter|Escape|Arrow(?:Up|Down|Left|Right)|(?:Shift|Control|Alt|Meta)(?:Left|Right))$/.test(event.code)) return null;
-  const kind = ['single', 'double'].includes(template.kind) ? template.kind : 'chord';
-  const modifiers = [];
-  if (kind === 'chord') {
-    if (event.ctrlKey) modifiers.push('Ctrl');
-    if (event.altKey) modifiers.push('Alt');
-    if (event.shiftKey) modifiers.push('Shift');
-    if (event.metaKey) modifiers.push('Meta');
-    if (!modifiers.length && !/^F(?:[1-9]|1[0-9]|2[0-4])$/.test(event.code)) return null;
-  }
-  const modifierOnly = /^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(event.code);
-  if (modifierOnly) return null;
-  return { kind, code: event.code, modifiers, scope: template.scope || 'global', intervalMs: Number(template.intervalMs) || (kind === 'double' ? 500 : 300) };
+  return shortcutCatalog.bindingFromInput(keyboardInput(event), { ...template, kind: template.kind || 'chord', scope: template.scope || 'global', intervalMs: Number(template.intervalMs) || (template.kind === 'double' ? 500 : 300) });
 }
 
 function shortcutEventMatches(event, binding) {
-  if (!binding || event.code !== binding.code || event.repeat) return false;
-  if (binding.kind !== 'chord') {
-    if (/^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(binding.code)) return true;
-    return !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey;
-  }
-  const expected = new Set(binding.modifiers || []);
-  return event.ctrlKey === expected.has('Ctrl') && event.altKey === expected.has('Alt') && event.shiftKey === expected.has('Shift') && event.metaKey === expected.has('Meta');
+  return !event.repeat && shortcutCatalog.inputMatchesBinding(keyboardInput(event), binding);
 }
 
 function handleFocusedShortcutEvent(event) {
@@ -156,7 +122,7 @@ function handleFocusedShortcutEvent(event) {
 function ensureShortcutRows() {
   const list = $('#shortcut-settings-list');
   if (!list || list.children.length) return;
-  list.innerHTML = Object.entries(shortcutActions).map(([action, [category, label, description]]) => `<div data-shortcut-row="${action}" data-category="${category}"><div><b>${label}</b><small>${description}</small></div><select class="shortcut-kind" data-shortcut-kind="${action}"><option value="chord">צירוף</option><option value="single">מקש יחיד</option><option value="double">לחיצה כפולה</option></select><select class="shortcut-scope" data-shortcut-scope="${action}"><option value="global">גלובלי</option><option value="focused">באפליקציה</option></select><select class="shortcut-interval" data-shortcut-interval="${action}" title="מרווח מרבי בין שתי לחיצות"><option value="300">300ms</option><option value="400">400ms</option><option value="500">500ms</option><option value="650">650ms</option><option value="700">700ms</option></select><button class="shortcut-recorder" data-shortcut-action="${action}"></button><button class="shortcut-test" data-shortcut-test="${action}">בדיקה</button><button class="shortcut-clear" data-shortcut-clear="${action}" title="ניקוי">×</button></div>`).join('');
+  list.innerHTML = Object.entries(shortcutActions).map(([action, [category, label, description]]) => `<div data-shortcut-row="${action}" data-category="${category}"><div><b>${label}</b><small>${description}</small><small class="shortcut-warning" data-shortcut-warning="${action}"></small></div><select class="shortcut-kind" data-shortcut-kind="${action}"><option value="chord">צירוף</option><option value="single">מקש יחיד</option><option value="double">לחיצה כפולה</option></select><select class="shortcut-scope" data-shortcut-scope="${action}"><option value="global">גלובלי</option><option value="focused">באפליקציה</option></select><select class="shortcut-interval" data-shortcut-interval="${action}" title="מרווח מרבי בין שתי לחיצות"><option value="300">300ms</option><option value="400">400ms</option><option value="500">500ms</option><option value="650">650ms</option><option value="700">700ms</option></select><button class="shortcut-recorder" data-shortcut-action="${action}"></button><button class="shortcut-test" data-shortcut-test="${action}">בדיקה</button><button class="shortcut-clear" data-shortcut-clear="${action}" title="ניקוי">×</button></div>`).join('');
 }
 
 function filterShortcutRows() {
@@ -181,6 +147,11 @@ function renderShortcutSettings(registration = {}) {
   $$('[data-shortcut-scope]').forEach((select) => { select.value = state.shortcuts[select.dataset.shortcutScope]?.scope || select.dataset.pendingScope || 'global'; });
   $$('[data-shortcut-interval]').forEach((select) => { const binding = state.shortcuts[select.dataset.shortcutInterval]; select.value = String(binding?.intervalMs || 500); select.disabled = binding?.kind !== 'double'; });
   $$('[data-shortcut-summary]').forEach((element) => { element.textContent = shortcutLabel(state.shortcuts[element.dataset.shortcutSummary]); });
+  // Warn (without blocking) when a system-wide shortcut takes over keys a popular program relies on.
+  $$('[data-shortcut-warning]').forEach((element) => {
+    const program = shortcutCatalog.commonAppConflict(state.shortcuts[element.dataset.shortcutWarning]);
+    element.textContent = program ? `תופס את הצירוף גם מתוכנות אחרות: ${program}` : '';
+  });
   const failed = Object.entries(shortcutRegistrationState).filter(([, registered]) => registered === false).map(([action]) => action);
   const banner = $('#shortcut-status-banner');
   if (banner) {
@@ -1723,7 +1694,7 @@ async function executeShortcutAction(action) {
   }
   if (action === 'camera') {
     if (state.cameraStream) return $('#recording-camera').click();
-    return $('#camera-source-shortcut').click();
+    return $('#camera-chip').click();
   }
   if (action === 'openOutput') return api.openOutput();
   if (action === 'openLibrary') return showPage('library');
@@ -2183,6 +2154,13 @@ async function initialize() {
     renderShortcutSettings();
   }, true);
   document.addEventListener('keydown', (event) => handleFocusedShortcutEvent(event), true);
+  // Ctrl+K (shown in the search box): jump to search from anywhere in the studio window.
+  document.addEventListener('keydown', (event) => {
+    if (!event.ctrlKey || event.shiftKey || event.altKey || event.code !== 'KeyK' || window.aurumEditor?.isOpen()) return;
+    event.preventDefault();
+    $('#global-search')?.focus();
+    $('#global-search')?.select();
+  });
   $$('#quality-options button').forEach((button) => button.addEventListener('click', () => {
     $$('#quality-options button').forEach((item) => item.classList.remove('active'));
     button.classList.add('active');
@@ -2340,15 +2318,15 @@ async function initialize() {
     $$('.source-type[data-source-filter]').forEach((item) => item.classList.toggle('active', item === button));
     renderSources();
   }));
-  $('#camera-source-shortcut').addEventListener('click', () => {
-    $('#camera').checked = !$('#camera').checked;
-    $('#camera').dispatchEvent(new Event('change'));
-  });
   $('#mic-chip').addEventListener('click', () => {
     $('#microphone').checked = !$('#microphone').checked;
     $('#microphone').dispatchEvent(new Event('change'));
   });
-  $('#camera-chip').addEventListener('click', () => $('#camera-source-shortcut').click());
+  // The camera is an overlay toggle, like the microphone — one button, next to it.
+  $('#camera-chip').addEventListener('click', () => {
+    $('#camera').checked = !$('#camera').checked;
+    $('#camera').dispatchEvent(new Event('change'));
+  });
   $('#resolution-select').addEventListener('change', (event) => {
     state.targetHeight = Number(event.target.value);
     $('#quality-status').textContent = `${event.target.options[event.target.selectedIndex].text.split(' ')[0]} · ${$('#fps-select').value}fps`;

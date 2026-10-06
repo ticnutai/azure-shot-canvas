@@ -1,3 +1,10 @@
+// Shared by the main process (require) and the studio window (script tag → window.AurumShortcuts): one copy of the shortcut catalog.
+(function exposeShortcuts(root, factory) {
+  const api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  if (root) root.AurumShortcuts = api;
+})(typeof window !== 'undefined' ? window : null, () => {
+
 const ACTION_DEFINITIONS = Object.freeze({
   record: { category: 'recording', label: 'התחלה / עצירת הקלטה', description: 'מחליף מצב לפי מצב ההקלטה הנוכחי' },
   recordStart: { category: 'recording', label: 'התחלת הקלטה', description: 'מתחיל רק אם אין הקלטה פעילה' },
@@ -21,15 +28,16 @@ const DEFAULT_SHORTCUTS = Object.freeze({
   record: Object.freeze({ kind: 'chord', code: 'Digit2', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   recordStart: null,
   recordStop: Object.freeze({ kind: 'single', code: 'F10', modifiers: [], scope: 'global', intervalMs: 300 }),
-  pause: Object.freeze({ kind: 'chord', code: 'KeyP', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
+  // The number row keeps every default clear of common programs (Ctrl+Shift+C/P/M/O belong to terminals, code editors and browsers).
+  pause: Object.freeze({ kind: 'chord', code: 'Digit5', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   screenshot: Object.freeze({ kind: 'chord', code: 'Digit1', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   region: Object.freeze({ kind: 'chord', code: 'Digit3', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   repeatRegion: Object.freeze({ kind: 'chord', code: 'Digit4', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   screenshotEdit: null,
-  microphone: Object.freeze({ kind: 'chord', code: 'KeyM', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
+  microphone: Object.freeze({ kind: 'chord', code: 'Digit6', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   systemAudio: null,
-  camera: Object.freeze({ kind: 'chord', code: 'KeyC', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
-  openOutput: Object.freeze({ kind: 'chord', code: 'KeyO', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
+  camera: Object.freeze({ kind: 'chord', code: 'Digit7', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
+  openOutput: Object.freeze({ kind: 'chord', code: 'Digit8', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   openLibrary: null,
   openLatest: null,
   editLatest: null,
@@ -41,6 +49,20 @@ const RESERVED_SIGNATURES = Object.freeze({
   'Ctrl+Shift|KeyR|global': 'רענון עמוק',
   'Ctrl+Shift|KeyI|global': 'קונסול מפתחים',
   '|F12|global': 'קונסול מפתחים'
+});
+// System-wide shortcuts that other popular programs rely on: allowed, but the settings screen warns before taking them over.
+const COMMON_APP_SHORTCUTS = Object.freeze({
+  'Ctrl+Shift|KeyC|global': 'העתקה בחלון הפקודות ובודק הרכיבים בדפדפן',
+  'Ctrl+Shift|KeyP|global': 'לוח הפקודות בעורכי קוד וחלון פרטי בדפדפן',
+  'Ctrl+Shift|KeyM|global': 'החלפת משתמש בדפדפן',
+  'Ctrl+Shift|KeyO|global': 'מנהל הסימניות בדפדפן',
+  'Ctrl+Shift|KeyN|global': 'חלון גלישה פרטית ותיקייה חדשה בסייר הקבצים',
+  'Ctrl+Shift|KeyT|global': 'פתיחה מחדש של לשונית שנסגרה בדפדפן',
+  'Ctrl+Shift|KeyV|global': 'הדבקה בחלון הפקודות',
+  'Ctrl+Shift|KeyS|global': 'שמירה בשם בתוכנות משרד',
+  'Ctrl+Shift|Escape|global': 'מנהל המשימות של חלונות',
+  'Ctrl+Alt|Delete|global': 'מסך האבטחה של חלונות',
+  '|PrintScreen|global': 'כלי החיתוך של חלונות'
 });
 const MODIFIER_ORDER = ['Ctrl', 'Alt', 'Shift', 'Meta'];
 const KEY_CODE_PATTERN = /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|PrintScreen|Numpad[0-9]|Space|Enter|Escape|Arrow(?:Up|Down|Left|Right)|(?:Shift|Control|Alt|Meta)(?:Left|Right))$/;
@@ -133,6 +155,10 @@ function reservedShortcutConflicts(candidate = {}) {
   });
 }
 
+function commonAppConflict(value) {
+  return COMMON_APP_SHORTCUTS[bindingSignature(value)] || '';
+}
+
 function inputMatchesBinding(input, value) {
   const binding = normalizeBinding(value);
   if (!binding || (input.type && input.type !== 'keyDown') || input.code !== binding.code) return false;
@@ -149,8 +175,9 @@ function actionForInput(input, candidate = DEFAULT_SHORTCUTS) {
   return Object.keys(shortcuts).find((action) => shortcuts[action]?.kind !== 'double' && inputMatchesBinding(input, shortcuts[action])) || null;
 }
 
-module.exports = {
-  ACTION_DEFINITIONS, ACTION_LABELS, DEFAULT_SHORTCUTS, RESERVED_SIGNATURES,
+return {
+  ACTION_DEFINITIONS, ACTION_LABELS, COMMON_APP_SHORTCUTS, DEFAULT_SHORTCUTS, RESERVED_SIGNATURES, commonAppConflict,
   acceleratorForBinding, actionForInput, bindingFromInput, bindingLabel, bindingSignature,
   inputMatchesBinding, normalizeBinding, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts
 };
+});
