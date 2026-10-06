@@ -1,0 +1,28 @@
+/* Capture screen: a tidy single-row source strip and collapsible sections (sources, preview, recent media). */
+
+/* Sources: one row of equal cards that scrolls sideways, instead of a grid that grew a vertical scrollbar. */
+#capture-page .source-drawer { max-height: none; overflow: hidden; padding: 10px 14px; }
+#capture-page .source-grid { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding-bottom: 4px; scrollbar-width: thin; scroll-snap-type: x proximity; }
+#capture-page .source-grid > .source-card { flex: 0 0 172px; scroll-snap-align: start; }
+#capture-page .source-grid > .loading { flex: 1; padding: 14px; }
+#capture-page .source-card span { font-size: 11px; }
+#capture-page .source-card em { font-size: 10px; }
+
+/* Collapse buttons */
+.collapse-toggles { display: inline-flex; gap: 6px; margin-inline-start: 4px; }
+.collapse-toggle { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.collapse-toggle:hover { color: var(--text); border-color: color-mix(in srgb, var(--gold) 45%, var(--line)); }
+.collapse-toggle[aria-expanded="false"] { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); }
+.collapse-toggle i { font-style: normal; font-size: 10px; }
+.collapse-heading { height: auto; padding: 0; border: 0; color: var(--text); font-size: inherit; font-weight: inherit; }
+.collapse-heading:hover { border: 0; color: var(--gold); }
+.collapse-heading[aria-expanded="false"] { border: 0; }
+
+/* Collapsed sections */
+html[data-collapsed-sources="true"] #capture-page .source-drawer { display: none; }
+html[data-collapsed-preview="true"] #capture-page .capture-preview { display: none; }
+html[data-collapsed-recent="true"] #capture-page .library-strip > :not(.section-heading) { display: none; }
+html[data-collapsed-recent="true"] #capture-page .library-strip .recent-controls { display: none; }
+
+/* The toolbar wraps onto a second row in narrow windows instead of growing its own scrollbar. */
+#capture-page .source-toolbar { height: auto; min-height: 70px; flex-wrap: wrap; row-gap: 8px; padding-block: 12px; overflow: visible; }

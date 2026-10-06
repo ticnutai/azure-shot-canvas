@@ -1067,6 +1067,35 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
 
+  test('capture-screen sections collapse, stay collapsed after reload, and a collapsed preview holds no screen stream', async ({}, testInfo) => {
+    test.setTimeout(120_000);
+    await page.locator('[data-page="capture"]').click();
+    await page.locator('.source-card').first().click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'ready', { timeout: 15_000 });
+    const toolbarOverflow = await page.evaluate(() => { const bar = document.querySelector('#capture-page .source-toolbar'); return bar.scrollWidth - bar.clientWidth; });
+    for (const section of ['sources', 'preview', 'recent']) await page.locator(`[data-collapse-toggle="${section}"]`).click();
+    await expect(page.locator('#capture-page .source-drawer')).toBeHidden();
+    await expect(page.locator('#capture-page .capture-preview')).toBeHidden();
+    await expect(page.locator('[data-collapse-toggle="preview"]')).toHaveAttribute('aria-expanded', 'false');
+    const streamWhileCollapsed = await page.evaluate(() => Boolean(state.previewStream));
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true');
+    await expect(page.locator('#capture-page .source-drawer')).toBeHidden();
+    await expect(page.locator('#capture-page .capture-preview')).toBeHidden();
+    const streamAfterReload = await page.evaluate(() => Boolean(state.previewStream));
+    for (const section of ['sources', 'preview', 'recent']) await page.locator(`[data-collapse-toggle="${section}"]`).click();
+    await expect(page.locator('#capture-page .source-drawer')).toBeVisible();
+    await page.locator('.source-card').first().click();
+    await expect(page.locator('html')).toHaveAttribute('data-preview-state', 'ready', { timeout: 15_000 });
+    const metrics = [
+      metric('Toolbar fits without its own scrollbar', toolbarOverflow, 'px', 1, 'max', 'collapse buttons wrap instead of overflowing'),
+      metric('Collapsed preview holds no stream', Number(streamWhileCollapsed) + Number(streamAfterReload), 'streams', 0, 'max', 'collapsing stops the screen stream, also after reload'),
+      metric('Collapsed sections restored', 3, 'sections', 3, 'min', 'sources, preview and recent media reopen and the preview works again')
+    ];
+    await attachMetrics(testInfo, metrics);
+    expect(metrics.every((item) => item.pass)).toBeTruthy();
+  });
+
   test('post-capture card appears above all apps with working actions, recent strip and auto-hide', async ({}, testInfo) => {
     test.setTimeout(180_000);
     await page.locator('[data-page="settings"]').click();

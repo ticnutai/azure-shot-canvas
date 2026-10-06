@@ -387,6 +387,9 @@ function applyAutomaticSwitches(patch = {}, persist = true) {
 }
 
 function restoreUserPreferences() {
+  let collapsed = {};
+  try { collapsed = JSON.parse(localStorage.getItem('aurum-collapsed') || '{}') || {}; } catch {}
+  for (const section of Object.keys(COLLAPSIBLE_SECTIONS)) setSectionCollapsed(section, Boolean(collapsed[section]), false);
   applyAutomaticSwitches({ ...Object.fromEntries(Object.entries(AUTOMATIC_SWITCHES).map(([name, { key }]) => [name, localStorage.getItem(key) === 'on'])), autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean', imageFormat: localStorage.getItem('aurum-image-format') || 'png' }, false);
   setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') !== 'off', false);
   setCaptureExclusion(localStorage.getItem('aurum-exclude-studio-window') !== 'off', false);
@@ -775,6 +778,7 @@ function monitorPreviewFrames(requestId) {
 
 async function startLivePreview(source = state.selectedSource) {
   if (state.livePreviewEnabled === false) { showLivePreviewOff(); return false; }
+  if (state.collapsed?.preview) return false;
   if (!source || state.recorder || state.busy) return false;
   const sameSource = state.previewStream?.active && document.documentElement.dataset.previewSourceId === source.id;
   if (sameSource) return true;
@@ -810,7 +814,7 @@ async function startLivePreview(source = state.selectedSource) {
     return true;
   } catch (error) {
     if (requestId !== state.previewRequestId) return false;
-    setPreviewState('error', `התצוגה החיה נכשלה: ${error.message}`);
+    setPreviewState('error', `התצוגה החיה נכשלה: ${mediaErrorText(error)}`);
     $('#selected-source-label').textContent = `לא ניתן להציג — ${source.name}`;
     return false;
   }
@@ -843,6 +847,37 @@ function setCaptureExclusion(enabled, persist = true) {
   document.documentElement.dataset.captureExclusion = enabled ? 'on' : 'off';
   if (persist) localStorage.setItem('aurum-exclude-studio-window', enabled ? 'on' : 'off');
   api.setCaptureExclusion?.(Boolean(enabled)).catch(() => {});
+}
+
+// Browser and system media errors arrive in English; the person using the studio reads Hebrew.
+function mediaErrorText(error) {
+  const known = {
+    NotAllowedError: 'אין הרשאה לצלם את המסך — אשרו את הבקשה או בחרו מקור שוב',
+    NotFoundError: 'המקור שנבחר לא נמצא — בחרו מסך או חלון אחר',
+    NotReadableError: 'המקור תפוס או לא זמין כרגע (אולי המחשב נעול)',
+    AbortError: 'הבחירה בוטלה',
+    OverconstrainedError: 'המקור לא תומך בהגדרות האיכות שנבחרו'
+  };
+  return known[error?.name] || (/permission denied/i.test(error?.message || '') ? known.NotAllowedError : error?.message || 'שגיאה לא ידועה');
+}
+
+// Capture-screen sections that can be collapsed, remembered per user. Collapsing the preview stops its screen stream.
+const COLLAPSIBLE_SECTIONS = { sources: 'רצועת המקורות', preview: 'התצוגה', recent: 'המדיה האחרונה' };
+function setSectionCollapsed(section, collapsed, persist = true) {
+  if (!(section in COLLAPSIBLE_SECTIONS)) return;
+  state.collapsed = { ...(state.collapsed || {}), [section]: Boolean(collapsed) };
+  document.documentElement.dataset[`collapsed${section[0].toUpperCase()}${section.slice(1)}`] = String(Boolean(collapsed));
+  for (const button of $$(`[data-collapse-toggle="${section}"]`)) {
+    button.setAttribute('aria-expanded', String(!collapsed));
+    button.title = `${collapsed ? 'הצגת' : 'הסתרת'} ${COLLAPSIBLE_SECTIONS[section]}`;
+    const icon = button.querySelector('i');
+    if (icon) icon.textContent = collapsed ? '▾' : '▴';
+  }
+  if (persist) localStorage.setItem('aurum-collapsed', JSON.stringify(state.collapsed));
+  if (section === 'preview' && !state.recorder && !state.busy) {
+    if (collapsed) stopLivePreview();
+    else restoreLivePreview();
+  }
 }
 
 function restoreLivePreview() {
@@ -2136,6 +2171,7 @@ async function initialize() {
   $('#preview-zoom').addEventListener('input', (event) => applyVisualCapturePreferences({ previewZoom: event.target.value }));
   $('#toggle-safe-area').addEventListener('click', () => applyVisualCapturePreferences({ safeArea: !state.safeArea }));
   $('#live-preview-toggle')?.addEventListener('click', () => setLivePreviewEnabled(!state.livePreviewEnabled));
+  $$('[data-collapse-toggle]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); setSectionCollapsed(button.dataset.collapseToggle, !state.collapsed?.[button.dataset.collapseToggle]); }));
   for (const [name, { control }] of Object.entries(AUTOMATIC_SWITCHES)) $(control)?.addEventListener('change', (event) => applyAutomaticSwitches({ [name]: event.target.checked }));
   $('#auto-beautify-style')?.addEventListener('change', (event) => applyAutomaticSwitches({ autoBeautifyStyle: event.target.value }));
   $('#image-format')?.addEventListener('change', (event) => applyAutomaticSwitches({ imageFormat: event.target.value }));

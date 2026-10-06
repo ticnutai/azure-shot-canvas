@@ -26,6 +26,7 @@
   <link rel="stylesheet" href="capture-layouts.css">
   <link rel="stylesheet" href="image-editor.css">
   <link rel="stylesheet" href="app-design.css">
+  <link rel="stylesheet" href="capture-sections.css">
 </head>
 <body>
   <div class="app-shell">
@@ -118,6 +119,7 @@
                 <button class="source-type" id="camera-source-shortcut">▣ <span>מצלמה</span></button>
                 <button class="refresh-button" id="refresh-sources">↻ רענון</button>
                 <span class="countdown-note" id="countdown-note">◷ צילום מיידי</span>
+                <span class="collapse-toggles" role="group" aria-label="הצגה והסתרה של חלקי המסך"><button type="button" class="collapse-toggle" data-collapse-toggle="sources" aria-expanded="true"><i aria-hidden="true">▴</i> מקורות</button><button type="button" class="collapse-toggle" data-collapse-toggle="preview" aria-expanded="true"><i aria-hidden="true">▴</i> תצוגה</button></span>
               </div>
               <div class="source-drawer" id="source-drawer"><div class="source-grid" id="source-grid"><div class="loading">טוען מסכים וחלונות…</div></div></div>
               <div class="capture-preview">
@@ -141,7 +143,7 @@
 
             <section class="library-strip panel">
               <div class="section-heading recent-heading">
-                <div><h2>המדיה האחרונה</h2><p id="library-count">הקבצים שלך נשמרים מקומית</p></div>
+                <div><h2><button type="button" class="collapse-toggle collapse-heading" data-collapse-toggle="recent" aria-expanded="true"><i aria-hidden="true">▴</i> המדיה האחרונה</button></h2><p id="library-count">הקבצים שלך נשמרים מקומית</p></div>
                 <div class="recent-controls">
                   <div class="recent-utility-actions" role="group" aria-label="פעולות קבצים מהירות">
                     <button id="quick-edit-latest" type="button" title="עריכת הצילום האחרון" aria-label="עריכת הצילום האחרון">✎</button>
