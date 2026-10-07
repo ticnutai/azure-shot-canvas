@@ -124,8 +124,33 @@
     syncCardKeys();
   });
 
-  document.querySelector('#edge-handle').addEventListener('click', () => setExpanded(true));
-  document.querySelector('#edge-handle').addEventListener('mouseenter', () => { if (preferences.activation === 'hover') setExpanded(true); });
+  // The hidden line: touching it opens the bar (hover mode, after a breath so a drag can start); a click opens it
+  // too; pressing and moving drags it anywhere — along the edge, to another edge or to another screen.
+  const handle = document.querySelector('#edge-handle');
+  let hoverTimer = 0;
+  let pressedAt = null;
+  handle.addEventListener('mouseenter', () => {
+    if (preferences.activation === 'hover') hoverTimer = setTimeout(() => { if (!pressedAt) setExpanded(true); }, 140);
+  });
+  handle.addEventListener('mouseleave', () => clearTimeout(hoverTimer));
+  handle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    clearTimeout(hoverTimer);
+    pressedAt = { x: event.screenX, y: event.screenY };
+    handle.setPointerCapture(event.pointerId);
+  });
+  handle.addEventListener('pointermove', (event) => {
+    if (!pressedAt || dragging || Math.hypot(event.screenX - pressedAt.x, event.screenY - pressedAt.y) < 5) return;
+    dragging = true;
+    root.dataset.dragging = 'true';
+    api.drag(true);
+  });
+  handle.addEventListener('pointerup', async () => {
+    const wasDragging = dragging;
+    pressedAt = null;
+    if (wasDragging) await endDrag();
+    else setExpanded(true);
+  });
   document.querySelector('#collapse').addEventListener('click', () => setExpanded(false));
   document.querySelector('#show-actions').addEventListener('click', async () => { setView('actions'); await api.setView('actions'); renderStrip(); syncCardKeys(); });
   document.querySelectorAll('.pin-toggle').forEach((pinButton) => pinButton.addEventListener('click', async () => {
@@ -333,7 +358,10 @@
   const endDrag = async () => {
     if (!dragging) return;
     dragging = false;
+    root.dataset.dragging = 'false';
     applyPreferences(await api.drag(false));
+    // Dropped with the pointer already elsewhere: hide like any time the pointer leaves.
+    if (!hovering && !preferences.pinned && document.body.dataset.expanded === 'true') scheduleCollapse(700);
   };
   grip.addEventListener('pointerup', endDrag);
   grip.addEventListener('lostpointercapture', endDrag);

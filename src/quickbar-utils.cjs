@@ -6,7 +6,8 @@ const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
   edge: 'top',
   // Position along the edge, 0 (start) – 1 (end); the user drags the bar to set it.
   offset: 0.5,
-  activation: 'click',
+  // Opens when the pointer touches it and hides as soon as the pointer leaves.
+  activation: 'hover',
   display: 'cursor',
   pinned: false,
   // Post-capture card: shown above every app right after a capture, hides after captureTimeout seconds (0 = stays).
@@ -51,6 +52,8 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
 // An open menu adds menuLength along the edge's depth (top) or menuDepth inward (sides); sides grow to menuLength tall.
 const STRIP = Object.freeze({ thickness: 64, length: 300, menuDepth: 276, menuLength: 344 });
 const HISTORY_SIZE = Object.freeze({ width: 392, height: 470 });
+// The hidden bar: a thin line along the edge (thick enough to find with the pointer by pushing it to the edge).
+const TAB = Object.freeze({ thickness: 6, length: 120 });
 
 // Centre of a window of `size` placed at `offset` (0–1) along a span, kept fully inside it.
 function alongEdge(start, span, size, offset = 0.5) {
@@ -63,12 +66,13 @@ function quickbarBounds(workArea, preferences, expanded = false, { view = 'actio
   const offset = preferences.offset;
   const strip = preferences.style === 'strip';
   if (!expanded) {
-    if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, 86, offset), y: workArea.y, width: 86, height: 11 };
+    // Hidden: a thin line flush with the very edge of the screen.
+    if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, TAB.length, offset), y: workArea.y, width: TAB.length, height: TAB.thickness };
     return {
-      x: edge === 'left' ? workArea.x : workArea.x + workArea.width - 11,
-      y: alongEdge(workArea.y, workArea.height, 160, offset),
-      width: 11,
-      height: 160
+      x: edge === 'left' ? workArea.x : workArea.x + workArea.width - TAB.thickness,
+      y: alongEdge(workArea.y, workArea.height, TAB.length, offset),
+      width: TAB.thickness,
+      height: TAB.length
     };
   }
   let width;
@@ -93,6 +97,12 @@ function quickbarBounds(workArea, preferences, expanded = false, { view = 'actio
     width,
     height
   };
+}
+
+// Which edge a dragged bar belongs to: the top band of the screen keeps it on top; lower down, the nearer side.
+function edgeForPointer(workArea, point) {
+  if (point.y - workArea.y < Math.min(160, workArea.height * 0.2)) return 'top';
+  return point.x - workArea.x < workArea.width / 2 ? 'left' : 'right';
 }
 
 // Where a dragged bar lands: the pointer's position along the bar's edge, as 0–1.
@@ -121,4 +131,4 @@ function addRecentCapture(list, item, max = MAX_RECENT_CAPTURES) {
   return [item, ...list.filter((entry) => entry.path.toLowerCase() !== item.path.toLowerCase())].slice(0, max);
 }
 
-module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, addRecentCapture, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };
+module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };

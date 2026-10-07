@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose } = require('../src/quickbar-utils.cjs');
+const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose } = require('../src/quickbar-utils.cjs');
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
@@ -11,9 +11,9 @@ test('quickbar preferences reject unknown values and unpin when disabled', () =>
 
 test('collapsed quickbar handle hugs every supported work-area edge', () => {
   const workArea = { x: -1920, y: 40, width: 1920, height: 1040 };
-  assert.deepEqual(quickbarBounds(workArea, { edge: 'left' }, false), { x: -1920, y: 480, width: 11, height: 160 });
-  assert.deepEqual(quickbarBounds(workArea, { edge: 'right' }, false), { x: -11, y: 480, width: 11, height: 160 });
-  assert.deepEqual(quickbarBounds(workArea, { edge: 'top' }, false), { x: -1003, y: 40, width: 86, height: 11 });
+  assert.deepEqual(quickbarBounds(workArea, { edge: 'left' }, false), { x: -1920, y: 500, width: 6, height: 120 });
+  assert.deepEqual(quickbarBounds(workArea, { edge: 'right' }, false), { x: -6, y: 500, width: 6, height: 120 });
+  assert.deepEqual(quickbarBounds(workArea, { edge: 'top' }, false), { x: -1020, y: 40, width: 120, height: 6 });
 });
 
 test('expanded quickbar stays inside normal and very small work areas', () => {
@@ -88,7 +88,7 @@ test('strip hugs its edge at the dragged position, grows inward for a menu and n
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.5 }, true, { menu: true }).height, 408);
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0 }, true).x, 0);
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 1 }, true).x, 1620);
-  assert.deepEqual(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.25 }, false), { x: 437, y: 0, width: 86, height: 11 });
+  assert.deepEqual(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.25 }, false), { x: 420, y: 0, width: 120, height: 6 });
   const right = quickbarBounds(workArea, { style: 'strip', edge: 'right', offset: 0.5 }, true, { menu: true });
   assert.deepEqual(right, { x: 1580, y: 348, width: 340, height: 344 });
   const left = quickbarBounds(workArea, { style: 'strip', edge: 'left', offset: 0.5 }, true);
@@ -114,4 +114,15 @@ test('region capture options: marks toolbar on, no delay and no automatic copy b
   assert.equal(normalizeQuickbarPreferences({ captureDelay: 5 }).captureDelay, 5);
   assert.equal(normalizeQuickbarPreferences({ captureDelay: 7 }).captureDelay, 0);
   assert.equal(normalizeQuickbarPreferences({ autoCopy: true }).autoCopy, true);
+});
+test('the bar opens on touch by default, and a drag decides its edge: top band stays on top, lower down the nearer side', () => {
+  assert.equal(DEFAULT_QUICKBAR_PREFERENCES.activation, 'hover');
+  const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
+  assert.equal(edgeForPointer(workArea, { x: 1500, y: 40 }), 'top');
+  assert.equal(edgeForPointer(workArea, { x: 100, y: 150 }), 'top');
+  assert.equal(edgeForPointer(workArea, { x: 100, y: 600 }), 'left');
+  assert.equal(edgeForPointer(workArea, { x: 1800, y: 600 }), 'right');
+  const second = { x: 1920, y: 0, width: 1280, height: 984 };
+  assert.equal(edgeForPointer(second, { x: 3100, y: 500 }), 'right');
+  assert.equal(offsetForPointer(second, 'right', { x: 3100, y: 492 }), 0.5);
 });

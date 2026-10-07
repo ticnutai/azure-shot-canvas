@@ -13,7 +13,7 @@ const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatch
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
-const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
 const { clipsWithoutSilence, cursorZooms, normalizeTimelineProject } = require('./video-timeline-utils.cjs');
 const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
@@ -1293,15 +1293,23 @@ function registerIpc() {
     clearInterval(quickbarDragTimer);
     quickbarDragTimer = null;
     if (active) {
+      // Follows the pointer anywhere: along the edge, onto another edge (top / left / right) or another screen.
       quickbarDragTimer = setInterval(() => {
-        const offset = offsetForPointer(quickbarDisplay().workArea, quickbarPreferences.edge, screen.getCursorScreenPoint());
-        if (offset === quickbarPreferences.offset) return;
-        quickbarPreferences = { ...quickbarPreferences, offset };
-        positionQuickbar(true);
+        const point = screen.getCursorScreenPoint();
+        const area = screen.getDisplayNearestPoint(point).workArea;
+        const edge = edgeForPointer(area, point);
+        const offset = offsetForPointer(area, edge, point);
+        if (offset === quickbarPreferences.offset && edge === quickbarPreferences.edge) return;
+        const edgeChanged = edge !== quickbarPreferences.edge;
+        quickbarPreferences = { ...quickbarPreferences, edge, offset, display: 'cursor' };
+        if (edgeChanged) quickbarWindow?.webContents.send('quickbar:preferences', quickbarPreferences);
+        positionQuickbar(quickbarExpanded);
       }, 16);
       return quickbarPreferences;
     }
-    return saveQuickbarPreferences({ offset: quickbarPreferences.offset });
+    const saved = await saveQuickbarPreferences({ edge: quickbarPreferences.edge, offset: quickbarPreferences.offset, display: quickbarPreferences.display });
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:quickbar-preferences', saved);
+    return saved;
   });
   // Drag a capture out of the card straight into another program (must run synchronously during dragstart).
   ipcMain.on('quickbar:start-drag', async (event, filePath) => {

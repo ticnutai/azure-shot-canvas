@@ -94,3 +94,15 @@ body:not([data-edge="top"]) #strip-menu{margin:4px}
 #history-selected-count{flex:1;font-size:11px;color:#ffd36a}
 #history-selection button{height:26px;border:1px solid #2e435c;border-radius:8px;background:#172536;color:#dce8f5;font:inherit;font-size:11px;cursor:pointer;padding:0 8px}
 #history-selection button.danger:hover{border-color:#f13c50;background:#3a1820}
+/* Hidden bar: a thin gold line flush with the screen edge; grab cursor because it can be dragged anywhere. */
+#edge-handle{cursor:grab;border-radius:0}
+body[data-edge="top"] #edge-handle{border-radius:0 0 6px 6px}
+body[data-edge="left"] #edge-handle{border-radius:0 6px 6px 0}
+body[data-edge="right"] #edge-handle{border-radius:6px 0 0 6px}
+#edge-handle span{display:none}
+html[data-dragging="true"] #edge-handle{cursor:grabbing;background:#ffd36a}
+/* Windows keeps windows at least ~10px tall: the visible line stays 6px, the rest is an invisible catch area. */
+body[data-edge="top"] #edge-handle{bottom:auto;height:6px}
+body[data-edge="left"] #edge-handle{right:auto;width:6px}
+body[data-edge="right"] #edge-handle{left:auto;width:6px}
+body[data-expanded="false"]{background:transparent}

@@ -26,7 +26,10 @@ test.describe.serial('slim capture strip', () => {
 
   test('on by default: a tab in the top edge that opens into a slim strip flush with the edge', async () => {
     const collapsed = await barBounds();
-    expect(collapsed.bounds).toMatchObject({ width: 86, y: collapsed.workArea.y });
+    expect(collapsed.bounds).toMatchObject({ width: 120, y: collapsed.workArea.y });
+    // 6px line; Windows may keep the window itself a few pixels taller (invisible catch area).
+    expect(collapsed.bounds.height).toBeLessThanOrEqual(19);
+    expect(await strip.locator('#edge-handle').evaluate((node) => node.getBoundingClientRect().height)).toBe(6);
     await strip.locator('#edge-handle').click();
     await expect.poll(async () => (await barBounds()).bounds.width).toBe(300);
     const open = await barBounds();
@@ -57,7 +60,7 @@ test.describe.serial('slim capture strip', () => {
     await strip.locator('#strip-pin').click();
     await strip.locator('#strip-hide').click();
     await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'false');
-    await expect.poll(async () => (await barBounds()).bounds.width).toBe(86);
+    await expect.poll(async () => (await barBounds()).bounds.width).toBe(120);
   });
 
   test('the capture button freezes the screen; the cut is saved and shown in the card, then in history', async () => {
@@ -115,6 +118,19 @@ test.describe.serial('slim capture strip', () => {
     await expect(strip.locator('html')).toHaveAttribute('data-view', 'history');
     expect((await fs.readdir(outputDir)).filter((name) => name.endsWith('.png'))).toEqual([]);
     await strip.locator('#history-back').click();
+  });
+
+  test('touching the thin line opens the strip and leaving hides it again (the default)', async () => {
+    await expect(strip.locator('body')).toHaveAttribute('data-activation', 'hover');
+    if (await strip.locator('body').getAttribute('data-expanded') === 'true') await strip.locator('#strip-hide').click();
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'false');
+    await strip.locator('#edge-handle').dispatchEvent('mouseenter');
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'true', { timeout: 2000 });
+    await expect.poll(async () => (await barBounds()).bounds.width).toBe(300);
+    await strip.mouse.move(3000, 3000);
+    await strip.locator('#strip').dispatchEvent('mouseleave');
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'false', { timeout: 2000 });
+    await expect.poll(async () => (await barBounds()).bounds.width).toBe(120);
   });
 
   test('settings switch between the strip and the full panel', async () => {

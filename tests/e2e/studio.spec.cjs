@@ -423,7 +423,7 @@ test.describe('Electron production workflow', () => {
       const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html'));
       return { bounds: win.getBounds(), workArea: screen.getDisplayMatching(win.getBounds()).workArea, alwaysOnTop: win.isAlwaysOnTop(), focusable: win.isFocusable() };
     });
-    expect(collapsed.bounds.width).toBe(11);
+    expect(collapsed.bounds.width).toBe(6);
     expect(collapsed.bounds.x + collapsed.bounds.width).toBe(collapsed.workArea.x + collapsed.workArea.width);
     expect(collapsed.alwaysOnTop).toBeTruthy();
     expect(collapsed.focusable).toBeFalsy();
@@ -455,8 +455,8 @@ test.describe('Electron production workflow', () => {
       const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html'));
       return { bounds: win.getBounds(), workArea: screen.getDisplayMatching(win.getBounds()).workArea };
     });
-    expect(topBounds.bounds).toMatchObject({ width: 86, y: topBounds.workArea.y });
-    expect(topBounds.bounds.height).toBeGreaterThanOrEqual(11);
+    expect(topBounds.bounds).toMatchObject({ width: 120, y: topBounds.workArea.y });
+    expect(topBounds.bounds.height).toBeGreaterThanOrEqual(6);
     expect(topBounds.bounds.height).toBeLessThanOrEqual(19);
 
     await page.locator('#quickbar-activation').selectOption('hover');
