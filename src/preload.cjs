@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   setAutostart: (enabled) => ipcRenderer.invoke('app:autostart-set', enabled),
   getQuickbarPreferences: () => ipcRenderer.invoke('quickbar:get-preferences'),
   setQuickbarPreferences: (patch) => ipcRenderer.invoke('quickbar:set-preferences', patch),
-  setQuickbarRecordingState: (active) => ipcRenderer.invoke('quickbar:recording-state', active),
+  setQuickbarRecordingState: (active, details) => ipcRenderer.invoke('quickbar:recording-state', active, details),
   getShortcuts: () => ipcRenderer.invoke('shortcuts:get'),
   setShortcuts: (shortcuts) => ipcRenderer.invoke('shortcuts:set', shortcuts),
   testShortcut: (action) => ipcRenderer.invoke('shortcuts:test', action),
@@ -65,6 +65,10 @@ contextBridge.exposeInMainWorld('screenStudio', {
   onExternalImage: (callback) => ipcRenderer.on('capture:external-image', (_event, payload) => callback(payload)),
   onToast: (callback) => ipcRenderer.on('app:toast', (_event, text) => callback(text)),
   regionCapture: (mode, purpose) => ipcRenderer.invoke('region:capture', mode, purpose),
+  getUpdateState: () => ipcRenderer.invoke('update:state'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdateState: (callback) => ipcRenderer.on('update:state', (_event, state) => callback(state)),
   importRegionAreas: (payload) => ipcRenderer.invoke('region:import-areas', payload),
   onQuickbarPreferences: (callback) => ipcRenderer.on('app:quickbar-preferences', (_event, value) => callback(value))
 });

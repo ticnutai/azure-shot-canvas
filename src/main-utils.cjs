@@ -28,9 +28,27 @@ function fileStamp(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}-${millis}`;
 }
 
-function captureFilePath(outputDirectory, kind, extension, date = new Date()) {
+// A window title as a short, safe file name: the program first, then the document — "Word – הצעת מחיר".
+// Direction marks, profile names and characters Windows forbids in names are removed; null when nothing is left.
+function nameFromWindowTitle(title) {
+  const clean = String(title || '').replace(/[‎‏‪-‮⁦-⁩]/g, '').replace(/\s+/g, ' ').trim();
+  if (!clean) return null;
+  const parts = clean.split(/\s+[-–—]\s+/).map((part) => part.trim()).filter((part) => part && !/^(?:פרופיל|profile)\s*\d*$/i.test(part));
+  let name = parts.join(' – ');
+  if (parts.length > 1 && parts[parts.length - 1].length <= 30) {
+    const program = parts[parts.length - 1];
+    const documentName = parts.slice(0, -1).join(' – ').replace(/\.[a-z0-9]{2,5}$/i, '');
+    name = `${program} – ${documentName}`;
+  }
+  name = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').replace(/^[\s.]+|[\s.]+$/g, '');
+  if (name.length > 60) name = `${name.slice(0, 59).trim()}…`;
+  return name || null;
+}
+
+// Capture file name: '<window>_<time>' when the window is known, otherwise 'צילום_<time>' / 'הקלטה_<time>'.
+function captureFilePath(outputDirectory, kind, extension, date = new Date(), title = null) {
   const ext = safeExtension(extension);
-  const label = kind === 'screenshot' ? 'צילום' : 'הקלטה';
+  const label = nameFromWindowTitle(title) || (kind === 'screenshot' ? 'צילום' : 'הקלטה');
   return path.join(outputDirectory, `${label}_${fileStamp(date)}.${ext}`);
 }
 
@@ -54,4 +72,4 @@ function developerShortcut(input = {}) {
   return null;
 }
 
-module.exports = { EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, MEDIA_EXTENSIONS, captureFilePath, developerShortcut, extensionPattern, fileStamp, mediaKind, qualityPreset, safeExtension };
+module.exports = { nameFromWindowTitle, EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, MEDIA_EXTENSIONS, captureFilePath, developerShortcut, extensionPattern, fileStamp, mediaKind, qualityPreset, safeExtension };

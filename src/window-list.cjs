@@ -25,7 +25,34 @@ public static class AurumWindows {
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
   [DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
   [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumProc callback, IntPtr lParam);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int max);
+  // The window's title as a JSON string (for naming captures after the window they came from).
+  static void AppendTitle(StringBuilder output, IntPtr hwnd) {
+    var text = new StringBuilder(256);
+    GetWindowText(hwnd, text, 256);
+    output.Append('"');
+    foreach (char ch in text.ToString()) {
+      if (ch == '"' || ch == '\\') output.Append('\\').Append(ch);
+      else if (ch < ' ') output.Append(' ');
+      else output.Append(ch);
+    }
+    output.Append('"');
+  }
   [DllImport("user32.dll")] static extern int GetSystemMetrics(int index);
+  [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
+  [DllImport("user32.dll")] static extern void mouse_event(uint flags, int dx, int dy, int data, UIntPtr extra);
+  [StructLayout(LayoutKind.Sequential)] struct POINT { public int X, Y; }
+  // Automatic scrolling capture: the wheel turned at a point (physical pixels); the pointer is put back afterwards.
+  public static string Scroll(int x, int y, int notches) {
+    SetThreadDpiAwarenessContext(new IntPtr(-4));
+    POINT before;
+    GetCursorPos(out before);
+    SetCursorPos(x, y);
+    mouse_event(0x0800, 0, 0, -120 * notches, UIntPtr.Zero);
+    SetCursorPos(before.X, before.Y);
+    return "ok";
+  }
   // The whole desktop (every screen) in physical pixels, straight from Windows: raw BGRA rows into a file.
   // Returns 'x,y,width,height' of the desktop. Tens of milliseconds where the thumbnail route takes seconds.
   public static string Shot(string file) {
@@ -83,6 +110,8 @@ public static class AurumWindows {
       first = false;
       output.Append('[').Append(rect.Left).Append(',').Append(rect.Top).Append(',').Append(width).Append(',').Append(height).Append(',').Append(pid);
       AppendParts(output, hwnd, rect);
+      output.Append(',');
+      AppendTitle(output, hwnd);
       output.Append(']');
       return true;
     }, IntPtr.Zero);
@@ -137,6 +166,8 @@ public static class AurumSnipKey {
 }`;
 
 const SCRIPT = `$ErrorActionPreference='Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding $false
 Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
 ${SOURCE}
 '@
@@ -146,6 +177,7 @@ while ($true) {
   if ($null -eq $line) { break }
   if ($line -eq 'snip on') { [AurumSnipKey]::Start(); [AurumSnipKey]::Enabled = $true; [Console]::Out.WriteLine('ok') }
   elseif ($line -eq 'snip off') { [AurumSnipKey]::Enabled = $false; [Console]::Out.WriteLine('ok') }
+  elseif ($line.StartsWith('scroll ')) { try { $p = $line.Split(' '); [Console]::Out.WriteLine([AurumWindows]::Scroll([int]$p[1], [int]$p[2], [int]$p[3])) } catch { [Console]::Out.WriteLine('error') } }
   elseif ($line.StartsWith('shot ')) { try { [Console]::Out.WriteLine([AurumWindows]::Shot($line.Substring(5))) } catch { [Console]::Out.WriteLine('error') } }
   else { try { [Console]::Out.WriteLine([AurumWindows]::List()) } catch { [Console]::Out.WriteLine('[]') } }
 }`;
@@ -213,8 +245,8 @@ class WindowList {
   async list(timeoutMs = 350) {
     const line = await this.request('list', timeoutMs);
     try {
-      return JSON.parse(line).map(([x, y, width, height, pid, parts = []]) => ({
-        x, y, width, height, pid, parts: parts.map(([px, py, pw, ph]) => ({ x: px, y: py, width: pw, height: ph }))
+      return JSON.parse(line).map(([x, y, width, height, pid, parts = [], title = '']) => ({
+        x, y, width, height, pid, title, parts: parts.map(([px, py, pw, ph]) => ({ x: px, y: py, width: pw, height: ph }))
       }));
     } catch { return []; }
   }
@@ -230,6 +262,11 @@ class WindowList {
   // The laptop capture key (Windows+Shift+S) opens the studio instead of the snipping tool; true when applied.
   async setSnipKey(enabled) {
     return (await this.request(enabled ? 'snip on' : 'snip off', 5000)) === 'ok';
+  }
+
+  // Turns the mouse wheel at a point (physical pixels) by whole notches (positive = down); true when done.
+  async scroll(x, y, notches = 3) {
+    return (await this.request(`scroll ${Math.round(x)} ${Math.round(y)} ${Math.round(notches)}`, 3000)) === 'ok';
   }
 
   stop() {

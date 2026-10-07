@@ -24,7 +24,9 @@ const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
   // The bar's history button: 'workspace' = the captures window (large thumbnails, round buttons); 'panel' = the small grid.
   historyStyle: 'workspace',
   // The bar's own look: 'office' = white with coloured line icons (like the captures window); 'graphite' = dark.
-  barLook: 'office'
+  barLook: 'office',
+  // Captures named after the window they came from ('Word – הצעת מחיר_…') instead of 'צילום_…'.
+  autoName: true
 });
 
 const CAPTURE_TIMEOUTS = [0, 4, 6, 10];
@@ -47,6 +49,7 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
   if ('laptopCaptureKey' in candidate) next.laptopCaptureKey = Boolean(candidate.laptopCaptureKey);
   if (['workspace', 'panel'].includes(candidate.historyStyle)) next.historyStyle = candidate.historyStyle;
   if (['office', 'graphite'].includes(candidate.barLook)) next.barLook = candidate.barLook;
+  if ('autoName' in candidate) next.autoName = Boolean(candidate.autoName);
   if (CAPTURE_DELAYS.includes(Number(candidate.captureDelay))) next.captureDelay = Number(candidate.captureDelay);
   if (!next.enabled) next.pinned = false;
   return next;

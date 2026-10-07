@@ -123,6 +123,12 @@ test.describe.serial('region capture on the frozen screen', () => {
     let since = Date.now();
     await pressShortcut('3');
     let overlay = await openedOverlay(since);
+    // C copies the colour under the pointer (as shown in the magnifier) as #RRGGBB.
+    await overlay.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, bubbles: true })));
+    await key(overlay, { key: 'c', code: 'KeyC' });
+    await expect(overlay.locator('#note')).toContainText('הועתק קוד הצבע');
+    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toMatch(/^#[0-9A-F]{6}$/);
+    await expect(overlay.locator('#loupe-info')).toContainText('#');
     await key(overlay, { key: 'Escape' });
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(await pngsSince(before)).toEqual([]);
@@ -204,9 +210,23 @@ test.describe.serial('region capture on the frozen screen', () => {
     const bounds = await overlay.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
     expect(region.x).toBeCloseTo(20 / bounds.width, 3);
     expect(region.width).toBeCloseTo(400 / bounds.width, 3);
+    // The floating bar and a frame around the area appear while recording.
+    await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.recordingControls?.bar), { timeout: 10_000 }).toBe(true);
+    const controls = await app.evaluate(() => globalThis.__aurumQa.recordingControls);
+    expect(controls.frame.width).toBe(400 + 6);
+    expect(controls.frame.height).toBe(240 + 6);
+    const bar = app.windows().find((candidate) => candidate.url().includes('recording-controls.html'));
+    await expect(bar.locator('#state')).toHaveText('מקליט');
+    // Pause and resume from the bar; the timer does not count paused time.
+    await bar.locator('#pause').click();
+    await expect(bar.locator('#state')).toHaveText('מושהה');
+    await expect.poll(() => page.evaluate(() => state.recorder?.state)).toBe('paused');
+    await bar.locator('#pause').click();
+    await expect(bar.locator('#state')).toHaveText('מקליט');
     await page.waitForTimeout(1500);
     const before = new Set(await fs.readdir(outputDir));
-    await page.evaluate(() => executeShortcutAction('recordStop'));
+    // Stop from the bar: the recording is saved, the bar and the frame go away.
+    await bar.locator('#stop').click();
     await expect.poll(async () => (await fs.readdir(outputDir)).some((name) => /\.(webm|mp4)$/i.test(name) && !before.has(name)), { timeout: 60_000 }).toBe(true);
     expect(runtimeErrors).toEqual([]);
   });

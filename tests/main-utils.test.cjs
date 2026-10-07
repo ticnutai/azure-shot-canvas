@@ -31,3 +31,17 @@ test('Electron developer shortcuts are recognized explicitly', () => {
   assert.equal(developerShortcut({ type: 'keyDown', key: 'F12' }), 'toggle-devtools');
   assert.equal(developerShortcut({ type: 'keyUp', control: true, shift: true, key: 'R' }), null);
 });
+
+test('captures are named after the window they came from: program first, then the document', () => {
+  const { nameFromWindowTitle } = require('../src/main-utils.cjs');
+  assert.equal(nameFromWindowTitle('הצעת מחיר.docx - Word'), 'Word – הצעת מחיר');
+  assert.equal(nameFromWindowTitle('\u202bכרטיס לקוח - פרופיל 1 - Microsoft Edge\u202c'), 'Microsoft Edge – כרטיס לקוח');
+  assert.equal(nameFromWindowTitle('Claude'), 'Claude');
+  assert.equal(nameFromWindowTitle('a:b/c|d? - Notepad'), 'Notepad – a b c d');
+  assert.equal(nameFromWindowTitle('   '), null);
+  assert.equal(nameFromWindowTitle(null), null);
+  assert.ok(nameFromWindowTitle('x'.repeat(200)).length <= 60);
+  assert.equal(captureFilePath('C:\\Videos', 'screenshot', 'png', new Date(2026, 0, 2, 3, 4, 5, 6), 'דוח.pdf - Adobe Acrobat'), path.join('C:\\Videos', 'Adobe Acrobat – דוח_2026-01-02_03-04-05-006.png'));
+  assert.equal(captureFilePath('C:\\Videos', 'screenshot', 'png', new Date(2026, 0, 2, 3, 4, 5, 6), ''), path.join('C:\\Videos', 'צילום_2026-01-02_03-04-05-006.png'));
+});
+

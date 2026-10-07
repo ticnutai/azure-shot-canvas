@@ -15,7 +15,7 @@ const ACTION_DEFINITIONS = Object.freeze({
   region: { category: 'capture', label: 'צילום אזור', description: 'פותח בחירת שטח לפני הצילום' },
   repeatRegion: { category: 'capture', label: 'צילום האזור האחרון', description: 'מצלם מיד את האזור שנבחר בפעם הקודמת, בלי לבחור שוב' },
   ocrRegion: { category: 'capture', label: 'העתקת טקסט מאזור', description: 'בוחרים אזור על המסך הקפוא והטקסט שבו, גם בעברית, מועתק ללוח' },
-  scrollCapture: { category: 'capture', label: 'צילום עמוד גלילה', description: 'צילום מודרך של עמוד ארוך עם חיבור אוטומטי' },
+  scrollCapture: { category: 'capture', label: 'צילום עמוד גלילה', description: 'בוחרים אזור על המסך הקפוא, התוכנה גוללת בעצמה ומחברת לתמונה אחת' },
   screenshotEdit: { category: 'capture', label: 'צילום ופתיחה בעורך', description: 'מצלם ופותח עריכה מקצועית' },
   microphone: { category: 'audio', label: 'השתקת מיקרופון', description: 'הפעלה או השתקה של המיקרופון' },
   systemAudio: { category: 'audio', label: 'קול המחשב', description: 'הפעלה או השתקה של שמע המחשב' },

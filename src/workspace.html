@@ -47,6 +47,9 @@
         <button data-item-action="edit" data-needs="one-image" style="--tint:#e5f4fb;--ink:#1c8fc4"><span class="tile"><svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></svg></span><span>עריכה</span></button>
         <button data-item-action="copy" data-needs="any" style="--tint:#eef0f4;--ink:#4b5565"><span class="tile"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></span><span>העתקה</span></button>
         <button data-item-action="open-folder" data-needs="any" style="--tint:#fff6d9;--ink:#c99124"><span class="tile"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span>תיקייה</span></button>
+        <button data-item-action="guide" data-needs="images" style="--tint:#e8f6ee;--ink:#2a9d5b"><span class="tile"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 12h7M9 16h5"/></svg></span><span>מדריך צעדים</span></button>
+        <button data-item-action="folder" data-needs="any" style="--tint:#fff1df;--ink:#e27a12"><span class="tile"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></svg></span><span>לתיקייה</span></button>
+        <button data-item-action="trim" data-needs="one-video" style="--tint:#ffe6ef;--ink:#d63a72"><span class="tile"><svg viewBox="0 0 24 24"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5L20 18M8.5 15.5L20 6"/></svg></span><span>חיתוך וידאו</span></button>
         <button data-item-action="trash" data-needs="any" style="--tint:#fde8e8;--ink:#c0392b"><span class="tile"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span>מחיקה</span></button>
       </div>
       <b class="ribbon-label">קובץ</b>
@@ -55,6 +58,7 @@
 
   <div class="viewbar">
     <b class="section-title">הצילומים האחרונים</b>
+    <label class="folder-filter" title="הצגת התיקייה בלבד"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><select id="folder-filter" aria-label="תיקייה"><option value="*">כל התיקיות</option></select></label>
     <label class="size-control" title="גודל התמונות (גם קונטרול + גלגלת)">
       <svg viewBox="0 0 24 24"><rect x="5" y="7" width="8" height="8" rx="1"/></svg>
       <input id="thumb-size" type="range" min="120" max="420" step="10" value="220" aria-label="גודל התמונות">
@@ -70,6 +74,7 @@
 
   <main id="grid" role="listbox" aria-multiselectable="true" aria-label="הצילומים האחרונים" tabindex="0"></main>
   <div id="menu" role="menu" hidden></div>
+  <div id="dialog-backdrop" hidden><div id="dialog" role="dialog" aria-modal="true"></div></div>
 
   <!-- Dark design: large round buttons at the bottom. -->
   <footer class="actions">

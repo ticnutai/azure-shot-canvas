@@ -1,6 +1,6 @@
 {
   "name": "hebrew-screen-studio",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "אולפן צילום והקלטת מסך מקומי ל-Windows",
   "main": "src/main.cjs",
   "author": "Screen Studio",
@@ -61,7 +61,19 @@
       "enableCookieEncryption": true,
       "enableEmbeddedAsarIntegrityValidation": true,
       "onlyLoadAppFromAsar": true
-    }
+    },
+    "artifactName": "Aurum-Screen-Studio-Setup-${version}.${ext}",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ticnutai",
+        "repo": "azure-shot-canvas",
+        "releaseType": "release"
+      }
+    ]
   },
-  "dependencies": {}
+  "dependencies": {
+    "docx": "^9.9.0",
+    "electron-updater": "^6.8.9"
+  }
 }

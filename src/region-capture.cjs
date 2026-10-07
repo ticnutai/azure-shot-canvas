@@ -2,11 +2,19 @@
 // drags (or clicks a window) right on the real screen, and the selection is cut from that frozen image — no
 // studio window, no preview stream. Overlay windows are created once per screen and reused, so later
 // captures open instantly.
-const { BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeImage, screen } = require('electron');
+const { BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, nativeImage, screen } = require('electron');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { clipRect, normalizeLastRegion, toImagePixels } = require('./region-utils.cjs');
+const { cropRows, framesAlike, stitchFrames } = require('./scroll-stitch.cjs');
+
+// Title of the front-most window under the centre of a rectangle (screen points of one screen); '' when none.
+function titleAt(windows = [], rect) {
+  const centre = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  const hit = windows.find((item) => centre.x >= item.x && centre.y >= item.y && centre.x < item.x + item.width && centre.y < item.y + item.height);
+  return hit?.title || '';
+}
 
 class RegionCapture {
   constructor({ lastRegionPath, savedRegionsPath, windowList, hidden = false }) {
@@ -25,6 +33,7 @@ class RegionCapture {
     ipcMain.on('region:visible', (event) => { const entry = owner(event); if (entry && !entry.window.isDestroyed()) entry.window.setOpacity(1); });
     ipcMain.on('region:finish', (event, displayId, rect, options = {}) => { if (owner(event)) this.active?.resolve({ displayId: String(displayId), rect, options: options || {} }); });
     ipcMain.on('region:cancel', (event) => { if (owner(event)) this.active?.resolve(null); });
+    ipcMain.handle('region:copy-text', (event, text) => { if (!owner(event)) throw new Error('בקשה ממקור לא מורשה'); const value = String(text || '').slice(0, 64); if (/^#[0-9A-F]{6}$/i.test(value)) clipboard.writeText(value); return value; });
     ipcMain.handle('region:save-area', (event, displayId, rect) => { if (!owner(event)) throw new Error('בקשה ממקור לא מורשה'); return this.saveArea(String(displayId), rect); });
   }
 
@@ -163,14 +172,14 @@ class RegionCapture {
         return { x: rect.x / display.scaleFactor, y: rect.y / display.scaleFactor, width: rect.width / display.scaleFactor, height: rect.height / display.scaleFactor };
       }
     };
-    const converted = raw.filter((item) => item.pid !== own).map((item) => ({ ...toPoints(item), parts: (item.parts || []).map(toPoints) }));
+    const converted = raw.filter((item) => item.pid !== own).map((item) => ({ ...toPoints(item), title: item.title || '', parts: (item.parts || []).map(toPoints) }));
     return new Map(displays.map((display) => {
       const local = (rect) => {
         const clipped = clipRect({ x: rect.x - display.bounds.x, y: rect.y - display.bounds.y, width: rect.width, height: rect.height }, { x: 0, y: 0, width: display.bounds.width, height: display.bounds.height });
         return clipped && { x: Math.round(clipped.x), y: Math.round(clipped.y), width: Math.round(clipped.width), height: Math.round(clipped.height) };
       };
       return [String(display.id), converted
-        .map((item) => { const rect = local(item); return rect && { ...rect, parts: item.parts.map(local).filter(Boolean) }; })
+        .map((item) => { const rect = local(item); return rect && { ...rect, title: item.title, parts: item.parts.map(local).filter(Boolean) }; })
         .filter(Boolean)];
     }));
   }
@@ -197,7 +206,10 @@ class RegionCapture {
       if (last) {
         const display = displays.find((item) => String(item.id) === String(last.displayId));
         const [frozen] = await this.freezeDisplays([display]);
-        if (frozen) return this.crop(frozen, last.rect);
+        if (frozen) {
+          const windows = await this.windowsByDisplay([display]);
+          return { ...this.crop(frozen, last.rect), title: titleAt(windows.get(String(display.id)), last.rect) };
+        }
       }
     }
     return this.pick(displays, { purpose, markup });
@@ -273,13 +285,63 @@ class RegionCapture {
       const after = ['save', 'copy', 'edit', 'ocr', 'record'].includes(choice.options.after) ? choice.options.after : 'save';
       // A recording area: where on which screen, nothing is cut.
       if (purpose === 'record') return { record: true, displayId: choice.displayId, rect: choice.rect, bounds: { ...frozen.display.bounds } };
+      // The area to scroll and photograph: scrolled and joined by autoScroll().
+      if (purpose === 'scroll') return { scroll: true, displayId: choice.displayId, rect: choice.rect, title: titleAt(windows.get(choice.displayId), choice.rect) };
       const cropped = this.crop(frozen, choice.rect, choice.options.png);
       if (cropped && purpose === 'capture') await this.saveLastRegion(choice.displayId, cropped.rect);
-      return cropped ? { ...cropped, after, marks: Number(choice.options.marks) || 0 } : { cancelled: true };
+      // The window the area was taken from (front-most under its centre) names the file.
+      return cropped ? { ...cropped, after, marks: Number(choice.options.marks) || 0, title: titleAt(windows.get(choice.displayId), choice.rect) } : { cancelled: true };
     } finally {
       for (const { entry } of entries) if (!entry.window.isDestroyed()) entry.window.hide();
       this.active = null;
     }
+  }
+  // Automatic scrolling capture of one area: photograph, turn the wheel over the area, photograph again, until the
+  // page stops moving (or 40 frames); then join the frames into one tall picture. Without the desktop helper
+  // (tests, other systems) the area is captured once, like a normal capture.
+  async autoScroll({ displayId, rect, maxFrames = 40 }) {
+    const display = screen.getAllDisplays().find((item) => String(item.id) === String(displayId)) || screen.getPrimaryDisplay();
+    if (!this.windowList?.shot || !this.windowList?.scroll) {
+      const [frozen] = await this.freezeDisplays([display]);
+      return frozen ? { ...this.crop(frozen, rect), frames: 1 } : null;
+    }
+    let physical;
+    try { physical = screen.dipToScreenRect(null, display.bounds); }
+    catch { physical = { x: Math.round(display.bounds.x * display.scaleFactor), y: Math.round(display.bounds.y * display.scaleFactor), width: Math.round(display.bounds.width * display.scaleFactor), height: Math.round(display.bounds.height * display.scaleFactor) }; }
+    const scale = physical.width / display.bounds.width;
+    const local = toImagePixels(rect, scale, { width: physical.width, height: physical.height });
+    if (!local) return null;
+    const file = path.join(os.tmpdir(), `aurum-scroll-${process.pid}.raw`);
+    const grab = async () => {
+      const desktop = await this.windowList.shot(file, 4000);
+      if (!desktop) return null;
+      const bitmap = await fs.readFile(file);
+      return cropRows(bitmap, desktop.width, { x: physical.x - desktop.x + local.x, y: physical.y - desktop.y + local.y, width: local.width, height: local.height });
+    };
+    const centre = { x: physical.x + local.x + local.width / 2, y: physical.y + local.y + local.height / 2 };
+    // About half the area per step, so consecutive frames always overlap.
+    const notches = Math.min(5, Math.max(1, Math.round(rect.height / 2 / 100)));
+    const frames = [];
+    try {
+      const first = await grab();
+      if (!first) return null;
+      frames.push(first);
+      // Until the page stops moving (the same picture twice) or the frame limit; joining handles the rest.
+      while (frames.length < maxFrames) {
+        await this.windowList.scroll(centre.x, centre.y, notches);
+        await new Promise((resolve) => setTimeout(resolve, 380));
+        const frame = await grab();
+        if (!frame) break;
+        const reachedEnd = framesAlike(frames[frames.length - 1], frame, local.width, local.height);
+        frames.push(frame);
+        if (reachedEnd) break;
+      }
+    } finally {
+      fs.rm(file, { force: true }).catch(() => {});
+    }
+    const joined = stitchFrames(frames, local.width, local.height);
+    const image = nativeImage.createFromBitmap(joined.buffer, { width: joined.width, height: joined.height });
+    return { png: image.toPNG(), width: joined.width, height: joined.height, displayId: String(display.id), rect, frames: joined.parts };
   }
 }
 

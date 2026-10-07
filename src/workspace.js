@@ -19,7 +19,9 @@
       list: async () => list,
       action: async (path, action) => { if (action === 'trash') list = list.filter((item) => item.path !== path); },
       runAction: async () => {}, startDrag: () => {}, close: async () => {}, toggleMaximize: async () => {},
-      setOnTop: async (value) => value, openStudio: async () => {}, getState: async () => ({ onTop: false }), onChanged: () => {}
+      setOnTop: async (value) => value, openStudio: async () => {}, getState: async () => ({ onTop: false }), onChanged: () => {},
+      setFolder: async (paths, folder) => { list = list.map((item) => (paths.includes(item.path) ? { ...item, folder } : item)); },
+      createGuide: async () => ({ path: 'מדריך צעדים.pdf' }), trim: async () => ({ path: 'קטע.mp4' })
     };
   }
   const api = window.workspaceApi || previewApi();
@@ -32,7 +34,21 @@
   const chosen = new Set();
   let anchor = null;
 
-  const visible = () => items.filter((item) => !filter || item.name.toLowerCase().includes(filter.toLowerCase()));
+  // Folder filter: '*' everything, '' captures without a folder, otherwise one folder.
+  let folderFilter = '*';
+  const visible = () => items.filter((item) => (folderFilter === '*' || (item.folder || '') === folderFilter) && (!filter || item.name.toLowerCase().includes(filter.toLowerCase())));
+  const folderNames = () => [...new Set(items.map((item) => item.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
+  function renderFolderFilter() {
+    const select = $('#folder-filter');
+    const names = folderNames();
+    if (folderFilter !== '*' && folderFilter !== '' && !names.includes(folderFilter)) folderFilter = '*';
+    select.replaceChildren(
+      new Option('כל התיקיות', '*'),
+      ...names.map((name) => new Option(`${name} (${items.filter((item) => item.folder === name).length})`, name)),
+      ...(names.length ? [new Option('בלי תיקייה', '')] : [])
+    );
+    select.value = folderFilter;
+  }
   const selectedItems = () => items.filter((item) => chosen.has(item.path));
 
   // Design, view and picture size are this window's own conveniences, kept on this computer.
@@ -61,7 +77,11 @@
     const one = selectedItems();
     $('#edit').disabled = one.length !== 1 || one[0].kind !== 'image';
     document.querySelectorAll('[data-item-action]').forEach((button) => {
-      button.disabled = button.dataset.needs === 'one-image' ? !(one.length === 1 && one[0].kind === 'image') : one.length === 0;
+      const needs = button.dataset.needs;
+      button.disabled = needs === 'one-image' ? !(one.length === 1 && one[0].kind === 'image')
+        : needs === 'one-video' ? !(one.length === 1 && one[0].kind === 'video')
+          : needs === 'images' ? !one.some((item) => item.kind === 'image')
+            : one.length === 0;
     });
     root.dataset.selected = String(chosen.size);
   }
@@ -101,6 +121,7 @@
       text.className = 'text';
       text.append(cell(item.name, 'name'), cell(`${KIND_LABELS[item.kind] || ''} · ${formatDate(item.modified)} · ${formatSize(item.size)}`, 'meta'));
       tile.append(frame, text, cell(KIND_LABELS[item.kind] || item.extension || ''), cell(formatDate(item.modified)), cell(formatSize(item.size)));
+      if (item.folder) tile.append(cell(item.folder, 'folder-tag'));
       tile.addEventListener('click', (event) => choose(item, event));
       tile.addEventListener('dblclick', () => run(item.kind === 'image' ? 'edit' : 'open-folder', [item]));
       tile.addEventListener('contextmenu', (event) => {
@@ -136,12 +157,131 @@
   async function load() {
     items = await api.list().catch(() => []);
     for (const path of [...chosen]) if (!items.some((item) => item.path === path)) chosen.delete(path);
+    renderFolderFilter();
     render();
+  }
+
+  // ---- Dialogs: folder, steps guide, video trim -----------------------------------------------------------
+  const backdrop = $('#dialog-backdrop');
+  const dialog = $('#dialog');
+  function openDialog(build) {
+    closeMenu();
+    dialog.replaceChildren();
+    build(dialog);
+    backdrop.hidden = false;
+    root.dataset.dialog = dialog.dataset.kind || 'open';
+    dialog.querySelector('input[type="text"], button.primary')?.focus();
+  }
+  function closeDialog() {
+    dialog.querySelector('video')?.pause();
+    backdrop.hidden = true;
+    delete root.dataset.dialog;
+  }
+  backdrop.addEventListener('pointerdown', (event) => { if (event.target === backdrop) closeDialog(); });
+  const make = (tag, props = {}, ...children) => { const node = Object.assign(document.createElement(tag), props); node.append(...children); return node; };
+  const errorLine = () => make('p', { className: 'error', hidden: true });
+
+  function folderDialog(targets) {
+    openDialog((box) => {
+      box.dataset.kind = 'folder';
+      const input = make('input', { type: 'text', placeholder: 'שם תיקייה חדשה, למשל שם לקוח או פרויקט', maxLength: 40 });
+      const apply = async (name) => { await api.setFolder(targets.map((item) => item.path), name); closeDialog(); await load(); };
+      const existing = folderNames();
+      box.append(
+        make('h2', { textContent: targets.length === 1 ? 'העברה לתיקייה' : `העברה לתיקייה (${targets.length} צילומים)` }),
+        make('p', { textContent: 'התיקייה היא תווית לסידור בלוח — הקבצים עצמם לא זזים ממקומם.' }),
+        ...(existing.length ? [make('div', { className: 'choices' }, ...existing.map((name) => make('button', { textContent: name, onclick: () => apply(name) })))] : []),
+        input,
+        make('div', { className: 'buttons' },
+          make('button', { textContent: 'הסרה מתיקייה', onclick: () => apply('') }),
+          make('button', { textContent: 'ביטול', onclick: closeDialog }),
+          make('button', { className: 'primary', textContent: 'העברה', onclick: () => input.value.trim() && apply(input.value.trim()) }))
+      );
+      input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && input.value.trim()) apply(input.value.trim()); });
+    });
+  }
+
+  function guideDialog(targets) {
+    const images = targets.filter((item) => item.kind === 'image');
+    openDialog((box) => {
+      box.dataset.kind = 'guide';
+      const input = make('input', { type: 'text', value: 'מדריך צעדים', maxLength: 80 });
+      const error = errorLine();
+      const create = async (format, button) => {
+        button.disabled = true;
+        error.hidden = true;
+        try {
+          const result = await api.createGuide({ paths: images.map((item) => item.path), title: input.value, format });
+          root.dataset.lastGuide = result.path;
+          closeDialog();
+        } catch (failure) { error.textContent = failure.message; error.hidden = false; }
+        finally { button.disabled = false; }
+      };
+      const pdf = make('button', { className: 'primary', textContent: 'יצירת PDF' });
+      const word = make('button', { textContent: 'יצירת מסמך וורד' });
+      pdf.onclick = () => create('pdf', pdf);
+      word.onclick = () => create('docx', word);
+      box.append(
+        make('h2', { textContent: `מדריך צעדים מ־${images.length} צילומים` }),
+        make('p', { textContent: 'כל צילום הופך לשלב ממוספר, לפי סדר הצילום, עם הסימונים שעליו. המסמך נשמר בתיקיית הצילומים ונפתח בתיקייה.' }),
+        input, error,
+        make('div', { className: 'buttons' }, make('button', { textContent: 'ביטול', onclick: closeDialog }), word, pdf)
+      );
+    });
+  }
+
+  function trimDialog(item) {
+    openDialog((box) => {
+      box.dataset.kind = 'trim';
+      const video = make('video', { src: item.url || '', controls: true, preload: 'metadata' });
+      const start = make('input', { type: 'range', min: 0, max: 0, step: 0.1, value: 0, ariaLabel: 'התחלה' });
+      const end = make('input', { type: 'range', min: 0, max: 0, step: 0.1, value: 0, ariaLabel: 'סוף' });
+      const startOut = make('output');
+      const endOut = make('output');
+      const error = errorLine();
+      const time = (seconds) => `${Math.floor(seconds / 60)}:${String((seconds % 60).toFixed(1)).padStart(4, '0')}`;
+      const sync = () => {
+        if (Number(start.value) > Number(end.value) - 0.2) start.value = Math.max(0, Number(end.value) - 0.2);
+        startOut.textContent = time(Number(start.value));
+        endOut.textContent = time(Number(end.value));
+      };
+      video.addEventListener('loadedmetadata', () => {
+        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+        start.max = end.max = String(duration);
+        end.value = String(duration);
+        sync();
+      });
+      start.addEventListener('input', () => { sync(); video.currentTime = Number(start.value); });
+      end.addEventListener('input', () => { if (Number(end.value) < Number(start.value) + 0.2) end.value = Number(start.value) + 0.2; sync(); video.currentTime = Number(end.value); });
+      const save = make('button', { className: 'primary', textContent: 'שמירת הקטע כקובץ חדש' });
+      save.onclick = async () => {
+        save.disabled = true;
+        error.hidden = true;
+        try { await api.trim(item.path, Number(start.value), Number(end.value)); closeDialog(); await load(); }
+        catch (failure) { error.textContent = failure.message; error.hidden = false; }
+        finally { save.disabled = false; }
+      };
+      box.append(
+        make('h2', { textContent: 'חיתוך וידאו' }),
+        make('p', { textContent: 'גררו את נקודות ההתחלה והסוף. הקובץ המקורי נשאר כמו שהוא.' }),
+        video,
+        make('div', { className: 'trim-range' }, make('span', { textContent: 'התחלה' }), start, startOut),
+        make('div', { className: 'trim-range' }, make('span', { textContent: 'סוף' }), end, endOut),
+        make('div', { className: 'row' },
+          make('button', { textContent: 'התחלה מהמקום הנוכחי', onclick: () => { start.value = String(video.currentTime); sync(); } }),
+          make('button', { textContent: 'סוף במקום הנוכחי', onclick: () => { end.value = String(video.currentTime); sync(); } })),
+        error,
+        make('div', { className: 'buttons' }, make('button', { textContent: 'ביטול', onclick: closeDialog }), save)
+      );
+    });
   }
 
   async function run(action, targets = selectedItems()) {
     closeMenu();
     if (!targets.length) return;
+    if (action === 'folder') return folderDialog(targets);
+    if (action === 'guide') return guideDialog(targets);
+    if (action === 'trim') return targets[0].kind === 'video' ? trimDialog(targets[0]) : undefined;
     if (action === 'edit') {
       const [first] = targets;
       if (first.kind === 'image') await api.action(first.path, 'edit');
@@ -153,10 +293,10 @@
 
   // ---- Menus ----------------------------------------------------------------------------------------------
   const ACTION_MENUS = {
-    capture: [['region', '▱', 'אזור או חלון'], ['repeatRegion', '↺', 'האזור הקודם'], ['ocrRegion', 'א', 'העתקת טקסט מאזור'], ['scrollCapture', '⇣', 'עמוד גלילה'], ['screenshot', '▣', 'מסך מלא']],
+    capture: [['region', '▱', 'אזור או חלון'], ['repeatRegion', '↺', 'האזור הקודם'], ['ocrRegion', 'א', 'העתקת טקסט מאזור'], ['scrollCapture', '⇣', 'עמוד גלילה אוטומטי'], ['screenshot', '▣', 'מסך מלא']],
     record: [['recordRegion', '▱', 'הקלטת אזור או חלון'], ['record', '●', 'התחלה או עצירה של הקלטה'], ['pause', 'Ⅱ', 'השהיה או המשך']]
   };
-  const ITEM_MENU = [['edit', '✎', 'עריכה'], ['copy', '⧉', 'העתקה ללוח'], ['pin', '⌖', 'הצמדה מעל החלונות'], ['open-folder', '⌑', 'הצגה בתיקייה'], null, ['trash', '⌫', 'העברה לסל המיחזור']];
+  const ITEM_MENU = [['edit', '✎', 'עריכה'], ['copy', '⧉', 'העתקה ללוח'], ['pin', '⌖', 'הצמדה מעל החלונות'], ['open-folder', '⌑', 'הצגה בתיקייה'], null, ['folder', '▣', 'העברה לתיקייה…'], ['guide', '☰', 'מדריך צעדים…'], ['trim', '✂', 'חיתוך וידאו…'], null, ['trash', '⌫', 'העברה לסל המיחזור']];
   function showMenu(entries, x, y, onPick) {
     menu.replaceChildren(...entries.map((entry) => {
       if (!entry) return document.createElement('hr');
@@ -178,7 +318,9 @@
   function closeMenu() { menu.hidden = true; }
   function openItemMenu(x, y) {
     const one = selectedItems();
-    const entries = ITEM_MENU.filter((entry) => !entry || ((entry[0] !== 'edit' && entry[0] !== 'pin') || (one.length === 1 && one[0].kind === 'image')));
+    const oneImage = one.length === 1 && one[0].kind === 'image';
+    const allowed = { edit: oneImage, pin: oneImage, guide: one.some((item) => item.kind === 'image'), trim: one.length === 1 && one[0].kind === 'video' };
+    const entries = ITEM_MENU.filter((entry) => !entry || allowed[entry[0]] !== false);
     showMenu(entries, x, y, (key) => run(key));
   }
   document.querySelectorAll('.more').forEach((button) => button.addEventListener('click', () => {
@@ -226,8 +368,11 @@
     event.currentTarget.setAttribute('aria-pressed', String(await api.setOnTop(pressed)));
   });
   $('#search').addEventListener('input', (event) => { filter = event.target.value.trim(); render(); });
+  $('#folder-filter').addEventListener('change', (event) => { folderFilter = event.target.value; chosen.clear(); render(); });
   grid.addEventListener('click', (event) => { if (event.target === grid) { chosen.clear(); syncSelection(); } });
   document.addEventListener('keydown', (event) => {
+    // An open dialog takes the keys: Escape closes it (not the window), typing in it never acts on captures.
+    if (!backdrop.hidden) { if (event.key === 'Escape') { event.preventDefault(); closeDialog(); } return; }
     if (event.target.id === 'search') { if (event.key === 'Escape') { event.target.value = ''; filter = ''; render(); grid.focus(); } return; }
     if (event.key === 'Escape') { if (!menu.hidden) return closeMenu(); return api.close(); }
     if (event.key === 'Enter') return run('edit');

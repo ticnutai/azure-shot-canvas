@@ -1,0 +1,53 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>שליטה בהקלטה</title>
+<style>
+:root{font-family:"Segoe UI",Arial,sans-serif;color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;user-select:none}
+.bar{position:fixed;inset:3px;display:flex;align-items:center;gap:6px;padding:0 6px 0 12px;border:1px solid #e1e4ea;border-radius:10px;background:#ffffff;box-shadow:0 6px 18px #1f263333;-webkit-app-region:drag}
+.dot{width:10px;height:10px;border-radius:50%;background:#e0262d;flex:0 0 auto;animation:pulse 1.2s ease-in-out infinite}
+body[data-paused="true"] .dot{background:#c99124;animation:none}
+@keyframes pulse{50%{opacity:.35}}
+#time{font-size:15px;font-weight:600;color:#1f2633;font-variant-numeric:tabular-nums;direction:ltr;min-width:52px;text-align:center}
+.state{font-size:11px;color:#687183;margin-inline-end:auto;white-space:nowrap}
+button{-webkit-app-region:no-drag;height:30px;min-width:30px;padding:0 9px;display:flex;align-items:center;gap:5px;border:1px solid #e1e4ea;border-radius:7px;background:#ffffff;color:#1f2633;font:inherit;font-size:12px;cursor:default}
+button:hover{background:#eef3fb;border-color:#c9d6ea}
+#stop{background:#e0262d;border-color:#e0262d;color:#fff}
+#stop:hover{background:#c41f25}
+svg{width:14px;height:14px;fill:currentColor}
+@media (prefers-reduced-motion: reduce){.dot{animation:none}}
+</style></head><body>
+  <div class="bar" role="toolbar" aria-label="שליטה בהקלטה">
+    <span class="dot" aria-hidden="true"></span>
+    <b id="time">00:00</b>
+    <span class="state" id="state">מקליט</span>
+    <button id="pause" title="השהיה / המשך"><svg viewBox="0 0 24 24" id="pause-icon"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span id="pause-label">השהיה</span></button>
+    <button id="stop" title="עצירה ושמירה"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><span>עצירה</span></button>
+  </div>
+<script>
+(() => {
+  const api = window.recordingControls;
+  let state = null;
+  const pad = (value) => String(value).padStart(2, '0');
+  function tick() {
+    if (!state) return;
+    const now = state.paused ? (state.pausedAt || Date.now()) : Date.now();
+    const elapsed = Math.max(0, now - state.startedAt - (state.pausedMs || 0));
+    const seconds = Math.floor(elapsed / 1000);
+    document.querySelector('#time').textContent = seconds >= 3600 ? `${Math.floor(seconds / 3600)}:${pad(Math.floor(seconds / 60) % 60)}:${pad(seconds % 60)}` : `${pad(Math.floor(seconds / 60))}:${pad(seconds % 60)}`;
+  }
+  function apply(next) {
+    if (!next) return;
+    state = next;
+    document.body.dataset.paused = String(Boolean(state.paused));
+    document.querySelector('#state').textContent = state.paused ? 'מושהה' : 'מקליט';
+    document.querySelector('#pause-label').textContent = state.paused ? 'המשך' : 'השהיה';
+    document.querySelector('#pause-icon').innerHTML = state.paused ? '<path d="M8 5l11 7-11 7z"/>' : '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+    tick();
+  }
+  document.querySelector('#pause').addEventListener('click', () => api.action('pause'));
+  document.querySelector('#stop').addEventListener('click', () => api.action('recordStop'));
+  api.onState(apply);
+  api.state().then(apply);
+  setInterval(tick, 250);
+})();
+</script></body></html>

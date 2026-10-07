@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
 const { EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, captureFilePath, developerShortcut, extensionPattern, mediaKind } = require('./main-utils.cjs');
 const { pdfFromJpeg } = require('./pdf-utils.cjs');
@@ -19,6 +20,8 @@ const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('.
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
 const { RegionCapture } = require('./region-capture.cjs');
 const { WindowList } = require('./window-list.cjs');
+const { Updater } = require('./updater.cjs');
+const { RecordingControls } = require('./recording-controls.cjs');
 
 if (process.env.SCREEN_STUDIO_USER_DATA_DIR) app.setPath('userData', path.resolve(process.env.SCREEN_STUDIO_USER_DATA_DIR));
 
@@ -74,11 +77,15 @@ async function applyFirstRunDefaults() {
 }
 // Full-screen region picker (frozen screens); created when the app is ready.
 let regionCapture = null;
+// Automatic updates from GitHub (installed program only).
+let updater = null;
+// Floating bar (timer, pause, stop) and area frame while recording.
+let recordingControls = null;
 // The last notice and recognised text, kept for automated checks (they read them in the main process).
 let lastNotice = null;
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {} }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -259,7 +266,7 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture' } = {}) {
   if (!regionCapture) return { unavailable: true };
   if (regionCapture.isOpen) return { busy: true };
   try {
-    const result = await regionCapture.capture({
+    let result = await regionCapture.capture({
       mode, purpose, markup: quickbarPreferences.regionMarkup,
       delay: purpose === 'capture' ? quickbarPreferences.captureDelay : 0, countdown: showCountdown
     });
@@ -269,13 +276,20 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture' } = {}) {
       mainWindow?.webContents.send('shortcut', 'recordRegion', { source: 'region', region: { displayId: result.displayId, x: rect.x / bounds.width, y: rect.y / bounds.height, width: rect.width / bounds.width, height: rect.height / bounds.height } });
       return { record: true };
     }
+    // Automatic scrolling capture: the chosen area is scrolled and photographed, then joined into one picture.
+    if (result?.scroll) {
+      const title = result.title;
+      result = await regionCapture.autoScroll({ displayId: result.displayId, rect: result.rect });
+      if (!result?.png) { notify('צילום הגלילה לא הצליח', 'נסו לבחור אזור שאפשר לגלול בתוכו'); return { error: 'scroll' }; }
+      result = { ...result, title, after: 'save' };
+    }
     if (!result?.png) return result;
     if (result.after === 'ocr') return copyTextFromImage(result.png);
     // Copy at once (the clipboard has the picture even while the studio is still saving it).
     if (result.after === 'copy' || quickbarPreferences.autoCopy) clipboard.writeImage(nativeImage.createFromBuffer(result.png));
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:external-image', { bytes: result.png, width: result.width, height: result.height, after: result.after || 'save' });
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:external-image', { bytes: result.png, width: result.width, height: result.height, after: result.after || 'save', title: quickbarPreferences.autoName ? result.title || '' : '' });
     else {
-      const filePath = captureFilePath(await ensureOutputDirectory(), 'screenshot', 'png');
+      const filePath = captureFilePath(await ensureOutputDirectory(), 'screenshot', 'png', new Date(), quickbarPreferences.autoName ? result.title : null);
       await fs.writeFile(filePath, result.png);
       await showCapturePreview(filePath);
     }
@@ -987,18 +1001,110 @@ function notifyWorkspace() {
 }
 // Capture from the window: it steps aside (like other capture tools) and comes back with the new capture in it.
 async function runFromWorkspace(action) {
-  const regionAction = ['region', 'repeatRegion', 'ocrRegion', 'recordRegion'].includes(action);
+  const regionAction = ['region', 'repeatRegion', 'ocrRegion', 'recordRegion', 'scrollCapture'].includes(action);
   const visible = workspaceWindow && !workspaceWindow.isDestroyed() && workspaceWindow.isVisible();
   if (regionAction && visible) {
     workspaceWindow.hide();
     await new Promise((resolve) => setTimeout(resolve, 150));
-    const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'] }[action];
+    const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'], scrollCapture: ['pick', 'scroll'] }[action];
     await runRegionCapture(plan[0], { purpose: plan[1] }).catch(() => {});
     if (action !== 'recordRegion' && workspaceWindow && !workspaceWindow.isDestroyed()) workspaceWindow.showInactive();
     return true;
   }
   if (!startRegionAction(action)) dispatchShortcut(action, 'workspace');
   return true;
+}
+
+// ---- Steps guide: chosen captures, oldest first, as numbered steps in one PDF or Word document. ----
+async function createStepsGuide({ paths = [], title = '', format = 'pdf' } = {}) {
+  const files = [];
+  for (const filePath of paths.slice(0, 60)) {
+    const resolved = await assertLibraryFile(filePath, IMAGE_FILE).catch(() => null);
+    if (!resolved) continue;
+    const image = await clipboardImageFor(resolved);
+    if (image) files.push({ path: resolved, image, modified: (await fs.stat(resolved)).mtimeMs });
+  }
+  if (!files.length) throw new Error('בחרו לפחות תמונה אחת למדריך');
+  files.sort((a, b) => a.modified - b.modified);
+  const heading = String(title || '').trim().slice(0, 80) || 'מדריך צעדים';
+  const directory = await ensureOutputDirectory();
+  const safe = heading.replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+  const outputPath = path.join(directory, `${safe}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${format === 'docx' ? 'docx' : 'pdf'}`);
+  if (format === 'docx') await fs.writeFile(outputPath, await guideAsWord(heading, files));
+  else await fs.writeFile(outputPath, await guideAsPdf(heading, files));
+  shell.showItemInFolder(outputPath);
+  return { path: outputPath, steps: files.length };
+}
+
+async function guideAsPdf(heading, files) {
+  const escape = (text) => String(text).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const steps = files.map((file, index) => `<section><h2><span>${index + 1}</span>שלב ${index + 1}</h2><img src="data:image/png;base64,${file.image.toPNG().toString('base64')}"></section>`).join('');
+  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>${escape(heading)}</title><style>
+    @page{size:A4;margin:12mm 14mm}body{font-family:"Segoe UI",Arial,sans-serif;color:#1f2633;margin:0}
+    header{border-bottom:2px solid #1f6fe5;padding-bottom:8px;margin-bottom:18px}h1{font-size:24px;margin:0;font-weight:600}header p{margin:4px 0 0;color:#687183;font-size:12px}
+    section{page-break-inside:avoid;margin:0 0 16px}h2{display:flex;align-items:center;gap:10px;font-size:16px;font-weight:600;margin:0 0 8px}
+    h2 span{width:26px;height:26px;border-radius:50%;background:#1f6fe5;color:#fff;display:inline-grid;place-items:center;font-size:13px}
+    img{max-width:100%;max-height:98mm;border:1px solid #e1e4ea;border-radius:4px;display:block;margin-inline:auto}
+  </style></head><body><header><h1>${escape(heading)}</h1><p>${files.length} שלבים · ${new Date().toLocaleDateString('he-IL')}</p></header>${steps}</body></html>`;
+  const page = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, sandbox: true, javascript: false } });
+  try {
+    const temporaryPath = path.join(os.tmpdir(), `aurum-guide-${process.pid}-${Date.now()}.html`);
+    await fs.writeFile(temporaryPath, html, 'utf8');
+    await page.loadFile(temporaryPath);
+    await fs.rm(temporaryPath, { force: true }).catch(() => {});
+    return await page.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { marginType: 'none' } });
+  } finally { page.destroy(); }
+}
+
+async function guideAsWord(heading, files) {
+  const { AlignmentType, Document, HeadingLevel, ImageRun, Packer, Paragraph, TextRun } = require('docx');
+  const maxWidth = 600;
+  const children = [
+    new Paragraph({ bidirectional: true, heading: HeadingLevel.TITLE, alignment: AlignmentType.RIGHT, children: [new TextRun({ text: heading, rightToLeft: true })] }),
+    new Paragraph({ bidirectional: true, alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `${files.length} שלבים · ${new Date().toLocaleDateString('he-IL')}`, rightToLeft: true, color: '687183' })] })
+  ];
+  files.forEach((file, index) => {
+    const size = file.image.getSize();
+    const scale = Math.min(1, maxWidth / size.width);
+    children.push(
+      new Paragraph({ bidirectional: true, heading: HeadingLevel.HEADING_2, alignment: AlignmentType.RIGHT, spacing: { before: 280 }, children: [new TextRun({ text: `שלב ${index + 1}`, rightToLeft: true })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'png', data: file.image.toPNG(), transformation: { width: Math.round(size.width * scale), height: Math.round(size.height * scale) } })] })
+    );
+  });
+  const document = new Document({ creator: 'אולפן צילום מסך', title: heading, sections: [{ properties: {}, children }] });
+  return Packer.toBuffer(document);
+}
+
+// ---- Folders by project / client: a tag kept with each capture (its details file), nothing is moved. ----
+async function setCaptureFolder(paths = [], folder = '') {
+  const name = String(folder || '').replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40);
+  let changed = 0;
+  for (const filePath of paths.slice(0, 500)) {
+    const resolved = await assertLibraryFile(filePath).catch(() => null);
+    if (!resolved) continue;
+    await updateMetadata(resolved, { folder: name });
+    changed += 1;
+  }
+  notifyWorkspace();
+  return { folder: name, changed };
+}
+
+// ---- Quick video trim: the chosen part saved as a new file next to the original (the original stays). ----
+async function trimVideo(filePath, start, end) {
+  const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
+  const from = Math.max(0, Number(start) || 0);
+  const to = Number(end);
+  if (!(to > from + 0.2)) throw new Error('בחרו קטע של לפחות שתי עשיריות שנייה');
+  const directory = path.dirname(resolved);
+  const stem = path.basename(resolved, path.extname(resolved));
+  let index = 1;
+  let outputPath = path.join(directory, `${stem} — קטע.mp4`);
+  while (await fs.access(outputPath).then(() => true, () => false)) outputPath = path.join(directory, `${stem} — קטע ${++index}.mp4`);
+  const result = await runVideoEdit(resolved, outputPath, { start: from, end: to });
+  if (!result.ok) throw new Error(result.error || 'החיתוך נכשל');
+  notifyWorkspace();
+  mainWindow?.webContents.send('app:library-changed');
+  return { path: outputPath };
 }
 
 // The newest captures only (for the bar's history grid): thumbnails just for those, not the whole library.
@@ -1011,7 +1117,8 @@ async function recentLibrary(limit = 48) {
     return stat && { name: entry.name, path: fullPath, size: stat.size, modified: stat.mtimeMs, extension: path.extname(entry.name).slice(1).toLowerCase(), kind: mediaKind(entry.name) };
   }));
   const newest = items.filter(Boolean).sort((a, b) => b.modified - a.modified).slice(0, limit);
-  return Promise.all(newest.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item) })));
+  // Folder tag and (for videos) a playable address, for the captures window.
+  return Promise.all(newest.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item), folder: (await readJson(`${item.path}.meta.json`))?.folder || '', url: item.kind === 'video' ? pathToFileURL(item.path).href : null })));
 }
 
 // Only the app's own pages may call the main process: a foreign page that slipped into a window
@@ -1052,7 +1159,7 @@ function registerIpc() {
   ipcMain.handle('file:save-screenshot', async (_event, bytes, options = {}) => {
     const directory = await ensureOutputDirectory();
     const format = ['png', 'jpg', 'webp', 'pdf'].includes(options.format) ? options.format : 'png';
-    const filePath = captureFilePath(directory, 'screenshot', format);
+    const filePath = captureFilePath(directory, 'screenshot', format, new Date(), quickbarPreferences.autoName ? options.title : null);
     const data = Buffer.from(bytes);
     await fs.writeFile(filePath, format === 'pdf' ? pdfFromJpeg(data, Number(options.width) || 1, Number(options.height) || 1) : data);
     // Every capture lands on the clipboard as a picture, ready to paste (PDF pages are JPEG inside).
@@ -1355,6 +1462,9 @@ function registerIpc() {
   });
   ipcMain.handle('quickbar:set-menu', (_event, open) => { quickbarMenu = Boolean(open) && quickbarView === 'actions'; positionQuickbar(true); return quickbarMenu; });
   ipcMain.handle('quickbar:history', () => recentLibrary(120));
+  ipcMain.handle('update:state', () => ({ ...(updater?.state || { status: 'unavailable' }), current: app.getVersion() }));
+  ipcMain.handle('update:check', async () => ({ ...(await updater?.check() || { status: 'unavailable' }), current: app.getVersion() }));
+  ipcMain.handle('update:install', () => Boolean(updater?.installNow()));
   ipcMain.handle('workspace:open', () => openWorkspace());
   ipcMain.handle('workspace:list', () => recentLibrary(200));
   ipcMain.handle('workspace:item-action', async (_event, filePath, action) => {
@@ -1367,6 +1477,9 @@ function registerIpc() {
     if (!Object.hasOwn(ACTION_DEFINITIONS, action)) throw new Error('פעולה לא מוכרת');
     return runFromWorkspace(action);
   });
+  ipcMain.handle('workspace:folder', (_event, paths, folder) => setCaptureFolder(Array.isArray(paths) ? paths : [], folder));
+  ipcMain.handle('workspace:guide', (_event, options) => createStepsGuide(options || {}));
+  ipcMain.handle('workspace:trim', (_event, filePath, start, end) => trimVideo(filePath, start, end));
   ipcMain.handle('workspace:close', () => { workspaceWindow?.close(); return true; });
   ipcMain.handle('workspace:maximize', () => {
     if (!workspaceWindow) return false;
@@ -1392,7 +1505,7 @@ function registerIpc() {
     } catch {}
   });
   // The studio's own capture buttons use the same frozen-screen picker as the shortcuts and the bar.
-  ipcMain.handle('region:capture', (_event, mode, purpose) => runRegionCapture(mode === 'last' ? 'last' : 'pick', { purpose: ['capture', 'record', 'ocr'].includes(purpose) ? purpose : 'capture' }));
+  ipcMain.handle('region:capture', (_event, mode, purpose) => runRegionCapture(mode === 'last' ? 'last' : 'pick', { purpose: ['capture', 'record', 'ocr', 'scroll'].includes(purpose) ? purpose : 'capture' }));
   ipcMain.handle('region:import-areas', (_event, payload) => regionCapture?.importAreas(payload || {}) || { imported: 0 });
   // A capture chosen in the history grid opens in the card, with all its actions.
   ipcMain.handle('quickbar:open-capture', async (_event, filePath) => {
@@ -1450,7 +1563,11 @@ function registerIpc() {
     else if (!startRegionAction(action)) mainWindow?.webContents.send('shortcut', action, { source: 'quickbar' });
     return true;
   });
-  ipcMain.handle('quickbar:recording-state', (_event, active) => { quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active)); return true; });
+  ipcMain.handle('quickbar:recording-state', async (_event, active, details = {}) => {
+    quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active));
+    await recordingControls?.update(Boolean(active), details && typeof details === 'object' ? details : {});
+    return true;
+  });
   ipcMain.handle('shortcuts:get', () => ({ shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration }));
   ipcMain.handle('shortcuts:set', (_event, candidate) => {
     const shortcuts = normalizeShortcutMap(candidate);
@@ -1539,7 +1656,7 @@ function applyLaptopCaptureKey() {
 
 // Actions that run on the frozen screen, without the studio window. True when the action was one of them.
 function startRegionAction(action) {
-  const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'] }[action];
+  const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'], scrollCapture: ['pick', 'scroll'] }[action];
   if (!plan) return false;
   runRegionCapture(plan[0], { purpose: plan[1] });
   return true;
@@ -1557,7 +1674,16 @@ function createTray() {
   const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="9" fill="#c99124"/><circle cx="16" cy="16" r="7" fill="#071a34"/><circle cx="16" cy="16" r="3" fill="#fff"/></svg>').toString('base64')}`).resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('אורום סטודיו — צילום והקלטת מסך');
+  buildTrayMenu();
+  tray.on('double-click', () => showMainWindow());
+}
+
+// Rebuilt when an update is ready, so its 'install now' item appears.
+function buildTrayMenu() {
+  if (!tray) return;
+  const ready = updater?.state.status === 'ready';
   tray.setContextMenu(Menu.buildFromTemplate([
+    ...(ready ? [{ label: `התקנת גרסה ${updater.state.version} והפעלה מחדש`, click: () => updater.installNow() }, { type: 'separator' }] : []),
     { label: 'פתיחת אורום סטודיו', click: () => showMainWindow() },
     { type: 'separator' },
     { label: 'התחל / עצור הקלטה', click: () => dispatchShortcut('record', 'tray') },
@@ -1572,7 +1698,6 @@ function createTray() {
     { type: 'separator' },
     { label: 'יציאה', click: () => app.quit() }
   ]));
-  tray.on('double-click', () => showMainWindow());
 }
 
 // A second copy would run crash recovery on the first copy's live recording and delete its segments.
@@ -1613,7 +1738,14 @@ app.whenReady().then(async () => {
     }
   }, { useSystemPicker: false });
   createWindow();
+  updater = new Updater({ app, notify, onState: (state) => { buildTrayMenu(); mainWindow?.webContents.send('update:state', { ...state, current: app.getVersion() }); } });
   createTray();
+  updater.start();
+  // Pause / stop from the floating bar act on the recording without bringing the studio forward.
+  recordingControls = new RecordingControls({
+    onAction: (action) => mainWindow?.webContents.send('shortcut', action, { source: 'recording-controls' }),
+    hidden: process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1'
+  });
   // The studio page loads first, so it is always the app's first window (automation and tools rely on that);
   // the floating bar follows a moment later.
   await new Promise((resolve) => { mainWindow.webContents.once('did-finish-load', resolve); setTimeout(resolve, 5000).unref?.(); });
@@ -1652,6 +1784,7 @@ app.on('will-quit', () => {
   }
   globalShortcut.unregisterAll();
   windowList.stop();
+  updater?.stop();
   privateShareServer.stop();
   tray?.destroy();
 });

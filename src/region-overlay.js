@@ -22,9 +22,10 @@
   const LOUPE_ZOOM = 8;
   const HANDLE = 7;
   const HINTS = {
-    capture: ['גררו לבחירת אזור', 'לחיצה על חלון או על חלק ממנו מצלמת אותו (שיפט: החלון כולו)', 'אנטר האזור הקודם', 'רווח המסך כולו', 'אסקייפ ביטול'],
+    capture: ['גררו לבחירת אזור', 'לחיצה על חלון או על חלק ממנו מצלמת אותו (שיפט: החלון כולו)', 'אנטר האזור הקודם', 'רווח המסך כולו', 'C קוד הצבע', 'אסקייפ ביטול'],
     record: ['גררו לבחירת אזור להקלטה', 'לחיצה על חלון מקליטה אותו', 'רווח המסך כולו', 'אסקייפ ביטול'],
-    ocr: ['גררו סביב הטקסט להעתקה', 'לחיצה על חלון או על חלק ממנו', 'אסקייפ ביטול']
+    ocr: ['גררו סביב הטקסט להעתקה', 'לחיצה על חלון או על חלק ממנו', 'אסקייפ ביטול'],
+    scroll: ['בחרו את האזור שנגלל — התוכנה תגלול ותחבר לבד', 'לחיצה על חלק בחלון בוחרת אותו', 'אסקייפ ביטול']
   };
   const TOOL_KEYS = { KeyV: 'move', KeyA: 'arrow', KeyR: 'rect', KeyP: 'pen', KeyT: 'text', KeyB: 'blur', KeyN: 'number' };
 
@@ -148,6 +149,12 @@
     sizeLabel.style.transform = `translate(${left}px, ${top}px)`;
   }
 
+  // Colour of one pixel of the frozen picture as #RRGGBB.
+  function colourAt(x, y) {
+    const [red, green, blue] = frozen.getContext('2d').getImageData(Math.min(frozen.width - 1, Math.max(0, x)), Math.min(frozen.height - 1, Math.max(0, y)), 1, 1).data;
+    return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+  }
+
   function drawLoupe() {
     if (!pointer || (selected && !adjusting)) { loupe.style.display = 'none'; return; }
     loupe.style.display = 'block';
@@ -166,7 +173,7 @@
     const focus = selected || dragSelection();
     loupeInfo.textContent = focus
       ? `${Math.round(focus.width * session.scale)} × ${Math.round(focus.height * session.scale)}`
-      : `${centerX}, ${centerY}`;
+      : `${colourAt(centerX, centerY)}  ·  ${centerX}, ${centerY}`;
     const boxWidth = loupe.offsetWidth;
     const boxHeight = loupe.offsetHeight;
     const left = pointer.x + 22 + boxWidth > session.width ? pointer.x - 22 - boxWidth : pointer.x + 22;
@@ -216,6 +223,7 @@
     if (!geometry.isUsable(rect)) return;
     if (session.purpose === 'record') return finish(rect, 'record');
     if (session.purpose === 'ocr') return finish(rect, 'ocr');
+    if (session.purpose === 'scroll') return finish(rect, 'scroll');
     if (!session.markup && !markupNow) return finish(rect, 'save');
     selected = rect;
     tool = 'move';
@@ -436,6 +444,14 @@
     const digit = /^Digit([1-9])$/.exec(event.code)?.[1];
     if (digit && session.saved[Number(digit) - 1]) { event.preventDefault(); return choose(session.saved[Number(digit) - 1].rect); }
     if (event.key === ' ' || event.code === 'Space') { event.preventDefault(); return choose(screenBounds()); }
+    // C: the colour under the pointer (shown in the magnifier) goes to the clipboard as #RRGGBB.
+    if (event.code === 'KeyC' && !event.ctrlKey && pointer) {
+      event.preventDefault();
+      const hex = colourAt(Math.floor(pointer.x * session.scale), Math.floor(pointer.y * session.scale));
+      api.copyText?.(hex);
+      root.dataset.copiedColour = hex;
+      return showNote(`הועתק קוד הצבע ${hex}`);
+    }
     // Arrows fine-tune the corner being dragged, one screen point at a time (Shift: ten).
     const step = event.shiftKey ? 10 : 1;
     const delta = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] }[event.key];

@@ -1242,6 +1242,24 @@ function chooseRegion() {
   });
 }
 
+// Updates: version, what the updater is doing, and 'install now' once a new version is downloaded.
+function showUpdateState(state = {}) {
+  if (!$('#update-version')) return;
+  $('#update-version').textContent = `גרסה ${state.current || ''}`;
+  const messages = {
+    checking: 'בודק אם יש גרסה חדשה…',
+    downloading: `מוריד את גרסה ${state.version || ''} ברקע${state.progress ? ` (${state.progress}%)` : ''}`,
+    ready: `גרסה ${state.version} הורדה ומוכנה — תותקן כשהתוכנה תיסגר, או עכשיו`,
+    latest: 'זו הגרסה העדכנית ביותר',
+    error: 'לא ניתן לבדוק עדכונים כרגע (אין חיבור לאינטרנט?) — יתבצע ניסיון נוסף אוטומטית',
+    unavailable: 'עדכונים אוטומטיים פועלים רק בתוכנה המותקנת'
+  };
+  $('#update-status').textContent = messages[state.status] || 'התוכנה בודקת עדכונים לבד, מורידה אותם ברקע ומתקינה כשהיא נסגרת';
+  $('#update-install').hidden = state.status !== 'ready';
+  $('#update-check').disabled = ['checking', 'downloading'].includes(state.status) || state.status === 'unavailable';
+  document.documentElement.dataset.updateStatus = state.status || 'idle';
+}
+
 function showQuickbarSettings(preferences) {
   $('#quickbar-enabled').checked = preferences.enabled;
   $('#quickbar-style').value = preferences.style || 'strip';
@@ -1260,6 +1278,7 @@ function showQuickbarSettings(preferences) {
   $('#laptop-capture-key').checked = preferences.laptopCaptureKey !== false;
   $('#history-style').value = preferences.historyStyle || 'workspace';
   $('#bar-look').value = preferences.barLook || 'office';
+  $('#auto-name').checked = preferences.autoName !== false;
 }
 
 async function handleSavedScreenshot(result) {
@@ -1507,7 +1526,7 @@ async function saveScreenshot() {
 }
 
 // A region cut on the frozen screen by the main process: same finishing and saving as any other screenshot.
-async function saveExternalImage({ bytes, after = 'save' }) {
+async function saveExternalImage({ bytes, after = 'save', title = '' }) {
   const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
   const canvas = document.createElement('canvas');
   canvas.width = bitmap.width;
@@ -1515,13 +1534,13 @@ async function saveExternalImage({ bytes, after = 'save' }) {
   canvas.getContext('2d').drawImage(bitmap, 0, 0);
   bitmap.close();
   document.documentElement.dataset.lastRegionCapture = `${canvas.width}x${canvas.height}`;
-  const result = await finishAndSaveScreenshot(canvas);
+  const result = await finishAndSaveScreenshot(canvas, { title });
   // 'Editor' on the quick marks toolbar: the saved picture opens in the full editor.
   if (after === 'edit' && result?.path) await openInEditor(result.path);
 }
 
 // Optional redaction and styling, encoding to the chosen format, saving, then the card and automations.
-async function finishAndSaveScreenshot(canvas) {
+async function finishAndSaveScreenshot(canvas, { title = '' } = {}) {
   const finish = window.aurumImageFinish;
   if (state.autoRedact && api.detectSensitiveRegions) {
     setStatus('מאתר מידע רגיש…', 'busy');
@@ -1534,7 +1553,7 @@ async function finishAndSaveScreenshot(canvas) {
   }
   if (state.autoBeautify) canvas = await finish.beautifyCanvas(canvas.toDataURL('image/png'), state.autoBeautifyStyle);
   const image = await finish.encode(canvas, state.imageFormat);
-  const result = await api.saveScreenshot(image.bytes, { format: state.imageFormat, width: image.width, height: image.height });
+  const result = await api.saveScreenshot(image.bytes, { format: state.imageFormat, width: image.width, height: image.height, title });
   runAfterScreenshot(result);
   return result;
 }
@@ -1664,7 +1683,7 @@ async function startRecording() {
   state.pausedMs = 0;
   startRecordingHealthMonitor();
   state.chapterMarkers = [];
-  api.setQuickbarRecordingState(true).catch(() => {});
+  api.setQuickbarRecordingState(true, recordingControlsDetails()).catch(() => {});
   $('#recording-time').textContent = '00:00';
   $('#recording-segments').textContent = 'מקטע 1';
   $('#recording-bar').classList.remove('hidden');
@@ -1770,6 +1789,20 @@ function togglePause() {
     button.textContent = 'השהיה';
     setStatus('מקליט', 'error');
   }
+  api.setQuickbarRecordingState(true, recordingControlsDetails()).catch(() => {});
+}
+
+// What the floating recording bar shows: timer (start, paused time) and which area of which screen to frame.
+function recordingControlsDetails() {
+  const source = state.selectedSource;
+  const region = state.region && !(state.region.x === 0 && state.region.y === 0 && state.region.width === 1 && state.region.height === 1) ? state.region : null;
+  return {
+    startedAt: state.startedAt, pausedMs: state.pausedMs || 0, pausedAt: state.pausedAt || 0,
+    paused: state.recorder?.state === 'paused',
+    displayId: source?.type === 'screen' ? source.displayId : null,
+    // A window source is not framed (its place on screen is not known here).
+    region: source?.type === 'screen' ? region : null
+  };
 }
 
 // An area chosen on the frozen screen (normalized to its screen): record that screen, cropped to the area.
@@ -2409,6 +2442,7 @@ async function initialize() {
   $('#laptop-capture-key').addEventListener('change', (event) => updateQuickbar({ laptopCaptureKey: event.target.checked }));
   $('#history-style').addEventListener('change', (event) => updateQuickbar({ historyStyle: event.target.value }));
   $('#bar-look').addEventListener('change', (event) => updateQuickbar({ barLook: event.target.value }));
+  $('#auto-name').addEventListener('change', (event) => updateQuickbar({ autoName: event.target.checked }));
   $('#capture-preview-enabled').addEventListener('change', (event) => updateQuickbar({ capturePreview: event.target.checked }));
   $('#capture-preview-timeout').addEventListener('change', (event) => updateQuickbar({ captureTimeout: Number(event.target.value) }));
   $('#quickbar-enabled').addEventListener('change', (event) => updateQuickbar({ enabled: event.target.checked }));
@@ -2596,6 +2630,10 @@ async function initialize() {
   api.onExternalImage?.((payload) => saveExternalImage(payload).catch((error) => showToast(`שמירת הצילום נכשלה: ${error.message}`, 8000)));
   api.onToast?.((text) => showToast(text, 8000));
   api.onQuickbarPreferences?.(showQuickbarSettings);
+  api.onUpdateState?.(showUpdateState);
+  api.getUpdateState?.().then(showUpdateState).catch(() => {});
+  $('#update-check')?.addEventListener('click', async () => showUpdateState(await api.checkForUpdates()));
+  $('#update-install')?.addEventListener('click', () => api.installUpdate());
   // Once: areas saved with the older in-window picker move to the frozen-screen picker (keys 1–9 there).
   if (api.importRegionAreas && !localStorage.getItem('aurum-areas-moved')) {
     let saved = [];
