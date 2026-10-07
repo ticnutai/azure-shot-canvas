@@ -4,7 +4,7 @@ const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, norma
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
-  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: true, captureDelay: 0, autoCopy: false });
+  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: true, captureDelay: 0, autoCopy: false, laptopCaptureKey: true });
   assert.deepEqual(normalizeQuickbarPreferences({ enabled: false, edge: 'bottom' }, normalized), { ...normalized, enabled: false, pinned: false });
   assert.deepEqual(normalizeQuickbarPreferences({}), DEFAULT_QUICKBAR_PREFERENCES);
 });

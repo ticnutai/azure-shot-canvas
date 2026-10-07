@@ -16,7 +16,9 @@ const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
   // and put every region capture on the clipboard as well.
   regionMarkup: true,
   captureDelay: 0,
-  autoCopy: false
+  autoCopy: false,
+  // Laptops whose Print Screen key sends Windows+Shift+S (the snipping tool): that key opens the studio instead.
+  laptopCaptureKey: true
 });
 
 const CAPTURE_TIMEOUTS = [0, 4, 6, 10];
@@ -36,6 +38,7 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
   if (CAPTURE_TIMEOUTS.includes(Number(candidate.captureTimeout))) next.captureTimeout = Number(candidate.captureTimeout);
   if ('regionMarkup' in candidate) next.regionMarkup = Boolean(candidate.regionMarkup);
   if ('autoCopy' in candidate) next.autoCopy = Boolean(candidate.autoCopy);
+  if ('laptopCaptureKey' in candidate) next.laptopCaptureKey = Boolean(candidate.laptopCaptureKey);
   if (CAPTURE_DELAYS.includes(Number(candidate.captureDelay))) next.captureDelay = Number(candidate.captureDelay);
   if (!next.enabled) next.pinned = false;
   return next;

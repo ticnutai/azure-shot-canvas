@@ -152,6 +152,7 @@ async function createQuickbarWindow({ forCapture = false } = {}) {
 async function applyQuickbarPreferences(patch = {}) {
   const wasEnabled = quickbarPreferences.enabled;
   await saveQuickbarPreferences(patch);
+  if ('laptopCaptureKey' in patch) applyLaptopCaptureKey();
   // The settings screen shows the same values the bar's toggles change.
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:quickbar-preferences', quickbarPreferences);
   // Switching the bar off closes its window; other setting changes while it is off keep the capture card's window.
@@ -1402,6 +1403,13 @@ function dispatchShortcut(action, source = 'unknown') {
   return true;
 }
 
+// The laptop capture key (Windows+Shift+S, caught by the desktop helper) opens the frozen screen like PrtSc.
+windowList.onEvent = (name) => { if (name === 'snip' && quickbarPreferences.laptopCaptureKey) dispatchShortcut('region', 'laptop-capture-key'); };
+function applyLaptopCaptureKey() {
+  if (process.env.SCREEN_STUDIO_QA === '1') return Promise.resolve(false);
+  return windowList.setSnipKey(Boolean(quickbarPreferences.laptopCaptureKey)).catch(() => false);
+}
+
 // Actions that run on the frozen screen, without the studio window. True when the action was one of them.
 function startRegionAction(action) {
   const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'] }[action];
@@ -1448,7 +1456,7 @@ else app.on('second-instance', () => { showMainWindow(); mainWindow?.focus(); })
 app.whenReady().then(async () => {
   if (!singleInstance) return;
   // The desktop helper (fast screen copy and window list) starts compiling at once, in the background.
-  if (process.env.SCREEN_STUDIO_QA !== '1') windowList.start().catch(() => {});
+  if (process.env.SCREEN_STUDIO_QA !== '1') windowList.start().then(() => applyLaptopCaptureKey()).catch(() => {});
   await ensureOutputDirectory();
   await recoverInterruptedRecordings();
   await loadQuickbarPreferences();

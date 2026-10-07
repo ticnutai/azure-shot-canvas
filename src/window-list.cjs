@@ -88,6 +88,52 @@ public static class AurumWindows {
     }, IntPtr.Zero);
     return output.Append(']').ToString();
   }
+}
+// Laptop "Print Screen" keys that send Windows+Shift+S (the snipping tool's shortcut) instead of a real Print Screen:
+// while on, that combination opens the studio's frozen screen and the snipping tool is not started.
+// A low-level keyboard hook on its own thread; it only looks at the S key and passes every other key straight on.
+public static class AurumSnipKey {
+  delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
+  [StructLayout(LayoutKind.Sequential)] struct MSG { public IntPtr hwnd; public uint message; public IntPtr wParam; public IntPtr lParam; public uint time; public int x; public int y; }
+  [DllImport("user32.dll")] static extern IntPtr SetWindowsHookEx(int id, HookProc fn, IntPtr module, uint thread);
+  [DllImport("user32.dll")] static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+  [DllImport("user32.dll")] static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+  [DllImport("user32.dll")] static extern int GetMessage(out MSG message, IntPtr hwnd, uint min, uint max);
+  [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
+  public static volatile bool Enabled;
+  static HookProc keep;
+  static IntPtr hook;
+  static bool swallowRelease;
+  static System.Threading.Thread thread;
+  public static void Start() {
+    if (thread != null) return;
+    thread = new System.Threading.Thread(() => {
+      keep = Proc;
+      hook = SetWindowsHookEx(13, keep, GetModuleHandle(null), 0);
+      MSG message;
+      while (GetMessage(out message, IntPtr.Zero, 0, 0) > 0) { }
+    });
+    thread.IsBackground = true;
+    thread.Start();
+  }
+  static bool Down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
+  static IntPtr Proc(int code, IntPtr wParam, IntPtr lParam) {
+    if (code >= 0 && Enabled && Marshal.ReadInt32(lParam) == 0x53 && (Marshal.ReadInt32(lParam, 8) & 0x10) == 0) {
+      int message = wParam.ToInt32();
+      if ((message == 0x100 || message == 0x104) && (Down(0x5B) || Down(0x5C)) && Down(0x10)) {
+        swallowRelease = true;
+        // A harmless unassigned key, so releasing the Windows key does not open the Start menu.
+        keybd_event(0xE8, 0, 0, UIntPtr.Zero);
+        keybd_event(0xE8, 0, 2, UIntPtr.Zero);
+        Console.Out.WriteLine("event snip");
+        Console.Out.Flush();
+        return (IntPtr)1;
+      }
+      if ((message == 0x101 || message == 0x105) && swallowRelease) { swallowRelease = false; return (IntPtr)1; }
+    }
+    return CallNextHookEx(hook, code, wParam, lParam);
+  }
 }`;
 
 const SCRIPT = `$ErrorActionPreference='Stop'
@@ -98,7 +144,9 @@ ${SOURCE}
 while ($true) {
   $line = [Console]::In.ReadLine()
   if ($null -eq $line) { break }
-  if ($line.StartsWith('shot ')) { try { [Console]::Out.WriteLine([AurumWindows]::Shot($line.Substring(5))) } catch { [Console]::Out.WriteLine('error') } }
+  if ($line -eq 'snip on') { [AurumSnipKey]::Start(); [AurumSnipKey]::Enabled = $true; [Console]::Out.WriteLine('ok') }
+  elseif ($line -eq 'snip off') { [AurumSnipKey]::Enabled = $false; [Console]::Out.WriteLine('ok') }
+  elseif ($line.StartsWith('shot ')) { try { [Console]::Out.WriteLine([AurumWindows]::Shot($line.Substring(5))) } catch { [Console]::Out.WriteLine('error') } }
   else { try { [Console]::Out.WriteLine([AurumWindows]::List()) } catch { [Console]::Out.WriteLine('[]') } }
 }`;
 
@@ -108,6 +156,7 @@ class WindowList {
     this.ready = null;
     this.buffer = '';
     this.waiting = [];
+    this.onEvent = null;
   }
 
   start() {
@@ -128,6 +177,8 @@ class WindowList {
           const line = this.buffer.slice(0, index).trim();
           this.buffer = this.buffer.slice(index + 1);
           if (line === 'ready') settle(true);
+          // Unasked lines from the helper (a key it caught) are events, never answers to a request.
+          else if (line.startsWith('event ')) this.onEvent?.(line.slice(6));
           else if (line) this.waiting.shift()?.(line);
         }
       });
@@ -176,6 +227,11 @@ class WindowList {
     return values.length === 4 && values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
       ? { x: values[0], y: values[1], width: values[2], height: values[3] } : null;
   }
+  // The laptop capture key (Windows+Shift+S) opens the studio instead of the snipping tool; true when applied.
+  async setSnipKey(enabled) {
+    return (await this.request(enabled ? 'snip on' : 'snip off', 5000)) === 'ok';
+  }
+
   stop() {
     try { this.child?.kill(); } catch {}
     this.child = null;

@@ -1257,6 +1257,7 @@ function showQuickbarSettings(preferences) {
   // One delay for every capture: the studio's setting and the bar's toggle are the same value.
   if (Number.isFinite(preferences.captureDelay)) applyCaptureDelay(preferences.captureDelay);
   $('#auto-copy-region').checked = Boolean(preferences.autoCopy);
+  $('#laptop-capture-key').checked = preferences.laptopCaptureKey !== false;
 }
 
 async function handleSavedScreenshot(result) {
@@ -2403,6 +2404,7 @@ async function initialize() {
   $('#quickbar-style').addEventListener('change', (event) => updateQuickbar({ style: event.target.value }));
   $('#region-markup').addEventListener('change', (event) => updateQuickbar({ regionMarkup: event.target.checked }));
   $('#auto-copy-region').addEventListener('change', (event) => updateQuickbar({ autoCopy: event.target.checked }));
+  $('#laptop-capture-key').addEventListener('change', (event) => updateQuickbar({ laptopCaptureKey: event.target.checked }));
   $('#capture-preview-enabled').addEventListener('change', (event) => updateQuickbar({ capturePreview: event.target.checked }));
   $('#capture-preview-timeout').addEventListener('change', (event) => updateQuickbar({ captureTimeout: Number(event.target.value) }));
   $('#quickbar-enabled').addEventListener('change', (event) => updateQuickbar({ enabled: event.target.checked }));
