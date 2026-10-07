@@ -52,6 +52,28 @@ const DEFAULT_SHORTCUTS = Object.freeze({
   toggleWindow: Object.freeze({ kind: 'double', code: 'F9', modifiers: [], scope: 'global', intervalMs: 500 })
 });
 
+// When a default key is already held by another program (another capture tool, Windows' snipping tool), the next
+// free one here is used instead — only while the user keeps the default; a key the user chose is never replaced.
+const SHORTCUT_FALLBACKS = Object.freeze({
+  region: Object.freeze([
+    Object.freeze({ kind: 'chord', code: 'PrintScreen', modifiers: ['Ctrl', 'Alt'], scope: 'global', intervalMs: 300 }),
+    Object.freeze({ kind: 'chord', code: 'Digit3', modifiers: ['Alt', 'Shift'], scope: 'global', intervalMs: 300 })
+  ]),
+  repeatRegion: Object.freeze([
+    Object.freeze({ kind: 'chord', code: 'PrintScreen', modifiers: ['Ctrl', 'Alt'], scope: 'global', intervalMs: 300 }),
+    Object.freeze({ kind: 'chord', code: 'Digit4', modifiers: ['Alt', 'Shift'], scope: 'global', intervalMs: 300 })
+  ]),
+  ocrRegion: Object.freeze([
+    Object.freeze({ kind: 'chord', code: 'PrintScreen', modifiers: ['Alt', 'Shift'], scope: 'global', intervalMs: 300 }),
+    Object.freeze({ kind: 'chord', code: 'KeyT', modifiers: ['Alt', 'Shift'], scope: 'global', intervalMs: 300 })
+  ])
+});
+// Defaults of earlier versions, replaced once by the current ones when a saved map still holds them.
+const PREVIOUS_DEFAULTS = Object.freeze({
+  region: Object.freeze({ kind: 'chord', code: 'Digit3', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
+  repeatRegion: Object.freeze({ kind: 'chord', code: 'Digit4', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 })
+});
+
 const ACTION_LABELS = Object.freeze(Object.fromEntries(Object.entries(ACTION_DEFINITIONS).map(([key, value]) => [key, value.label])));
 const RESERVED_SIGNATURES = Object.freeze({
   'Ctrl+Shift|KeyR|global': 'רענון עמוק',
@@ -185,9 +207,44 @@ function actionForInput(input, candidate = DEFAULT_SHORTCUTS) {
   return Object.keys(shortcuts).find((action) => shortcuts[action]?.kind !== 'double' && inputMatchesBinding(input, shortcuts[action])) || null;
 }
 
+// Registers every binding through tryRegister(action, binding) → true when the system accepted it. A default key
+// that another program holds moves to its first free fallback (never onto a key another action uses).
+// Returns the keys actually in force, what was registered, and which defaults were replaced.
+function registerWithFallbacks(requested, tryRegister) {
+  const shortcuts = normalizeShortcutMap(requested);
+  const registration = {};
+  const fallbacks = {};
+  const used = new Set(Object.values(shortcuts).map(bindingSignature).filter(Boolean));
+  for (const [action, binding] of Object.entries(shortcuts)) {
+    if (!binding) { registration[action] = null; continue; }
+    if (binding.scope === 'focused' || tryRegister(action, binding)) { registration[action] = true; continue; }
+    registration[action] = false;
+    if (bindingSignature(binding) !== bindingSignature(DEFAULT_SHORTCUTS[action])) continue;
+    for (const alternative of SHORTCUT_FALLBACKS[action] || []) {
+      const signature = bindingSignature(alternative);
+      if (used.has(signature) || !tryRegister(action, alternative)) continue;
+      used.add(signature);
+      shortcuts[action] = normalizeBinding(alternative);
+      fallbacks[action] = { from: binding, to: shortcuts[action] };
+      registration[action] = true;
+      break;
+    }
+  }
+  return { shortcuts, registration, fallbacks };
+}
+
+// A saved map from an earlier version still holding its old defaults gets the current defaults instead.
+function upgradePreviousDefaults(saved = {}) {
+  const next = { ...saved };
+  for (const [action, previous] of Object.entries(PREVIOUS_DEFAULTS)) {
+    if (next[action] && bindingSignature(next[action]) === bindingSignature(previous)) delete next[action];
+  }
+  return next;
+}
+
 return {
-  ACTION_DEFINITIONS, ACTION_LABELS, COMMON_APP_SHORTCUTS, DEFAULT_SHORTCUTS, RESERVED_SIGNATURES, commonAppConflict,
+  ACTION_DEFINITIONS, ACTION_LABELS, COMMON_APP_SHORTCUTS, DEFAULT_SHORTCUTS, PREVIOUS_DEFAULTS, RESERVED_SIGNATURES, SHORTCUT_FALLBACKS, commonAppConflict,
   acceleratorForBinding, actionForInput, bindingFromInput, bindingLabel, bindingSignature,
-  inputMatchesBinding, normalizeBinding, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts
+  inputMatchesBinding, normalizeBinding, normalizeShortcutMap, registerWithFallbacks, reservedShortcutConflicts, shortcutConflicts, upgradePreviousDefaults
 };
 });

@@ -32,3 +32,4 @@
 .developer-shortcuts-note kbd { direction: ltr; color: var(--gold); }
 @keyframes shortcut-pulse { to { box-shadow: 0 0 0 4px color-mix(in srgb,var(--gold) 8%,transparent); } }
 @media(max-width:1150px) { .shortcut-settings-list > div { grid-template-columns:minmax(145px,1fr) 82px 82px 72px 125px 48px 30px; }.shortcut-kind,.shortcut-scope,.shortcut-interval{font-size:8px;} }
+.shortcut-warning.moved{color:#ffd36a}

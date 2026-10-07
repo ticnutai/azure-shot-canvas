@@ -76,3 +76,41 @@ test('the backslash key (as in other capture tools) can be a single global key o
   assert.equal(inputMatchesBinding({ type: 'keyDown', key: '\\', code: 'Backslash', control: true }, binding), false);
   assert.equal(actionForInput({ type: 'keyDown', key: '\\', code: 'Backslash' }, { region: binding }), 'region');
 });
+
+test('a default key held by another program moves to its first free fallback; a key the user chose never moves', () => {
+  const { registerWithFallbacks } = require('../src/shortcut-utils.cjs');
+  const held = new Set(['Shift|PrintScreen|global', 'Ctrl|PrintScreen|global']);
+  const tryRegister = (_action, binding) => !held.has(bindingSignature(binding));
+  const outcome = registerWithFallbacks(DEFAULT_SHORTCUTS, tryRegister);
+  assert.equal(outcome.registration.region, true);
+  assert.equal(outcome.shortcuts.region.code, 'PrintScreen');
+  assert.deepEqual(outcome.shortcuts.repeatRegion.modifiers, ['Ctrl', 'Alt']);
+  assert.deepEqual(outcome.shortcuts.ocrRegion.modifiers, ['Alt', 'Shift']);
+  assert.deepEqual(Object.keys(outcome.fallbacks).sort(), ['ocrRegion', 'repeatRegion']);
+  assert.equal(outcome.registration.repeatRegion, true);
+  // Nothing free: stays as asked, reported as not registered.
+  const none = registerWithFallbacks(DEFAULT_SHORTCUTS, (action) => action !== 'ocrRegion');
+  assert.equal(none.registration.ocrRegion, false);
+  assert.equal(none.fallbacks.ocrRegion, undefined);
+  // A custom key is reported, never replaced.
+  const custom = { ...DEFAULT_SHORTCUTS, repeatRegion: { kind: 'chord', code: 'F7', modifiers: ['Ctrl'], scope: 'global' } };
+  const kept = registerWithFallbacks(custom, (action) => action !== 'repeatRegion');
+  assert.equal(kept.shortcuts.repeatRegion.code, 'F7');
+  assert.equal(kept.registration.repeatRegion, false);
+  // Two defaults never land on the same fallback.
+  const both = registerWithFallbacks(DEFAULT_SHORTCUTS, (_action, binding) => binding.code !== 'PrintScreen' || bindingSignature(binding) === 'Ctrl+Alt|PrintScreen|global');
+  assert.notEqual(bindingSignature(both.shortcuts.region), bindingSignature(both.shortcuts.repeatRegion));
+});
+
+test('keys saved by an earlier version holding its old defaults move to PrtSc; chosen keys stay', () => {
+  const { upgradePreviousDefaults } = require('../src/shortcut-utils.cjs');
+  const saved = {
+    region: { kind: 'chord', code: 'Digit3', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
+    repeatRegion: { kind: 'chord', code: 'Digit9', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 },
+    record: { kind: 'chord', code: 'Digit2', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }
+  };
+  const upgraded = normalizeShortcutMap(upgradePreviousDefaults(saved));
+  assert.equal(upgraded.region.code, 'PrintScreen');
+  assert.equal(upgraded.repeatRegion.code, 'Digit9');
+  assert.equal(upgraded.record.code, 'Digit2');
+});

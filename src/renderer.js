@@ -76,6 +76,8 @@ let selectedTimelineItem = null;
 let workflowDefinitions = [];
 let workflowExecutionLog = [];
 let shortcutRegistrationState = {};
+// Defaults held by another program and the free key used instead: { action: { from, to } }.
+let shortcutFallbackState = {};
 const shortcutDoublePressState = new Map();
 
 // One shortcut catalog for the whole app (shortcut-utils.cjs, also used by the main process).
@@ -149,8 +151,12 @@ function renderShortcutSettings(registration = {}) {
   $$('[data-shortcut-summary]').forEach((element) => { element.textContent = shortcutLabel(state.shortcuts[element.dataset.shortcutSummary]); });
   // Warn (without blocking) when a system-wide shortcut takes over keys a popular program relies on.
   $$('[data-shortcut-warning]').forEach((element) => {
+    const moved = shortcutFallbackState[element.dataset.shortcutWarning];
     const program = shortcutCatalog.commonAppConflict(state.shortcuts[element.dataset.shortcutWarning]);
-    element.textContent = program ? `תופס את הצירוף גם מתוכנות אחרות: ${program}` : '';
+    element.textContent = moved
+      ? `הצירוף ${shortcutLabel(moved.from)} תפוס בתוכנה אחרת — פעיל במקומו ${shortcutLabel(moved.to)}`
+      : program ? `תופס את הצירוף גם מתוכנות אחרות: ${program}` : '';
+    element.classList.toggle('moved', Boolean(moved));
   });
   const failed = Object.entries(shortcutRegistrationState).filter(([, registered]) => registered === false).map(([action]) => action);
   const banner = $('#shortcut-status-banner');
@@ -171,8 +177,11 @@ async function applyShortcutSettings(candidate, persist = true) {
     renderShortcutSettings(result.registration);
     return false;
   }
+  // Shown: the keys in force. Saved: the keys the user asked for (a default held by another program is retried
+  // at the next start, so it comes back by itself once that program lets go).
   state.shortcuts = result.shortcuts;
-  if (persist) localStorage.setItem('aurum-shortcuts', JSON.stringify(state.shortcuts));
+  shortcutFallbackState = result.fallbacks || {};
+  if (persist) localStorage.setItem('aurum-shortcuts', JSON.stringify(result.requested || state.shortcuts));
   renderShortcutSettings(result.registration);
   return true;
 }
@@ -182,12 +191,14 @@ async function loadShortcutSettings() {
   try { saved = JSON.parse(localStorage.getItem('aurum-shortcuts') || '{}'); } catch {}
   const removedUnsafe = Object.entries(saved).filter(([, binding]) => binding?.kind === 'double' && /^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(binding.code));
   for (const [action] of removedUnsafe) saved[action] = null;
+  // Keys saved by an earlier version that still hold its old defaults move to the current ones (PrtSc).
+  saved = shortcutCatalog.upgradePreviousDefaults(saved);
   state.shortcuts = { ...defaultShortcuts, ...saved };
-  const accepted = await applyShortcutSettings(state.shortcuts, false);
+  const accepted = await applyShortcutSettings(state.shortcuts, true);
   if (!accepted) {
     state.shortcuts = { ...defaultShortcuts };
     await applyShortcutSettings(state.shortcuts);
-  } else localStorage.setItem('aurum-shortcuts', JSON.stringify(state.shortcuts));
+  }
   if (removedUnsafe.length) setTimeout(() => showToast(`${removedUnsafe.length} קיצורים כפולים לא אמינים הוסרו. מקשי Windows/Ctrl/Alt/Shift נתפסים בידי Windows.`), 400);
 }
 

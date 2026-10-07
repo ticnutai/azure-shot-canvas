@@ -9,7 +9,7 @@ const { pdfFromJpeg } = require('./pdf-utils.cjs');
 const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, imageMimeType, projectPathFor } = require('./editor-utils.cjs');
-const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
+const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, registerWithFallbacks, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
@@ -30,6 +30,9 @@ let qaProcess = null;
 let qaConsole = '';
 let activeShortcuts = { ...DEFAULT_SHORTCUTS };
 let shortcutRegistration = {};
+// The keys actually in force (a default held by another program moves to a free fallback) and what moved.
+let effectiveShortcuts = { ...DEFAULT_SHORTCUTS };
+let shortcutFallbacks = {};
 const lastShortcutDispatch = new Map();
 const pendingDoublePress = new Map();
 const recordingSessions = new Map();
@@ -464,10 +467,10 @@ function createWindow() {
       if (action === 'toggle-devtools') mainWindow.webContents.toggleDevTools();
       return;
     }
-    const shortcutAction = Object.keys(activeShortcuts).find((name) => activeShortcuts[name]?.scope === 'global' && inputMatchesBinding(input, activeShortcuts[name]));
+    const shortcutAction = Object.keys(effectiveShortcuts).find((name) => effectiveShortcuts[name]?.scope === 'global' && inputMatchesBinding(input, effectiveShortcuts[name]));
     if (shortcutAction) {
       event.preventDefault();
-      handleShortcutPress(shortcutAction, activeShortcuts[shortcutAction], 'focused-physical-key');
+      handleShortcutPress(shortcutAction, effectiveShortcuts[shortcutAction], 'focused-physical-key');
     }
   });
   const devUrl = process.env.SCREEN_STUDIO_DEV_URL;
@@ -1320,14 +1323,14 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle('quickbar:recording-state', (_event, active) => { quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active)); return true; });
-  ipcMain.handle('shortcuts:get', () => ({ shortcuts: activeShortcuts, registration: shortcutRegistration }));
+  ipcMain.handle('shortcuts:get', () => ({ shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration }));
   ipcMain.handle('shortcuts:set', (_event, candidate) => {
     const shortcuts = normalizeShortcutMap(candidate);
     const conflicts = [...shortcutConflicts(shortcuts), ...reservedShortcutConflicts(shortcuts)];
-    if (conflicts.length) return { ok: false, conflicts, shortcuts: activeShortcuts, registration: shortcutRegistration };
+    if (conflicts.length) return { ok: false, conflicts, shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration };
     activeShortcuts = shortcuts;
-    shortcutRegistration = registerShortcuts();
-    return { ok: Object.values(shortcutRegistration).every((registered) => registered !== false), shortcuts: activeShortcuts, registration: shortcutRegistration };
+    registerShortcuts();
+    return { ok: Object.values(shortcutRegistration).every((registered) => registered !== false), shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration };
   });
   ipcMain.handle('shortcuts:test', (_event, action) => {
     if (!Object.hasOwn(ACTION_DEFINITIONS, action)) return false;
@@ -1348,33 +1351,24 @@ function registerShortcuts() {
   // unregisterAll also dropped any live card keys; forget them so they are never 'released' over a user shortcut.
   registeredCardKeys.clear();
   cardKeysPath = null;
-  if (process.env.SCREEN_STUDIO_QA === '1') {
-    shortcutRegistration = Object.fromEntries(Object.keys(activeShortcuts).map((action) => [action, true]));
-    return shortcutRegistration;
-  }
-  const result = {};
-  for (const [action, binding] of Object.entries(activeShortcuts)) {
-    if (!binding) {
-      result[action] = null;
-      continue;
-    }
-    if (binding.scope === 'focused') {
-      result[action] = true;
-      continue;
-    }
+  // QA runs never grab real system keys: everything counts as registered, nothing is replaced.
+  const qa = process.env.SCREEN_STUDIO_QA === '1';
+  const outcome = registerWithFallbacks(activeShortcuts, (action, binding) => {
+    if (qa) return true;
     const accelerator = acceleratorForBinding(binding);
-    result[action] = Boolean(accelerator && globalShortcut.register(accelerator, () => handleShortcutPress(action, binding, 'global')));
-  }
-  shortcutRegistration = result;
-  // The screenshot key can be held by Windows' own snipping tool or by another capture program: say how to free it.
-  const blocked = Object.entries(activeShortcuts).filter(([action, binding]) => binding?.code === 'PrintScreen' && result[action] === false);
+    return Boolean(accelerator && globalShortcut.register(accelerator, () => handleShortcutPress(action, binding, 'global')));
+  });
+  effectiveShortcuts = outcome.shortcuts;
+  shortcutFallbacks = outcome.fallbacks;
+  shortcutRegistration = outcome.registration;
+  // A key still not in force (no free fallback either): say how to free it.
+  const blocked = Object.entries(effectiveShortcuts).filter(([action, binding]) => binding?.code === 'PrintScreen' && shortcutRegistration[action] === false);
   if (blocked.length && !printScreenNoticeShown) {
     printScreenNoticeShown = true;
     setTimeout(() => notify('מקש צילום המסך תפוס', 'תוכנה אחרת או כלי החיתוך של חלונות משתמשים בו. בהגדרות חלונות ← נגישות ← מקלדת: כבו את "שימוש במקש צילום המסך לפתיחת כלי החיתוך", או בחרו מקש אחר במרכז הקיצורים.'), 3000).unref?.();
   }
-  return result;
+  return shortcutRegistration;
 }
-
 function handleShortcutPress(action, binding, source) {
   if (binding?.kind !== 'double') return dispatchShortcut(action, source);
   const now = Date.now();
