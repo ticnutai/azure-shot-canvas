@@ -221,6 +221,7 @@ async function showCapturePreview(filePath) {
   const kind = mediaKind(resolved) || 'video';
   const durationSeconds = kind === 'video' ? (await readJson(`${resolved}.quality.json`))?.durationSeconds || null : null;
   recentCaptures = addRecentCapture(recentCaptures, { path: resolved, name: path.basename(resolved), kind, size: stat.size, durationSeconds, thumbnail, at: Date.now() });
+  notifyWorkspace();
   if (!quickbarPreferences.capturePreview) return { shown: false, recent: recentCaptures.length };
   await createQuickbarWindow({ forCapture: true });
   quickbarView = 'capture';
@@ -342,7 +343,7 @@ async function runCaptureCardAction(filePath, action) {
     await shell.trashItem(resolved);
     for (const sidecar of [projectPathFor(resolved), `${resolved}.meta.json`]) await shell.trashItem(sidecar).catch(() => {});
     recentCaptures = recentCaptures.filter((entry) => entry.path !== resolved);
-    mainWindow?.webContents.send('app:library-changed');
+    mainWindow?.webContents.send('app:library-changed'); notifyWorkspace();
     quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: false });
     if (!recentCaptures.length && quickbarView === 'capture') positionQuickbar(false);
   } else await runLibraryAction(resolved, action);
@@ -923,6 +924,65 @@ async function listLibrary() {
   return Promise.all(sorted.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item) })));
 }
 
+// ---- Captures window: large thumbnails, round capture/record buttons; remembers where and how big it was. ----
+let workspaceWindow = null;
+function workspaceStatePath() { return path.join(app.getPath('userData'), 'workspace-window.json'); }
+async function openWorkspace() {
+  if (workspaceWindow && !workspaceWindow.isDestroyed()) {
+    if (workspaceWindow.isMinimized()) workspaceWindow.restore();
+    if (process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') { workspaceWindow.show(); workspaceWindow.focus(); }
+    return { opened: true, existing: true };
+  }
+  const saved = await readJson(workspaceStatePath()) || {};
+  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const size = { width: Math.min(736, area.width), height: Math.min(612, area.height) };
+  // Saved place only while it is still on a connected screen; otherwise the bottom corner of the current one.
+  const savedOnScreen = saved.bounds && screen.getAllDisplays().some((display) => {
+    const { x, y, width, height } = display.workArea;
+    return saved.bounds.x + 80 > x && saved.bounds.y + 40 > y && saved.bounds.x + 80 < x + width && saved.bounds.y + 40 < y + height;
+  });
+  const bounds = savedOnScreen ? saved.bounds : { ...size, x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 };
+  workspaceWindow = new BrowserWindow({
+    ...bounds, minWidth: 420, minHeight: 380, frame: false, show: false, title: 'לוח הצילומים', backgroundColor: '#5c5c5c',
+    alwaysOnTop: Boolean(saved.onTop), webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
+  });
+  workspaceWindow.setMenuBarVisibility(false);
+  workspaceWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  workspaceWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+  let saveTimer = null;
+  const remember = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (!workspaceWindow || workspaceWindow.isDestroyed() || workspaceWindow.isMaximized()) return;
+      fs.writeFile(workspaceStatePath(), JSON.stringify({ bounds: workspaceWindow.getBounds(), onTop: workspaceWindow.isAlwaysOnTop() }), 'utf8').catch(() => {});
+    }, 400);
+  };
+  workspaceWindow.on('move', remember);
+  workspaceWindow.on('resize', remember);
+  workspaceWindow.on('closed', () => { workspaceWindow = null; });
+  await workspaceWindow.loadFile(path.join(__dirname, 'workspace.html'));
+  if (process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') workspaceWindow.show();
+  return { opened: true, existing: false };
+}
+function notifyWorkspace() {
+  if (workspaceWindow && !workspaceWindow.isDestroyed()) workspaceWindow.webContents.send('workspace:changed');
+}
+// Capture from the window: it steps aside (like other capture tools) and comes back with the new capture in it.
+async function runFromWorkspace(action) {
+  const regionAction = ['region', 'repeatRegion', 'ocrRegion', 'recordRegion'].includes(action);
+  const visible = workspaceWindow && !workspaceWindow.isDestroyed() && workspaceWindow.isVisible();
+  if (regionAction && visible) {
+    workspaceWindow.hide();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'] }[action];
+    await runRegionCapture(plan[0], { purpose: plan[1] }).catch(() => {});
+    if (action !== 'recordRegion' && workspaceWindow && !workspaceWindow.isDestroyed()) workspaceWindow.showInactive();
+    return true;
+  }
+  if (!startRegionAction(action)) dispatchShortcut(action, 'workspace');
+  return true;
+}
+
 // The newest captures only (for the bar's history grid): thumbnails just for those, not the whole library.
 async function recentLibrary(limit = 48) {
   const directory = await ensureOutputDirectory();
@@ -1272,6 +1332,42 @@ function registerIpc() {
   });
   ipcMain.handle('quickbar:set-menu', (_event, open) => { quickbarMenu = Boolean(open) && quickbarView === 'actions'; positionQuickbar(true); return quickbarMenu; });
   ipcMain.handle('quickbar:history', () => recentLibrary(120));
+  ipcMain.handle('workspace:open', () => openWorkspace());
+  ipcMain.handle('workspace:list', () => recentLibrary(200));
+  ipcMain.handle('workspace:item-action', async (_event, filePath, action) => {
+    if (!['edit', 'copy', 'pin', 'open-folder', 'trash'].includes(action)) throw new Error('פעולה לא מוכרת');
+    const result = await runCaptureCardAction(filePath, action);
+    if (action === 'trash') notifyWorkspace();
+    return result;
+  });
+  ipcMain.handle('workspace:run', (_event, action) => {
+    if (!Object.hasOwn(ACTION_DEFINITIONS, action)) throw new Error('פעולה לא מוכרת');
+    return runFromWorkspace(action);
+  });
+  ipcMain.handle('workspace:close', () => { workspaceWindow?.close(); return true; });
+  ipcMain.handle('workspace:maximize', () => {
+    if (!workspaceWindow) return false;
+    if (workspaceWindow.isMaximized()) workspaceWindow.unmaximize(); else workspaceWindow.maximize();
+    return workspaceWindow.isMaximized();
+  });
+  ipcMain.handle('workspace:on-top', async (_event, onTop) => {
+    workspaceWindow?.setAlwaysOnTop(Boolean(onTop));
+    if (workspaceWindow) await fs.writeFile(workspaceStatePath(), JSON.stringify({ bounds: workspaceWindow.getBounds(), onTop: Boolean(onTop) }), 'utf8').catch(() => {});
+    return Boolean(onTop);
+  });
+  ipcMain.handle('workspace:open-studio', () => { showMainWindow(); mainWindow?.focus(); return true; });
+  ipcMain.handle('workspace:state', () => ({ onTop: Boolean(workspaceWindow?.isAlwaysOnTop()) }));
+  ipcMain.on('workspace:start-drag', async (event, filePath) => {
+    if (!isTrustedSender(event)) return;
+    try {
+      const resolved = await assertLibraryFile(filePath);
+      const extension = path.extname(resolved).slice(1).toLowerCase();
+      const stat = await fs.stat(resolved);
+      const thumbnail = await thumbnailFor({ path: resolved, extension, modified: stat.mtimeMs, size: stat.size });
+      const icon = thumbnail ? nativeImage.createFromDataURL(thumbnail).resize({ width: 96 }) : nativeImage.createFromPath(resolved).resize({ width: 96 });
+      event.sender.startDrag({ file: resolved, icon });
+    } catch {}
+  });
   // The studio's own capture buttons use the same frozen-screen picker as the shortcuts and the bar.
   ipcMain.handle('region:capture', (_event, mode, purpose) => runRegionCapture(mode === 'last' ? 'last' : 'pick', { purpose: ['capture', 'record', 'ocr'].includes(purpose) ? purpose : 'capture' }));
   ipcMain.handle('region:import-areas', (_event, payload) => regionCapture?.importAreas(payload || {}) || { imported: 0 });
@@ -1447,6 +1543,7 @@ function createTray() {
     { label: 'העתקת טקסט מאזור', click: () => runRegionCapture('pick', { purpose: 'ocr' }) },
     { label: 'הקלטת אזור', click: () => runRegionCapture('pick', { purpose: 'record' }) },
     { label: 'צילום מסך מלא', click: () => dispatchShortcut('screenshot', 'tray') },
+    { label: 'לוח הצילומים', click: () => openWorkspace() },
     { label: 'פתיחת הספרייה', click: () => showMainWindow('library') },
     { label: 'פתיחת תיקיית השמירה', click: () => ensureOutputDirectory().then((directory) => shell.openPath(directory)) },
     { type: 'separator' },

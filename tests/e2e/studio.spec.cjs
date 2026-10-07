@@ -550,20 +550,19 @@ test.describe('Electron production workflow', () => {
     let since = Date.now();
     await page.locator('#screenshot-button').click();
     let overlay = await region.opened(since);
-    await region.drag(overlay, { x: 60, y: 50 }, { x: 360, y: 250 });
+    // Control on release: the marks toolbar (its ⊕ keeps the area for reuse).
+    await region.drag(overlay, { x: 60, y: 50 }, { x: 360, y: 250 }, { ctrl: true });
     await overlay.locator('[data-command="save-area"]').click();
     await expect(overlay.locator('#note')).toContainText('נשמר');
     await expect(overlay.locator('html')).toHaveAttribute('data-saved-areas', '1');
     await overlay.locator('[data-after="save"]').click();
     const savedRegionCapture = await waitForNewFile(outputDir, '.png', before);
 
-    // Enter on a fresh frozen screen: the last area, then save.
+    // Enter on a fresh frozen screen: the last area, saved at once (saving on release is the default).
     before = new Set(await fs.readdir(outputDir));
     since = Date.now();
     await page.locator('#screenshot-button').click();
     overlay = await region.opened(since);
-    await region.key(overlay, { key: 'Enter' });
-    await expect(overlay.locator('html')).toHaveAttribute('data-region-editing', 'true');
     await region.key(overlay, { key: 'Enter' });
     const lastRegionCapture = await waitForNewFile(outputDir, '.png', before);
 
@@ -575,7 +574,6 @@ test.describe('Electron production workflow', () => {
     await expect(overlay.locator('html')).toHaveAttribute('data-saved-areas', '1');
     await expect(overlay.locator('#hint')).toContainText('מקש 1 האזור השמור');
     await region.key(overlay, { key: '1', code: 'Digit1' });
-    await region.key(overlay, { key: 'Enter' });
     const reusableRegionCapture = await waitForNewFile(outputDir, '.png', before);
     const [savedSize, reusedSize] = await Promise.all([savedRegionCapture, reusableRegionCapture].map(pngDimensions));
     expect([reusedSize.width, reusedSize.height]).toEqual([savedSize.width, savedSize.height]);

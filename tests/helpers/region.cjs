@@ -17,14 +17,15 @@ function regionOverlay(app) {
       }
       throw new Error('the frozen screen never opened');
     },
-    drag: (overlay, from, to) => overlay.evaluate(([a, b]) => {
-      const fire = (type, point) => window.dispatchEvent(new PointerEvent(type, { clientX: point.x, clientY: point.y, button: 0, bubbles: true, pointerId: 1 }));
+    // { ctrl: true } holds Control on release: the marks toolbar opens instead of saving at once.
+    drag: (overlay, from, to, { ctrl = false } = {}) => overlay.evaluate(([a, b, control]) => {
+      const fire = (type, point, extra = {}) => window.dispatchEvent(new PointerEvent(type, { clientX: point.x, clientY: point.y, button: 0, bubbles: true, pointerId: 1, ...extra }));
       fire('pointermove', a);
       fire('pointerdown', a);
       fire('pointermove', { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
       fire('pointermove', b);
-      fire('pointerup', b);
-    }, [from, to]),
+      fire('pointerup', b, { ctrlKey: control });
+    }, [from, to, ctrl]),
     key: (overlay, init) => overlay.evaluate((value) => window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...value })), init)
   };
 }

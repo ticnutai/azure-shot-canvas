@@ -211,11 +211,12 @@
   }
 
   // A chosen area: capture at once, or (quick marks on) keep it on screen with the toolbar.
-  function choose(rect) {
+  // markupNow: Control held on release opens the marks toolbar even when saving on release is the setting.
+  function choose(rect, { markupNow = false } = {}) {
     if (!geometry.isUsable(rect)) return;
     if (session.purpose === 'record') return finish(rect, 'record');
     if (session.purpose === 'ocr') return finish(rect, 'ocr');
-    if (!session.markup) return finish(rect, 'save');
+    if (!session.markup && !markupNow) return finish(rect, 'save');
     selected = rect;
     tool = 'move';
     syncToolbar();
@@ -406,11 +407,11 @@
     const start = dragStart;
     dragStart = null;
     document.body.dataset.dragging = 'false';
-    if (dragged) return choose(dragged);
+    if (dragged) return choose(dragged, { markupNow: event.ctrlKey });
     // A click: the window part under the pointer, or the whole screen when there is none.
     pointer = start;
     shiftHeld = event.shiftKey;
-    choose(hoveredTarget() || screenBounds());
+    choose(hoveredTarget() || screenBounds(), { markupNow: event.ctrlKey });
   });
 
   window.addEventListener('dblclick', (event) => {
@@ -450,6 +451,7 @@
   // ---- Session start ------------------------------------------------------------------------------------
   function renderHint(purpose, savedCount = 0) {
     const [first, ...rest] = HINTS[purpose] || HINTS.capture;
+    if (purpose === 'capture') rest.unshift(session.markup ? 'שחרור — סרגל סימון לפני השמירה' : 'שחרור — נשמר מיד · עם קונטרול: סימון לפני השמירה');
     if (savedCount && purpose !== 'ocr') rest.splice(rest.length - 1, 0, savedCount === 1 ? 'מקש 1 האזור השמור' : `מקשים 1–${savedCount} אזורים שמורים`);
     const bold = document.createElement('b');
     bold.textContent = first;

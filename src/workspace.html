@@ -1,0 +1,50 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>לוח הצילומים</title><link rel="stylesheet" href="workspace.css"></head><body>
+  <header class="titlebar">
+    <span class="logo" aria-hidden="true"><i></i></span>
+    <b class="title">לוח הצילומים</b>
+    <input id="search" type="search" placeholder="חיפוש…" aria-label="חיפוש בצילומים" dir="rtl">
+    <span id="count" class="count"></span>
+    <div class="window-buttons">
+      <button id="open-studio" title="פתיחת האולפן וההגדרות" aria-label="פתיחת האולפן">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.7-.7-2.5z"/></svg>
+      </button>
+      <button id="on-top" title="תמיד מעל החלונות" aria-pressed="false" aria-label="תמיד מעל החלונות">
+        <svg viewBox="0 0 24 24"><path d="M9 3h6l-1 6 3 3v2h-4v7l-1 1-1-1v-7H7v-2l3-3z"/></svg>
+      </button>
+      <button id="maximize" title="הגדלה / שחזור" aria-label="הגדלה">
+        <svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></svg>
+      </button>
+      <button id="close" title="סגירה (אסקייפ)" aria-label="סגירה">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+  </header>
+  <main id="grid" role="listbox" aria-multiselectable="true" aria-label="הצילומים האחרונים" tabindex="0"></main>
+  <div id="menu" role="menu" hidden></div>
+  <footer class="actions">
+    <div class="action-group">
+      <button class="round-action capture" data-action="region" title="צילום אזור או חלון (צילום מסך)">
+        <span class="ring"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span class="label">צילום אזור</span>
+      </button>
+      <button class="more" data-menu="capture" aria-label="עוד אפשרויות צילום" title="עוד אפשרויות צילום">▾</button>
+    </div>
+    <div class="action-group">
+      <button class="round-action record" data-action="recordRegion" title="הקלטת אזור או חלון">
+        <span class="ring"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 11l6-3v8l-6-3z"/></svg></span><span class="label">הקלטת וידאו</span>
+      </button>
+      <button class="more" data-menu="record" aria-label="עוד אפשרויות הקלטה" title="עוד אפשרויות הקלטה">▾</button>
+    </div>
+    <div class="action-group">
+      <button class="round-action edit" id="edit" title="עריכת הצילום שנבחר (אנטר)" disabled>
+        <span class="ring"><svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></svg></span><span class="label">עריכה…</span>
+      </button>
+    </div>
+    <div class="spacer"></div>
+    <div class="action-group">
+      <button class="round-action close" id="close-bottom" title="סגירה">
+        <span class="ring"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span><span class="label">סגירה</span>
+      </button>
+    </div>
+  </footer>
+  <script src="workspace.js"></script>
+</body></html>

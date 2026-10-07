@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('quickbarApi', {
   setMenu: (open) => ipcRenderer.invoke('quickbar:set-menu', open),
   history: () => ipcRenderer.invoke('quickbar:history'),
   openCapture: (filePath) => ipcRenderer.invoke('quickbar:open-capture', filePath),
-  drag: (active) => ipcRenderer.invoke('quickbar:drag', active)
+  drag: (active) => ipcRenderer.invoke('quickbar:drag', active),
+  openWorkspace: () => ipcRenderer.invoke('workspace:open')
 });

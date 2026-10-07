@@ -4,7 +4,7 @@ const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeF
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
-  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: true, captureDelay: 0, autoCopy: false, laptopCaptureKey: true });
+  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: false, captureDelay: 0, autoCopy: false, laptopCaptureKey: true, historyStyle: 'workspace' });
   assert.deepEqual(normalizeQuickbarPreferences({ enabled: false, edge: 'bottom' }, normalized), { ...normalized, enabled: false, pinned: false });
   assert.deepEqual(normalizeQuickbarPreferences({}), DEFAULT_QUICKBAR_PREFERENCES);
 });
@@ -108,9 +108,11 @@ test('dragging maps the pointer to a 0–1 position along the edge', () => {
   assert.equal(offsetForPointer(workArea, 'left', { x: 0, y: 840 }), 1);
   assert.equal(offsetForPointer(workArea, 'right', { x: 0, y: 240 }), 0.25);
 });
-test('region capture options: marks toolbar on, no delay and no automatic copy by default; only known delays', () => {
-  assert.equal(DEFAULT_QUICKBAR_PREFERENCES.regionMarkup, true);
-  assert.equal(normalizeQuickbarPreferences({ regionMarkup: false }).regionMarkup, false);
+test('region capture options: saved on release, no delay and no automatic copy by default; only known delays', () => {
+  assert.equal(DEFAULT_QUICKBAR_PREFERENCES.regionMarkup, false);
+  assert.equal(normalizeQuickbarPreferences({ regionMarkup: true }).regionMarkup, true);
+  assert.equal(DEFAULT_QUICKBAR_PREFERENCES.historyStyle, 'workspace');
+  assert.equal(normalizeQuickbarPreferences({ historyStyle: 'other' }).historyStyle, 'workspace');
   assert.equal(normalizeQuickbarPreferences({ captureDelay: 5 }).captureDelay, 5);
   assert.equal(normalizeQuickbarPreferences({ captureDelay: 7 }).captureDelay, 0);
   assert.equal(normalizeQuickbarPreferences({ autoCopy: true }).autoCopy, true);

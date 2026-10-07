@@ -17,6 +17,9 @@ test.describe.serial('region capture on the frozen screen', () => {
   test.beforeAll(async () => {
     ({ app, page, outputDir, runtimeErrors } = await launchStudio('region-overlay'));
     scale = await app.evaluate(({ screen }) => screen.getPrimaryDisplay().scaleFactor);
+    // These tests cover the marks toolbar: turned on here (the default saves on release — tested below).
+    await expect.poll(() => app.windows().some((candidate) => candidate.url().includes('quickbar.html')), { timeout: 15_000 }).toBe(true);
+    await app.windows().find((candidate) => candidate.url().includes('quickbar.html')).evaluate(() => window.quickbarApi.setPreferences({ regionMarkup: true }));
   });
   test.afterAll(async () => closeStudio(app));
 
@@ -136,15 +139,30 @@ test.describe.serial('region capture on the frozen screen', () => {
     expect(dimensions.height).toBe(Math.round(size.height * scale));
   });
 
-  test('with quick marks off the area is saved the moment it is chosen', async () => {
+  test('default: the area is saved the moment the mouse is released; Control on release opens the marks toolbar', async () => {
     await setPreferences({ regionMarkup: false });
-    const before = new Set(await fs.readdir(outputDir));
-    const since = Date.now();
+    let before = new Set(await fs.readdir(outputDir));
+    let since = Date.now();
     await pressShortcut('3');
-    const overlay = await openedOverlay(since);
+    let overlay = await openedOverlay(since);
+    await expect(overlay.locator('#hint')).toContainText('שחרור — נשמר מיד');
     await drag(overlay, { x: 10, y: 10 }, { x: 90, y: 50 });
     const dimensions = await pngDimensions(await newPng(before));
     expect(dimensions.width).toBe(Math.round(80 * scale));
+    // Control held on release: the toolbar instead, nothing saved yet.
+    before = new Set(await fs.readdir(outputDir));
+    since = Date.now();
+    await pressShortcut('3');
+    overlay = await openedOverlay(since);
+    await overlay.evaluate(() => {
+      const fire = (type, x, y, extra = {}) => window.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true, pointerId: 1, ...extra }));
+      fire('pointerdown', 20, 20); fire('pointermove', 120, 80); fire('pointerup', 120, 80, { ctrlKey: true });
+    });
+    await expect(overlay.locator('html')).toHaveAttribute('data-region-editing', 'true');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(await pngsSince(before)).toEqual([]);
+    await overlay.locator('[data-after="save"]').click();
+    expect((await pngDimensions(await newPng(before))).width).toBe(Math.round(100 * scale));
     await setPreferences({ regionMarkup: true });
   });
 

@@ -228,7 +228,7 @@
     };
     const delay = preferences.captureDelay || 0;
     row.append(
-      chip('markup', 'סימון אחרי בחירה', preferences.regionMarkup !== false, () => ({ regionMarkup: preferences.regionMarkup === false })),
+      chip('markup', 'סימון לפני שמירה', Boolean(preferences.regionMarkup), () => ({ regionMarkup: !preferences.regionMarkup })),
       chip('delay', delay ? `השהיה ${delay} שנ׳` : 'בלי השהיה', delay > 0, () => ({ captureDelay: DELAYS[(DELAYS.indexOf(delay) + 1) % DELAYS.length] })),
       chip('copy', 'העתקה אוטומטית', Boolean(preferences.autoCopy), () => ({ autoCopy: !preferences.autoCopy }))
     );
@@ -319,6 +319,11 @@
     renderSelection();
   }
   async function showHistory() {
+    // Default: the captures window (large thumbnails, round buttons); the small grid stays as a choice.
+    if (preferences.historyStyle !== 'panel' && api.openWorkspace) {
+      await setExpanded(false);
+      return api.openWorkspace();
+    }
     setView('history');
     await api.setView('history');
     chosen.clear();

@@ -88,6 +88,8 @@ test.describe.serial('slim capture strip', () => {
     await expect(strip.locator('html')).toHaveAttribute('data-view', 'capture', { timeout: 15_000 });
     await expect(strip.locator('#capture-card')).toBeVisible();
 
+    // The small grid inside the bar (the default button opens the captures window — tested below).
+    await strip.evaluate(() => window.quickbarApi.setPreferences({ historyStyle: 'panel' }));
     await strip.locator('#show-history').click();
     await expect(strip.locator('html')).toHaveAttribute('data-view', 'history');
     await expect.poll(async () => (await barBounds()).bounds).toMatchObject({ width: 392, height: 470 });
@@ -98,6 +100,9 @@ test.describe.serial('slim capture strip', () => {
   });
 
   test('history: search, kind and time filters, and several captures chosen and moved to the recycle bin', async () => {
+    // The small grid inside the bar (the default history button opens the captures window — tested below).
+    await strip.evaluate(() => window.quickbarApi.setPreferences({ historyStyle: 'panel' }));
+    await expect(strip.locator('body')).toHaveAttribute('data-style', 'strip');
     await strip.locator('#show-history').click();
     await expect(strip.locator('.history-item')).toHaveCount(1);
     await strip.locator('[data-kind-filter="video"]').click();
@@ -131,6 +136,53 @@ test.describe.serial('slim capture strip', () => {
     await strip.locator('#strip').dispatchEvent('mouseleave');
     await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'false', { timeout: 2000 });
     await expect.poll(async () => (await barBounds()).bounds.width).toBe(120);
+  });
+
+  test('captures window: large thumbnails with names, choose, delete, and capture from its round button', async () => {
+    await strip.evaluate(() => window.quickbarApi.setPreferences({ historyStyle: 'workspace' }));
+    // Two captures to show.
+    for (let i = 0; i < 2; i += 1) {
+      const before = new Set(await fs.readdir(outputDir));
+      const since = Date.now();
+      await strip.evaluate(() => window.quickbarApi.runAction('region'));
+      let overlay = null;
+      for (let tries = 0; tries < 200 && !overlay; tries += 1) {
+        for (const candidate of app.windows().filter((item) => item.url().includes('region-overlay.html'))) {
+          if (Number(await candidate.evaluate(() => document.documentElement.dataset.regionReady || 0).catch(() => 0)) > since) overlay = candidate;
+        }
+        if (!overlay) await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      await overlay.evaluate((n) => {
+        const fire = (type, x, y) => window.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, button: 0, bubbles: true, pointerId: 1 }));
+        fire('pointerdown', 30, 30); fire('pointermove', 130 + n * 20, 90); fire('pointerup', 130 + n * 20, 90);
+      }, i);
+      await expect.poll(async () => (await fs.readdir(outputDir)).filter((name) => name.endsWith('.png') && !before.has(name)).length, { timeout: 20_000 }).toBe(1);
+    }
+    if (await strip.locator('body').getAttribute('data-expanded') !== 'true') await strip.locator('#edge-handle').click();
+    await strip.evaluate(() => { document.documentElement.dataset.view = 'actions'; });
+    await strip.locator('#strip-history').click();
+    await expect.poll(() => app.windows().filter((candidate) => candidate.url().includes('workspace.html')).length, { timeout: 15_000 }).toBe(1);
+    const workspace = app.windows().find((candidate) => candidate.url().includes('workspace.html'));
+    await workspace.waitForFunction(() => document.documentElement.dataset.ready === 'true');
+    const pngs = (await fs.readdir(outputDir)).filter((name) => name.endsWith('.png'));
+    await expect(workspace.locator('.item')).toHaveCount(pngs.length);
+    await expect(workspace.locator('.item .name').first()).toHaveText(/\.png$/);
+    await expect(workspace.locator('.round-action')).toHaveCount(4);
+    await expect(workspace.locator('#edit')).toBeDisabled();
+    await workspace.locator('.item').first().click();
+    await expect(workspace.locator('.item').first()).toHaveAttribute('aria-selected', 'true');
+    await expect(workspace.locator('#edit')).toBeEnabled();
+    // A new capture appears in the open window by itself.
+    const countBefore = await workspace.locator('.item').count();
+    await workspace.locator('.item').first().click();
+    await workspace.keyboard.press('Delete');
+    await expect(workspace.locator('.item')).toHaveCount(countBefore - 1);
+    // The ▾ menu lists the other capture kinds.
+    await workspace.locator('.more[data-menu="capture"]').click();
+    await expect(workspace.locator('#menu [data-menu-item]')).toHaveCount(5);
+    await workspace.keyboard.press('Escape');
+    await workspace.locator('#close-bottom').click();
+    await expect.poll(() => app.windows().filter((candidate) => candidate.url().includes('workspace.html')).length).toBe(0);
   });
 
   test('settings switch between the strip and the full panel', async () => {

@@ -13,13 +13,15 @@ const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
   // Post-capture card: shown above every app right after a capture, hides after captureTimeout seconds (0 = stays).
   capturePreview: true,
   captureTimeout: 6,
-  // Region capture: show the quick marks toolbar after selecting (off = save at once), wait before freezing,
-  // and put every region capture on the clipboard as well.
-  regionMarkup: true,
+  // Region capture: off = the picture is saved the moment the selection is released (Control on release still
+  // opens the marks toolbar); on = the marks toolbar every time. Then: wait before freezing, copy every capture.
+  regionMarkup: false,
   captureDelay: 0,
   autoCopy: false,
   // Laptops whose Print Screen key sends Windows+Shift+S (the snipping tool): that key opens the studio instead.
-  laptopCaptureKey: true
+  laptopCaptureKey: true,
+  // The bar's history button: 'workspace' = the captures window (large thumbnails, round buttons); 'panel' = the small grid.
+  historyStyle: 'workspace'
 });
 
 const CAPTURE_TIMEOUTS = [0, 4, 6, 10];
@@ -40,6 +42,7 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
   if ('regionMarkup' in candidate) next.regionMarkup = Boolean(candidate.regionMarkup);
   if ('autoCopy' in candidate) next.autoCopy = Boolean(candidate.autoCopy);
   if ('laptopCaptureKey' in candidate) next.laptopCaptureKey = Boolean(candidate.laptopCaptureKey);
+  if (['workspace', 'panel'].includes(candidate.historyStyle)) next.historyStyle = candidate.historyStyle;
   if (CAPTURE_DELAYS.includes(Number(candidate.captureDelay))) next.captureDelay = Number(candidate.captureDelay);
   if (!next.enabled) next.pinned = false;
   return next;
