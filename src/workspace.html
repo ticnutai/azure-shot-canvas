@@ -1,10 +1,13 @@
-<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>לוח הצילומים</title><link rel="stylesheet" href="workspace.css"></head><body>
+<!doctype html><html lang="he" dir="rtl" data-theme="graphite" data-view="large"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>לוח הצילומים</title><link rel="stylesheet" href="workspace.css"></head><body>
   <header class="titlebar">
     <span class="logo" aria-hidden="true"><i></i></span>
     <b class="title">לוח הצילומים</b>
     <input id="search" type="search" placeholder="חיפוש…" aria-label="חיפוש בצילומים" dir="rtl">
     <span id="count" class="count"></span>
     <div class="window-buttons">
+      <button id="theme-button" title="עיצוב ופריסה" aria-label="עיצוב ופריסה" aria-haspopup="menu">
+        <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.6-.9 1.2-1.8-.5-1.1.2-2.2 1.4-2.2H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10" cy="7" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/></svg>
+      </button>
       <button id="open-studio" title="פתיחת האולפן וההגדרות" aria-label="פתיחת האולפן">
         <svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.5-.7-.7-2.5z"/></svg>
       </button>
@@ -19,8 +22,56 @@
       </button>
     </div>
   </header>
+
+  <!-- Light designs: actions grouped like an office ribbon, each with a coloured icon tile. -->
+  <nav class="ribbon" aria-label="פעולות">
+    <section class="ribbon-group">
+      <div class="ribbon-buttons">
+        <button data-action="region" style="--tint:#fde8e8;--ink:#d93636"><span class="tile"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></span><span>צילום אזור</span></button>
+        <button data-action="repeatRegion" style="--tint:#fff1df;--ink:#e27a12"><span class="tile"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v4h4"/></svg></span><span>האזור הקודם</span></button>
+        <button data-action="screenshot" style="--tint:#e6efff;--ink:#2f6fe0"><span class="tile"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="13" rx="2"/><path d="M8 21h8"/></svg></span><span>מסך מלא</span></button>
+        <button data-action="scrollCapture" style="--tint:#e8f6ee;--ink:#2a9d5b"><span class="tile"><svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M12 8v8M9 13l3 3 3-3"/></svg></span><span>עמוד גלילה</span></button>
+        <button data-action="ocrRegion" style="--tint:#f1e9ff;--ink:#7a4ddb"><span class="tile"><svg viewBox="0 0 24 24"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg></span><span>טקסט מאזור</span></button>
+      </div>
+      <b class="ribbon-label">צילום</b>
+    </section>
+    <section class="ribbon-group">
+      <div class="ribbon-buttons">
+        <button data-action="recordRegion" style="--tint:#ffe6ef;--ink:#d63a72"><span class="tile"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="2"/><path d="M15 11l6-3v8l-6-3z"/></svg></span><span>הקלטת אזור</span></button>
+        <button data-action="record" style="--tint:#ffe9e4;--ink:#e0472b"><span class="tile"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor"/></svg></span><span>התחלה / עצירה</span></button>
+      </div>
+      <b class="ribbon-label">הקלטה</b>
+    </section>
+    <section class="ribbon-group">
+      <div class="ribbon-buttons">
+        <button data-item-action="edit" data-needs="one-image" style="--tint:#e5f4fb;--ink:#1c8fc4"><span class="tile"><svg viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/></svg></span><span>עריכה</span></button>
+        <button data-item-action="copy" data-needs="any" style="--tint:#eef0f4;--ink:#4b5565"><span class="tile"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></span><span>העתקה</span></button>
+        <button data-item-action="open-folder" data-needs="any" style="--tint:#fff6d9;--ink:#c99124"><span class="tile"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span>תיקייה</span></button>
+        <button data-item-action="trash" data-needs="any" style="--tint:#fde8e8;--ink:#c0392b"><span class="tile"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></span><span>מחיקה</span></button>
+      </div>
+      <b class="ribbon-label">קובץ</b>
+    </section>
+  </nav>
+
+  <div class="viewbar">
+    <b class="section-title">הצילומים האחרונים</b>
+    <label class="size-control" title="גודל התמונות (גם קונטרול + גלגלת)">
+      <svg viewBox="0 0 24 24"><rect x="5" y="7" width="8" height="8" rx="1"/></svg>
+      <input id="thumb-size" type="range" min="120" max="420" step="10" value="220" aria-label="גודל התמונות">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="16" height="15" rx="1.5"/></svg>
+    </label>
+    <div class="view-switch" role="group" aria-label="תצוגה">
+      <button data-view-choice="large" title="תמונות גדולות" aria-pressed="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button>
+      <button data-view-choice="grid" title="רשת צפופה" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M4 4h4v4H4zM10 4h4v4h-4zM16 4h4v4h-4zM4 10h4v4H4zM10 10h4v4h-4zM16 10h4v4h-4zM4 16h4v4H4zM10 16h4v4h-4zM16 16h4v4h-4z"/></svg></button>
+      <button data-view-choice="list" title="רשימה" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="4" height="4" rx="1"/><rect x="4" y="15" width="4" height="4" rx="1"/><path d="M11 7h9M11 17h9"/></svg></button>
+      <button data-view-choice="table" title="טבלת פרטים" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9h16M4 14h16M10 9v11"/></svg></button>
+    </div>
+  </div>
+
   <main id="grid" role="listbox" aria-multiselectable="true" aria-label="הצילומים האחרונים" tabindex="0"></main>
   <div id="menu" role="menu" hidden></div>
+
+  <!-- Dark design: large round buttons at the bottom. -->
   <footer class="actions">
     <div class="action-group">
       <button class="round-action capture" data-action="region" title="צילום אזור או חלון (צילום מסך)">

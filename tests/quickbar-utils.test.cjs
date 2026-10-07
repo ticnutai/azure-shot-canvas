@@ -4,7 +4,7 @@ const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeF
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
-  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: false, captureDelay: 0, autoCopy: false, laptopCaptureKey: true, historyStyle: 'workspace' });
+  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: false, captureDelay: 0, autoCopy: true, laptopCaptureKey: true, historyStyle: 'workspace' });
   assert.deepEqual(normalizeQuickbarPreferences({ enabled: false, edge: 'bottom' }, normalized), { ...normalized, enabled: false, pinned: false });
   assert.deepEqual(normalizeQuickbarPreferences({}), DEFAULT_QUICKBAR_PREFERENCES);
 });
@@ -115,7 +115,8 @@ test('region capture options: saved on release, no delay and no automatic copy b
   assert.equal(normalizeQuickbarPreferences({ historyStyle: 'other' }).historyStyle, 'workspace');
   assert.equal(normalizeQuickbarPreferences({ captureDelay: 5 }).captureDelay, 5);
   assert.equal(normalizeQuickbarPreferences({ captureDelay: 7 }).captureDelay, 0);
-  assert.equal(normalizeQuickbarPreferences({ autoCopy: true }).autoCopy, true);
+  assert.equal(DEFAULT_QUICKBAR_PREFERENCES.autoCopy, true);
+  assert.equal(normalizeQuickbarPreferences({ autoCopy: false }).autoCopy, false);
 });
 test('the bar opens on touch by default, and a drag decides its edge: top band stays on top, lower down the nearer side', () => {
   assert.equal(DEFAULT_QUICKBAR_PREFERENCES.activation, 'hover');

@@ -17,7 +17,8 @@ const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
   // opens the marks toolbar); on = the marks toolbar every time. Then: wait before freezing, copy every capture.
   regionMarkup: false,
   captureDelay: 0,
-  autoCopy: false,
+  // Every capture is put on the clipboard as a picture (paste anywhere right away).
+  autoCopy: true,
   // Laptops whose Print Screen key sends Windows+Shift+S (the snipping tool): that key opens the studio instead.
   laptopCaptureKey: true,
   // The bar's history button: 'workspace' = the captures window (large thumbnails, round buttons); 'panel' = the small grid.

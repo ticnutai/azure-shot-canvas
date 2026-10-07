@@ -168,13 +168,31 @@ async function applyQuickbarPreferences(patch = {}) {
   return quickbarPreferences;
 }
 
+// PNG and JPG load directly; WebP and the rest are converted to PNG by FFmpeg first (Windows cannot read them).
+async function clipboardImageFor(filePath) {
+  const direct = nativeImage.createFromPath(filePath);
+  if (!direct.isEmpty()) return direct;
+  const temporaryPath = path.join(os.tmpdir(), `aurum-copy-${process.pid}-${Date.now()}.png`);
+  try {
+    const result = await runHidden('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-i', filePath, '-frames:v', '1', temporaryPath], { timeoutMs: 20_000 });
+    if (!result.ok) return null;
+    const converted = nativeImage.createFromBuffer(await fs.readFile(temporaryPath));
+    return converted.isEmpty() ? null : converted;
+  } catch { return null; } finally { await fs.rm(temporaryPath, { force: true }).catch(() => {}); }
+}
+
 // One implementation for library actions, used by automations (workflow:action) and the capture card.
 async function runLibraryAction(filePath, action, options = {}) {
   const resolved = await assertLibraryFile(filePath);
   if (action === 'copy') {
-    const image = IMAGE_FILE.test(resolved) ? nativeImage.createFromPath(resolved) : null;
-    if (image && !image.isEmpty()) clipboard.writeImage(image);
-    else clipboard.writeText(resolved);
+    // A picture is always copied as a picture (pasted anywhere as an image) — never as its file location.
+    if (IMAGE_FILE.test(resolved)) {
+      const image = await clipboardImageFor(resolved);
+      if (!image) throw new Error('לא ניתן להעתיק את התמונה ללוח');
+      clipboard.writeImage(image);
+      return { action, path: resolved, image: true };
+    }
+    clipboard.writeText(resolved);
     return { action, path: resolved };
   }
   if (action === 'ocr') {
@@ -1037,6 +1055,11 @@ function registerIpc() {
     const filePath = captureFilePath(directory, 'screenshot', format);
     const data = Buffer.from(bytes);
     await fs.writeFile(filePath, format === 'pdf' ? pdfFromJpeg(data, Number(options.width) || 1, Number(options.height) || 1) : data);
+    // Every capture lands on the clipboard as a picture, ready to paste (PDF pages are JPEG inside).
+    if (quickbarPreferences.autoCopy) {
+      const image = format === 'webp' ? await clipboardImageFor(filePath) : nativeImage.createFromBuffer(data);
+      if (image && !image.isEmpty()) clipboard.writeImage(image);
+    }
     return { path: filePath };
   });
   ipcMain.handle('file:save-recording', async (_event, bytes, convertToMp4) => {

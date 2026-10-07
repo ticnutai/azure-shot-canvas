@@ -181,6 +181,30 @@ test.describe.serial('slim capture strip', () => {
     await workspace.locator('.more[data-menu="capture"]').click();
     await expect(workspace.locator('#menu [data-menu-item]')).toHaveCount(5);
     await workspace.keyboard.press('Escape');
+    // Designs, views and picture size; the choice is remembered when the window opens again.
+    await workspace.locator('#theme-button').click();
+    await expect(workspace.locator('#menu [data-theme-choice]')).toHaveCount(6);
+    await workspace.locator('#menu [data-theme-choice="office"]').click();
+    await expect(workspace.locator('html')).toHaveAttribute('data-theme', 'office');
+    await expect(workspace.locator('.ribbon')).toBeVisible();
+    await expect(workspace.locator('.actions')).toBeHidden();
+    await workspace.locator('[data-view-choice="table"]').click();
+    await expect(workspace.locator('.table-head')).toHaveCount(1);
+    await workspace.locator('[data-view-choice="large"]').click();
+    await workspace.locator('#thumb-size').fill('320');
+    await expect.poll(() => workspace.evaluate(() => document.documentElement.style.getPropertyValue('--thumb'))).toBe('320px');
+    await workspace.reload();
+    await workspace.waitForFunction(() => document.documentElement.dataset.ready === 'true');
+    await expect(workspace.locator('html')).toHaveAttribute('data-theme', 'office');
+    // Ribbon actions follow the selection.
+    await expect(workspace.locator('.ribbon [data-item-action="copy"]')).toBeDisabled();
+    await workspace.locator('.item').first().click();
+    await expect(workspace.locator('.ribbon [data-item-action="copy"]')).toBeEnabled();
+    await workspace.locator('.ribbon [data-item-action="copy"]').click();
+    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readImage().isEmpty())).toBe(false);
+    await workspace.evaluate(() => { localStorage.setItem('aurum-ws-theme', 'graphite'); });
+    await workspace.reload();
+    await workspace.waitForFunction(() => document.documentElement.dataset.ready === 'true');
     await workspace.locator('#close-bottom').click();
     await expect.poll(() => app.windows().filter((candidate) => candidate.url().includes('workspace.html')).length).toBe(0);
   });

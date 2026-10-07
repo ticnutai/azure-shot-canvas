@@ -146,9 +146,13 @@ test.describe.serial('region capture on the frozen screen', () => {
     await pressShortcut('3');
     let overlay = await openedOverlay(since);
     await expect(overlay.locator('#hint')).toContainText('שחרור — נשמר מיד');
+    await app.evaluate(({ clipboard }) => clipboard.writeText('לפני הצילום'));
     await drag(overlay, { x: 10, y: 10 }, { x: 90, y: 50 });
     const dimensions = await pngDimensions(await newPng(before));
     expect(dimensions.width).toBe(Math.round(80 * scale));
+    // On by default: the capture is on the clipboard as a picture (ready to paste), not as text.
+    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readImage().getSize().width)).toBe(Math.round(80 * scale));
+    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('');
     // Control held on release: the toolbar instead, nothing saved yet.
     before = new Set(await fs.readdir(outputDir));
     since = Date.now();
