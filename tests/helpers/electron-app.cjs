@@ -34,7 +34,13 @@ async function launchStudio(testName, options = {}) {
     },
     timeout: 30_000
   });
-  const page = await app.firstWindow();
+  // The studio window, not whichever opened first: the floating bar and the region overlays are windows too.
+  await app.firstWindow();
+  let page = null;
+  for (const deadline = Date.now() + 30_000; !page; await new Promise((resolve) => setTimeout(resolve, 100))) {
+    page = app.windows().find((candidate) => candidate.url().endsWith('index.html')) || null;
+    if (!page && Date.now() > deadline) throw new Error('the studio window never opened');
+  }
   const runtimeErrors = [];
   page.on('console', (message) => {
     if (message.type() === 'error') runtimeErrors.push({ type: 'console', text: message.text() });

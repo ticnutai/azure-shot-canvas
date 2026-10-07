@@ -61,5 +61,10 @@ contextBridge.exposeInMainWorld('screenStudio', {
   onNavigate: (callback) => ipcRenderer.on('app:navigate', (_event, page) => callback(page)),
   showCapturePreview: (filePath) => ipcRenderer.invoke('capture:preview', filePath),
   onOpenEditor: (callback) => ipcRenderer.on('app:open-editor', (_event, filePath) => callback(filePath)),
-  onLibraryChanged: (callback) => ipcRenderer.on('app:library-changed', () => callback())
+  onLibraryChanged: (callback) => ipcRenderer.on('app:library-changed', () => callback()),
+  onExternalImage: (callback) => ipcRenderer.on('capture:external-image', (_event, payload) => callback(payload)),
+  onToast: (callback) => ipcRenderer.on('app:toast', (_event, text) => callback(text)),
+  regionCapture: (mode, purpose) => ipcRenderer.invoke('region:capture', mode, purpose),
+  importRegionAreas: (payload) => ipcRenderer.invoke('region:import-areas', payload),
+  onQuickbarPreferences: (callback) => ipcRenderer.on('app:quickbar-preferences', (_event, value) => callback(value))
 });

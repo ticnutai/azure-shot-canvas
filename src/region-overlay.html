@@ -1,0 +1,33 @@
+<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>בחירת אזור</title><link rel="stylesheet" href="region-overlay.css"></head><body>
+  <canvas id="frozen" aria-hidden="true"></canvas>
+  <canvas id="marks" aria-hidden="true"></canvas>
+  <div id="loupe" aria-hidden="true"><canvas id="loupe-canvas" width="132" height="132"></canvas><span id="loupe-info"></span></div>
+  <div id="size-label" aria-hidden="true"></div>
+  <div id="hint" role="status"></div>
+  <div id="note" role="status" hidden></div>
+  <textarea id="text-input" rows="1" dir="rtl" spellcheck="false" placeholder="הקלידו טקסט · אנטר לסיום" hidden></textarea>
+  <div id="toolbar" role="toolbar" aria-label="סימון וצילום" hidden>
+    <div class="tools">
+      <button data-tool="move" title="בחירה, הזזה ושינוי גודל (V)">⤧</button>
+      <button data-tool="arrow" title="חץ (A)">➚</button>
+      <button data-tool="rect" title="מלבן (R)">▭</button>
+      <button data-tool="pen" title="עט (P)">✎</button>
+      <button data-tool="text" title="טקסט (T)">א</button>
+      <button data-tool="blur" title="טשטוש מידע (B)">▦</button>
+      <button data-tool="number" title="מספור שלבים (N)">①</button>
+      <button data-command="undo" title="ביטול הסימון האחרון (Ctrl+Z)">↶</button>
+      <button data-command="save-area" title="שמירת האזור לשימוש חוזר (מקשי 1–9 בפעם הבאה)">⊕</button>
+    </div>
+    <div class="colors" aria-label="צבע"></div>
+    <div class="actions">
+      <button data-after="ocr" title="העתקת הטקסט שבאזור (בלי לשמור תמונה)">העתקת טקסט</button>
+      <button data-after="edit" title="שמירה ופתיחה בעורך המלא (Ctrl+E)">עורך</button>
+      <button data-after="copy" title="שמירה והעתקה ללוח (Ctrl+C)">העתקה</button>
+      <button data-after="save" class="primary" title="שמירה (אנטר או לחיצה כפולה)">✓ שמירה</button>
+      <button data-command="cancel" class="close" title="ביטול (אסקייפ)">×</button>
+    </div>
+  </div>
+  <script src="region-utils.cjs"></script>
+  <script src="region-markup.js"></script>
+  <script src="region-overlay.js"></script>
+</body></html>

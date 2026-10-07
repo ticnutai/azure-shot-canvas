@@ -9,10 +9,13 @@ const ACTION_DEFINITIONS = Object.freeze({
   record: { category: 'recording', label: 'התחלה / עצירת הקלטה', description: 'מחליף מצב לפי מצב ההקלטה הנוכחי' },
   recordStart: { category: 'recording', label: 'התחלת הקלטה', description: 'מתחיל רק אם אין הקלטה פעילה' },
   recordStop: { category: 'recording', label: 'עצירת הקלטה', description: 'עוצר ושומר רק הקלטה פעילה' },
+  recordRegion: { category: 'recording', label: 'הקלטת אזור', description: 'בוחרים אזור או חלון על המסך הקפוא וההקלטה מתחילה' },
   pause: { category: 'recording', label: 'השהיה / המשך', description: 'מחליף בין השהיה להמשך' },
   screenshot: { category: 'capture', label: 'צילום מסך מלא', description: 'מצלם מיד את המקור שנבחר' },
   region: { category: 'capture', label: 'צילום אזור', description: 'פותח בחירת שטח לפני הצילום' },
   repeatRegion: { category: 'capture', label: 'צילום האזור האחרון', description: 'מצלם מיד את האזור שנבחר בפעם הקודמת, בלי לבחור שוב' },
+  ocrRegion: { category: 'capture', label: 'העתקת טקסט מאזור', description: 'בוחרים אזור על המסך הקפוא והטקסט שבו, גם בעברית, מועתק ללוח' },
+  scrollCapture: { category: 'capture', label: 'צילום עמוד גלילה', description: 'צילום מודרך של עמוד ארוך עם חיבור אוטומטי' },
   screenshotEdit: { category: 'capture', label: 'צילום ופתיחה בעורך', description: 'מצלם ופותח עריכה מקצועית' },
   microphone: { category: 'audio', label: 'השתקת מיקרופון', description: 'הפעלה או השתקה של המיקרופון' },
   systemAudio: { category: 'audio', label: 'קול המחשב', description: 'הפעלה או השתקה של שמע המחשב' },
@@ -31,8 +34,13 @@ const DEFAULT_SHORTCUTS = Object.freeze({
   // The number row keeps every default clear of common programs (Ctrl+Shift+C/P/M/O belong to terminals, code editors and browsers).
   pause: Object.freeze({ kind: 'chord', code: 'Digit5', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   screenshot: Object.freeze({ kind: 'chord', code: 'Digit1', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
-  region: Object.freeze({ kind: 'chord', code: 'Digit3', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
-  repeatRegion: Object.freeze({ kind: 'chord', code: 'Digit4', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
+  // The capture key every professional capture tool uses: PrtSc alone for an area (frozen screen + marks),
+  // Shift+PrtSc for the previous area at once, Ctrl+PrtSc to copy the text of an area.
+  region: Object.freeze({ kind: 'single', code: 'PrintScreen', modifiers: [], scope: 'global', intervalMs: 300 }),
+  repeatRegion: Object.freeze({ kind: 'chord', code: 'PrintScreen', modifiers: ['Shift'], scope: 'global', intervalMs: 300 }),
+  ocrRegion: Object.freeze({ kind: 'chord', code: 'PrintScreen', modifiers: ['Ctrl'], scope: 'global', intervalMs: 300 }),
+  scrollCapture: null,
+  recordRegion: null,
   screenshotEdit: null,
   microphone: Object.freeze({ kind: 'chord', code: 'Digit6', modifiers: ['Ctrl', 'Shift'], scope: 'global', intervalMs: 300 }),
   systemAudio: null,
@@ -61,11 +69,12 @@ const COMMON_APP_SHORTCUTS = Object.freeze({
   'Ctrl+Shift|KeyV|global': 'הדבקה בחלון הפקודות',
   'Ctrl+Shift|KeyS|global': 'שמירה בשם בתוכנות משרד',
   'Ctrl+Shift|Escape|global': 'מנהל המשימות של חלונות',
-  'Ctrl+Alt|Delete|global': 'מסך האבטחה של חלונות',
-  '|PrintScreen|global': 'כלי החיתוך של חלונות'
+  'Ctrl+Alt|Delete|global': 'מסך האבטחה של חלונות'
 });
 const MODIFIER_ORDER = ['Ctrl', 'Alt', 'Shift', 'Meta'];
-const KEY_CODE_PATTERN = /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|PrintScreen|Numpad[0-9]|Space|Enter|Escape|Arrow(?:Up|Down|Left|Right)|(?:Shift|Control|Alt|Meta)(?:Left|Right))$/;
+const KEY_CODE_PATTERN = /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|PrintScreen|Numpad[0-9]|Space|Enter|Escape|Arrow(?:Up|Down|Left|Right)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Backslash|Backquote|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Comma|Period|Slash)$/;
+// Punctuation keys by physical position (the same key on Hebrew and English layouts), as Electron names them.
+const PUNCTUATION_KEYS = Object.freeze({ Backslash: '\\', Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/' });
 
 function legacyBinding(value) {
   const parts = String(value || '').split('+').filter(Boolean);
@@ -106,13 +115,14 @@ function bindingFromInput(input = {}, template = {}) {
 }
 
 function electronKey(code) {
+  if (PUNCTUATION_KEYS[code]) return PUNCTUATION_KEYS[code];
   return code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'num').replace('Space', 'Space').replace('Enter', 'Return');
 }
 
 function bindingLabel(value) {
   const binding = normalizeBinding(value);
   if (!binding) return 'לא מוגדר';
-  const key = electronKey(binding.code).replace('ControlLeft', 'Ctrl שמאל').replace('ControlRight', 'Ctrl ימין').replace('ShiftLeft', 'Shift שמאל').replace('ShiftRight', 'Shift ימין');
+  const key = electronKey(binding.code).replace('PrintScreen', 'PrtSc').replace('ControlLeft', 'Ctrl שמאל').replace('ControlRight', 'Ctrl ימין').replace('ShiftLeft', 'Shift שמאל').replace('ShiftRight', 'Shift ימין');
   const prefix = binding.kind === 'double' ? 'פעמיים ' : '';
   return `${prefix}${[...binding.modifiers, key].join(' + ')}`;
 }

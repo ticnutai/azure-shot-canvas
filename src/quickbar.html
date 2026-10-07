@@ -1,7 +1,26 @@
-<!doctype html><html lang="he" dir="rtl" data-view="actions"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>סרגל מהיר</title><link rel="stylesheet" href="quickbar.css"></head><body>
+<!doctype html><html lang="he" dir="rtl" data-view="actions"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>סרגל מהיר</title><link rel="stylesheet" href="quickbar.css"><link rel="stylesheet" href="quickbar-strip.css"></head><body>
   <button id="edge-handle" aria-label="פתיחת הסרגל המהיר"><span></span></button>
+  <section id="strip" aria-label="סרגל צילום מהיר">
+    <div class="strip-bar">
+      <button id="strip-grip" title="גרירה לאורך הקצה" aria-label="גרירת הסרגל"><span></span></button>
+      <div class="strip-group">
+        <button class="strip-big" data-strip-action="region" title="צילום אזור או חלון — המסך קופא ובוחרים עליו"><i class="strip-camera"></i><span>צילום</span></button>
+        <button class="strip-more" data-menu="capture" aria-expanded="false" aria-haspopup="menu" title="עוד אפשרויות צילום">▾</button>
+      </div>
+      <div class="strip-group">
+        <button class="strip-big record" data-strip-action="record" title="התחלת הקלטה"><i class="strip-record"></i><span>הקלטה</span></button>
+        <button class="strip-more" data-menu="record" aria-expanded="false" aria-haspopup="menu" title="עוד אפשרויות הקלטה">▾</button>
+      </div>
+      <div class="strip-tools">
+        <button id="strip-history" title="הצילומים האחרונים" aria-label="הצילומים האחרונים">▤</button>
+        <button id="strip-pin" class="pin-toggle" title="נעיצה — הסרגל נשאר פתוח" aria-pressed="false">⌖</button>
+        <button id="strip-hide" title="הסתרה לקצה המסך">×</button>
+      </div>
+    </div>
+    <div id="strip-menu" role="menu" aria-label="אפשרויות"></div>
+  </section>
   <section id="quickbar" aria-label="פעולות מהירות">
-    <header><b id="quickbar-title">אורום מהיר</b><span id="recording-state">מוכן</span><button id="show-actions" title="חזרה לפעולות המהירות">▦</button><button id="pin" title="הצמדה" aria-pressed="false">⌖</button><button id="collapse" title="הסתרה (Esc)">×</button></header>
+    <header><b id="quickbar-title">אורום מהיר</b><span id="recording-state">מוכן</span><button id="show-history" title="הצילומים האחרונים">▤</button><button id="show-actions" title="חזרה לפעולות המהירות">▦</button><button id="pin" class="pin-toggle" title="הצמדה" aria-pressed="false">⌖</button><button id="collapse" title="הסתרה (Esc)">×</button></header>
     <nav id="quickbar-actions">
       <button data-action="screenshot"><i>▣</i><span>צילום מסך</span></button>
       <button data-action="region"><i>▱</i><span>צילום אזור</span></button>
@@ -27,5 +46,21 @@
       </div>
     </section>
     <div id="recent-strip" class="recent-strip" aria-label="צילומים אחרונים"></div>
-  </section><script src="quickbar.js"></script>
+  </section>
+  <section id="history" aria-label="הצילומים האחרונים">
+    <header><b>הצילומים האחרונים</b><span id="history-count"></span><button id="history-library" title="פתיחת הספרייה המלאה">▥</button><button id="history-back" title="חזרה">×</button></header>
+    <div class="history-filters">
+      <input id="history-search" type="search" placeholder="חיפוש לפי שם…" aria-label="חיפוש בצילומים" dir="rtl">
+      <div class="history-chips" role="group" aria-label="סוג">
+        <button data-kind-filter="all" aria-pressed="true">הכול</button><button data-kind-filter="image" aria-pressed="false">תמונות</button><button data-kind-filter="video" aria-pressed="false">וידאו</button>
+      </div>
+      <div class="history-chips" role="group" aria-label="זמן">
+        <button data-time-filter="all" aria-pressed="true">תמיד</button><button data-time-filter="today" aria-pressed="false">היום</button><button data-time-filter="week" aria-pressed="false">השבוע</button>
+      </div>
+    </div>
+    <div id="history-grid" role="list"></div>
+    <div id="history-selection" hidden><span id="history-selected-count"></span><button id="history-select-clear">ביטול בחירה</button><button id="history-trash" class="danger">העברה לסל המיחזור</button></div>
+    <p class="history-tip">לחיצה פותחת את הכרטיס · קונטרול+לחיצה בוחרת כמה · לחיצה כפולה לעריכה · גרירה לתוכנה אחרת</p>
+  </section>
+  <script src="quickbar.js"></script>
 </body></html>

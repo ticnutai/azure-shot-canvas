@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, screen, session, shell, Tray } = require('electron');
+const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, session, shell, Tray } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -13,10 +13,12 @@ const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatch
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
-const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
 const { clipsWithoutSilence, cursorZooms, normalizeTimelineProject } = require('./video-timeline-utils.cjs');
 const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
+const { RegionCapture } = require('./region-capture.cjs');
+const { WindowList } = require('./window-list.cjs');
 
 if (process.env.SCREEN_STUDIO_USER_DATA_DIR) app.setPath('userData', path.resolve(process.env.SCREEN_STUDIO_USER_DATA_DIR));
 
@@ -42,10 +44,39 @@ let quickbarCursorTimer = null;
 // Post-capture card: which view the bar shows and the recent captures it lists (newest first).
 let quickbarView = 'actions';
 let recentCaptures = [];
+// A strip drop-down menu is open (the window grows inward to show it), and the timer of a bar being dragged.
+let quickbarMenu = false;
+let quickbarDragTimer = null;
 // Card keys are registered only while the pointer is over the card, then released.
 let cardKeysPath = null;
 const registeredCardKeys = new Set();
 let isQuitting = false;
+// Launched by Windows at sign-in (or with --hidden): no studio window until the user opens it.
+const startHidden = process.argv.includes('--hidden');
+function setAutostart(enabled) {
+  // An older entry without --hidden would open the full window at sign-in: replace it.
+  app.setLoginItemSettings({ openAtLogin: false, path: process.execPath });
+  app.setLoginItemSettings({ openAtLogin: Boolean(enabled), path: process.execPath, args: ['--hidden'] });
+}
+function isAutostartOn() {
+  return app.getLoginItemSettings({ path: process.execPath, args: ['--hidden'] }).openAtLogin || app.getLoginItemSettings({ path: process.execPath }).openAtLogin;
+}
+// The installed app starts with Windows (hidden in the tray) from its first run; the setting can turn it off.
+async function applyFirstRunDefaults() {
+  if (!app.isPackaged || process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') return;
+  const marker = path.join(app.getPath('userData'), 'first-run-defaults.json');
+  if (await readJson(marker)) return;
+  setAutostart(true);
+  await fs.writeFile(marker, JSON.stringify({ autostart: true, at: new Date().toISOString() }), 'utf8').catch(() => {});
+}
+// Full-screen region picker (frozen screens); created when the app is ready.
+let regionCapture = null;
+// The last notice and recognised text, kept for automated checks (they read them in the main process).
+let lastNotice = null;
+let lastOcrText = '';
+let printScreenNoticeShown = false;
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {} }), configurable: true });
+const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
 const projectDirectory = path.resolve(__dirname, '..');
@@ -71,12 +102,12 @@ function quickbarDisplay() {
   return quickbarPreferences.display === 'primary' ? screen.getPrimaryDisplay() : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
 }
 function quickbarBounds(expanded = quickbarExpanded) {
-  return calculateQuickbarBounds(quickbarDisplay().workArea, quickbarPreferences, expanded, { view: quickbarView, hasRecent: recentCaptures.length > 0 });
+  return calculateQuickbarBounds(quickbarDisplay().workArea, quickbarPreferences, expanded, { view: quickbarView, hasRecent: recentCaptures.length > 0, menu: quickbarMenu });
 }
 function positionQuickbar(expanded = quickbarExpanded) {
   if (!quickbarWindow || quickbarWindow.isDestroyed()) return;
   quickbarExpanded = Boolean(expanded || quickbarPreferences.pinned);
-  if (!quickbarExpanded) { quickbarView = 'actions'; setCardKeys(null); }
+  if (!quickbarExpanded) { quickbarView = 'actions'; quickbarMenu = false; quickbarWindow.setFocusable(false); setCardKeys(null); }
   quickbarWindow.setBounds(quickbarBounds(quickbarExpanded), false);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
   // With the bar switched off, the window only exists to show the capture card: no edge tab once it closes.
@@ -118,6 +149,8 @@ async function createQuickbarWindow({ forCapture = false } = {}) {
 async function applyQuickbarPreferences(patch = {}) {
   const wasEnabled = quickbarPreferences.enabled;
   await saveQuickbarPreferences(patch);
+  // The settings screen shows the same values the bar's toggles change.
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:quickbar-preferences', quickbarPreferences);
   // Switching the bar off closes its window; other setting changes while it is off keep the capture card's window.
   if (!quickbarPreferences.enabled && wasEnabled) { clearInterval(quickbarCursorTimer); quickbarCursorTimer = null; quickbarWindow?.destroy(); quickbarWindow = null; quickbarExpanded = false; quickbarView = 'actions'; }
   else if (!quickbarPreferences.enabled) { quickbarWindow?.webContents.send('quickbar:preferences', quickbarPreferences); }
@@ -194,6 +227,92 @@ async function showCapturePreview(filePath) {
   return { shown: true, recent: recentCaptures.length };
 }
 
+// Region capture straight on the screen ('pick' = freeze and select, 'last' = the previous area at once).
+// The cut image goes through the studio's own save path (format, auto-redact, styling, card, automations),
+// so it behaves exactly like every other screenshot — without bringing the studio window forward.
+// purpose 'capture' (toolbar: save / copy / editor / copy text), 'ocr' (text of an area to the clipboard),
+// 'record' (the area to record — the studio then records it).
+async function runRegionCapture(mode = 'pick', { purpose = 'capture' } = {}) {
+  if (!regionCapture) return { unavailable: true };
+  if (regionCapture.isOpen) return { busy: true };
+  try {
+    const result = await regionCapture.capture({
+      mode, purpose, markup: quickbarPreferences.regionMarkup,
+      delay: purpose === 'capture' ? quickbarPreferences.captureDelay : 0, countdown: showCountdown
+    });
+    if (result?.record) {
+      const { rect, bounds } = result;
+      showMainWindow();
+      mainWindow?.webContents.send('shortcut', 'recordRegion', { source: 'region', region: { displayId: result.displayId, x: rect.x / bounds.width, y: rect.y / bounds.height, width: rect.width / bounds.width, height: rect.height / bounds.height } });
+      return { record: true };
+    }
+    if (!result?.png) return result;
+    if (result.after === 'ocr') return copyTextFromImage(result.png);
+    // Copy at once (the clipboard has the picture even while the studio is still saving it).
+    if (result.after === 'copy' || quickbarPreferences.autoCopy) clipboard.writeImage(nativeImage.createFromBuffer(result.png));
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:external-image', { bytes: result.png, width: result.width, height: result.height, after: result.after || 'save' });
+    else {
+      const filePath = captureFilePath(await ensureOutputDirectory(), 'screenshot', 'png');
+      await fs.writeFile(filePath, result.png);
+      await showCapturePreview(filePath);
+    }
+    return { captured: true, width: result.width, height: result.height, after: result.after || 'save', marks: result.marks || 0 };
+  } catch (error) {
+    notify('צילום האזור נכשל', error.message);
+    return { error: error.message };
+  }
+}
+
+// Text recognition (Hebrew and English) of a cut area, straight to the clipboard; no image is saved.
+async function copyTextFromImage(png) {
+  const temporaryPath = path.join(os.tmpdir(), `aurum-ocr-${process.pid}-${Date.now()}.png`);
+  try {
+    await fs.writeFile(temporaryPath, png);
+    const result = await runOcr(temporaryPath, { tessdataDirectory: await ensureOcrLanguageData() });
+    const text = String(result.text || '').trim();
+    if (text) clipboard.writeText(text);
+    lastOcrText = text;
+    notify(text ? 'הטקסט הועתק ללוח' : 'לא נמצא טקסט באזור', text ? text.slice(0, 120) : 'נסו לבחור אזור גדול יותר או ברור יותר');
+    return { ocr: true, characters: text.length };
+  } catch (error) {
+    notify('העתקת הטקסט נכשלה', error.message);
+    return { error: error.message };
+  } finally {
+    await fs.rm(temporaryPath, { force: true }).catch(() => {});
+  }
+}
+
+// A short system notice (the studio window is usually hidden during quick captures).
+function notify(title, body = '') {
+  if (process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') { lastNotice = { title, body }; return; }
+  if (Notification.isSupported()) new Notification({ title, body, silent: true }).show();
+  else mainWindow?.webContents.send('app:toast', `${title} ${body}`);
+}
+
+// Big countdown in the middle of the screen before a delayed capture; it never appears in the capture itself.
+async function showCountdown(seconds) {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const size = 150;
+  const hidden = process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1';
+  const window = new BrowserWindow({
+    x: Math.round(display.workArea.x + (display.workArea.width - size) / 2), y: Math.round(display.workArea.y + (display.workArea.height - size) / 2),
+    width: size, height: size, show: false, frame: false, transparent: true, resizable: false, movable: false, focusable: false,
+    skipTaskbar: true, alwaysOnTop: true, hasShadow: false, webPreferences: { contextIsolation: true, sandbox: true }
+  });
+  window.setContentProtection(true);
+  window.setIgnoreMouseEvents(true);
+  window.setAlwaysOnTop(true, 'screen-saver');
+  await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}div{width:100%;height:100%;border-radius:50%;background:#101923e6;border:3px solid #f5bd46;box-sizing:border-box;display:grid;place-items:center;color:#ffd36a;font:700 72px "Segoe UI",Arial;}</style><div id="n">${seconds}</div>`)}`);
+  if (!hidden) window.showInactive();
+  for (let left = seconds; left > 0; left -= 1) {
+    await window.webContents.executeJavaScript(`document.getElementById('n').textContent=${left}`).catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  window.destroy();
+  // Let the screen repaint without the countdown before it is frozen.
+  await new Promise((resolve) => setTimeout(resolve, 150));
+}
+
 // A key press is forwarded to the card, which runs the very same handler as the button (one code path).
 // Keys already taken by the user's own global shortcuts are never claimed.
 function setCardKeys(filePath) {
@@ -221,7 +340,7 @@ async function runCaptureCardAction(filePath, action) {
     recentCaptures = recentCaptures.filter((entry) => entry.path !== resolved);
     mainWindow?.webContents.send('app:library-changed');
     quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: false });
-    if (!recentCaptures.length) positionQuickbar(false);
+    if (!recentCaptures.length && quickbarView === 'capture') positionQuickbar(false);
   } else await runLibraryAction(resolved, action);
   return { action, path: resolved };
 }
@@ -320,7 +439,8 @@ function runQa() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1',
+    // Started with Windows: stays in the tray (shortcuts and the bar work at once) until opened.
+    show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1' && !startHidden,
     width: 1280,
     height: 840,
     minWidth: 980,
@@ -799,6 +919,19 @@ async function listLibrary() {
   return Promise.all(sorted.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item) })));
 }
 
+// The newest captures only (for the bar's history grid): thumbnails just for those, not the whole library.
+async function recentLibrary(limit = 48) {
+  const directory = await ensureOutputDirectory();
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+  const items = await Promise.all(entries.filter((entry) => entry.isFile() && LIBRARY_FILE.test(entry.name) && mediaKind(entry.name)).map(async (entry) => {
+    const fullPath = path.join(directory, entry.name);
+    const stat = await fs.stat(fullPath).catch(() => null);
+    return stat && { name: entry.name, path: fullPath, size: stat.size, modified: stat.mtimeMs, extension: path.extname(entry.name).slice(1).toLowerCase(), kind: mediaKind(entry.name) };
+  }));
+  const newest = items.filter(Boolean).sort((a, b) => b.modified - a.modified).slice(0, limit);
+  return Promise.all(newest.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item) })));
+}
+
 // Only the app's own pages may call the main process: a foreign page that slipped into a window
 // would otherwise reach file, clipboard and ffmpeg handlers through the preload bridge.
 function isTrustedSender(event) {
@@ -1106,10 +1239,10 @@ function registerIpc() {
     return outputDirectory;
   });
   ipcMain.handle('output:get', ensureOutputDirectory);
-  ipcMain.handle('app:autostart-get', () => app.getLoginItemSettings().openAtLogin);
+  ipcMain.handle('app:autostart-get', () => isAutostartOn());
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('app:autostart-set', (_event, enabled) => {
-    app.setLoginItemSettings({ openAtLogin: Boolean(enabled), path: process.execPath });
+    setAutostart(enabled);
     return app.getLoginItemSettings().openAtLogin;
   });
   ipcMain.handle('quickbar:get-state', () => ({ preferences: quickbarPreferences, expanded: quickbarExpanded, recording: Boolean(recordingSessions.size), view: quickbarView, captures: recentCaptures }));
@@ -1122,7 +1255,50 @@ function registerIpc() {
     setCardKeys(filePath && quickbarView === 'capture' ? (await assertLibraryFile(filePath)) : null);
     return [...registeredCardKeys];
   });
-  ipcMain.handle('quickbar:set-view', (_event, view) => { quickbarView = view === 'capture' && recentCaptures.length ? 'capture' : 'actions'; positionQuickbar(quickbarExpanded); return quickbarView; });
+  ipcMain.handle('quickbar:set-view', (_event, view) => {
+    quickbarView = view === 'capture' && recentCaptures.length ? 'capture' : view === 'history' ? 'history' : 'actions';
+    quickbarMenu = false;
+    // Only the history panel takes keyboard focus (for its search box); the bar itself never steals focus.
+    if (quickbarWindow && !quickbarWindow.isDestroyed()) {
+      quickbarWindow.setFocusable(quickbarView === 'history');
+      if (quickbarView === 'history' && process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') quickbarWindow.focus();
+    }
+    positionQuickbar(quickbarExpanded);
+    return quickbarView;
+  });
+  ipcMain.handle('quickbar:set-menu', (_event, open) => { quickbarMenu = Boolean(open) && quickbarView === 'actions'; positionQuickbar(true); return quickbarMenu; });
+  ipcMain.handle('quickbar:history', () => recentLibrary(120));
+  // The studio's own capture buttons use the same frozen-screen picker as the shortcuts and the bar.
+  ipcMain.handle('region:capture', (_event, mode, purpose) => runRegionCapture(mode === 'last' ? 'last' : 'pick', { purpose: ['capture', 'record', 'ocr'].includes(purpose) ? purpose : 'capture' }));
+  ipcMain.handle('region:import-areas', (_event, payload) => regionCapture?.importAreas(payload || {}) || { imported: 0 });
+  // A capture chosen in the history grid opens in the card, with all its actions.
+  ipcMain.handle('quickbar:open-capture', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath);
+    const stat = await fs.stat(resolved);
+    const kind = mediaKind(resolved) || 'video';
+    const thumbnail = await thumbnailFor({ path: resolved, extension: path.extname(resolved).slice(1).toLowerCase(), modified: stat.mtimeMs, size: stat.size });
+    const durationSeconds = kind === 'video' ? (await readJson(`${resolved}.quality.json`))?.durationSeconds || null : null;
+    recentCaptures = addRecentCapture(recentCaptures, { path: resolved, name: path.basename(resolved), kind, size: stat.size, durationSeconds, thumbnail, at: Date.now() });
+    quickbarView = 'capture';
+    positionQuickbar(true);
+    quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: false, select: true });
+    return { opened: true };
+  });
+  // Dragging the bar along its edge: the main process follows the real pointer (the bar window cannot take focus).
+  ipcMain.handle('quickbar:drag', async (_event, active) => {
+    clearInterval(quickbarDragTimer);
+    quickbarDragTimer = null;
+    if (active) {
+      quickbarDragTimer = setInterval(() => {
+        const offset = offsetForPointer(quickbarDisplay().workArea, quickbarPreferences.edge, screen.getCursorScreenPoint());
+        if (offset === quickbarPreferences.offset) return;
+        quickbarPreferences = { ...quickbarPreferences, offset };
+        positionQuickbar(true);
+      }, 16);
+      return quickbarPreferences;
+    }
+    return saveQuickbarPreferences({ offset: quickbarPreferences.offset });
+  });
   // Drag a capture out of the card straight into another program (must run synchronously during dragstart).
   ipcMain.on('quickbar:start-drag', async (event, filePath) => {
     if (!isTrustedSender(event)) return;
@@ -1140,7 +1316,7 @@ function registerIpc() {
     if (!Object.hasOwn(ACTION_DEFINITIONS, action)) throw new Error('פעולת סרגל מהיר אינה מוכרת');
     if (['openLibrary'].includes(action)) showMainWindow('library');
     else if (action === 'openOutput') ensureOutputDirectory().then((directory) => shell.openPath(directory));
-    else mainWindow?.webContents.send('shortcut', action, { source: 'quickbar' });
+    else if (!startRegionAction(action)) mainWindow?.webContents.send('shortcut', action, { source: 'quickbar' });
     return true;
   });
   ipcMain.handle('quickbar:recording-state', (_event, active) => { quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active)); return true; });
@@ -1190,6 +1366,12 @@ function registerShortcuts() {
     result[action] = Boolean(accelerator && globalShortcut.register(accelerator, () => handleShortcutPress(action, binding, 'global')));
   }
   shortcutRegistration = result;
+  // The screenshot key can be held by Windows' own snipping tool or by another capture program: say how to free it.
+  const blocked = Object.entries(activeShortcuts).filter(([action, binding]) => binding?.code === 'PrintScreen' && result[action] === false);
+  if (blocked.length && !printScreenNoticeShown) {
+    printScreenNoticeShown = true;
+    setTimeout(() => notify('מקש צילום המסך תפוס', 'תוכנה אחרת או כלי החיתוך של חלונות משתמשים בו. בהגדרות חלונות ← נגישות ← מקלדת: כבו את "שימוש במקש צילום המסך לפתיחת כלי החיתוך", או בחרו מקש אחר במרכז הקיצורים.'), 3000).unref?.();
+  }
   return result;
 }
 
@@ -1218,9 +1400,19 @@ function dispatchShortcut(action, source = 'unknown') {
     ensureOutputDirectory().then((directory) => shell.openPath(directory)).catch(() => {});
     return true;
   }
+  // Region captures happen right on the screen: the studio window stays where it is.
+  if (startRegionAction(action)) return true;
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (!mainWindow.isVisible()) mainWindow.show();
   mainWindow.webContents.send('shortcut', action, { source });
+  return true;
+}
+
+// Actions that run on the frozen screen, without the studio window. True when the action was one of them.
+function startRegionAction(action) {
+  const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'] }[action];
+  if (!plan) return false;
+  runRegionCapture(plan[0], { purpose: plan[1] });
   return true;
 }
 
@@ -1240,6 +1432,10 @@ function createTray() {
     { label: 'פתיחת אורום סטודיו', click: () => showMainWindow() },
     { type: 'separator' },
     { label: 'התחל / עצור הקלטה', click: () => dispatchShortcut('record', 'tray') },
+    { label: 'צילום אזור או חלון', click: () => runRegionCapture('pick') },
+    { label: 'צילום האזור הקודם', click: () => runRegionCapture('last') },
+    { label: 'העתקת טקסט מאזור', click: () => runRegionCapture('pick', { purpose: 'ocr' }) },
+    { label: 'הקלטת אזור', click: () => runRegionCapture('pick', { purpose: 'record' }) },
     { label: 'צילום מסך מלא', click: () => dispatchShortcut('screenshot', 'tray') },
     { label: 'פתיחת הספרייה', click: () => showMainWindow('library') },
     { label: 'פתיחת תיקיית השמירה', click: () => ensureOutputDirectory().then((directory) => shell.openPath(directory)) },
@@ -1257,9 +1453,12 @@ else app.on('second-instance', () => { showMainWindow(); mainWindow?.focus(); })
 
 app.whenReady().then(async () => {
   if (!singleInstance) return;
+  // The desktop helper (fast screen copy and window list) starts compiling at once, in the background.
+  if (process.env.SCREEN_STUDIO_QA !== '1') windowList.start().catch(() => {});
   await ensureOutputDirectory();
   await recoverInterruptedRecordings();
   await loadQuickbarPreferences();
+  await applyFirstRunDefaults();
   registerIpc();
   // Deny every permission except the three the app uses, and only for its own pages.
   const allowedPermissions = new Set(['media', 'display-capture', 'fullscreen']);
@@ -1285,11 +1484,23 @@ app.whenReady().then(async () => {
   }, { useSystemPicker: false });
   createWindow();
   createTray();
+  // The studio page loads first, so it is always the app's first window (automation and tools rely on that);
+  // the floating bar follows a moment later.
+  await new Promise((resolve) => { mainWindow.webContents.once('did-finish-load', resolve); setTimeout(resolve, 5000).unref?.(); });
   await createQuickbarWindow();
   // Prepare the capture card's window in the background, so the first capture after start shows its card at once.
   if (quickbarPreferences.capturePreview) setTimeout(() => createQuickbarWindow({ forCapture: true }).catch(() => {}), 2500).unref?.();
-  screen.on('display-metrics-changed', () => positionQuickbar());
-  screen.on('display-removed', () => positionQuickbar());
+  regionCapture = new RegionCapture({
+    lastRegionPath: path.join(app.getPath('userData'), 'last-region.json'),
+    savedRegionsPath: path.join(app.getPath('userData'), 'saved-regions.json'),
+    // QA runs never read the real desktop's windows; the picker still works by dragging.
+    windowList: process.env.SCREEN_STUDIO_QA === '1' ? null : windowList,
+    hidden: process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1'
+  });
+  setTimeout(() => regionCapture.prepare(), 1500).unref?.();
+  screen.on('display-metrics-changed', () => { positionQuickbar(); regionCapture?.reset(); });
+  screen.on('display-removed', () => { positionQuickbar(); regionCapture?.reset(); });
+  screen.on('display-added', () => regionCapture?.reset());
   const devParentPid = Number(process.env.SCREEN_STUDIO_DEV_PARENT_PID);
   if (devParentPid > 0) setInterval(() => {
     try { process.kill(devParentPid, 0); } catch { app.quit(); }
@@ -1303,12 +1514,14 @@ app.on('before-quit', () => { isQuitting = true; });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('will-quit', () => {
   clearInterval(quickbarCursorTimer);
+  clearInterval(quickbarDragTimer);
   if (qaProcess?.pid) {
     if (process.platform === 'win32') spawn('taskkill', ['/pid', String(qaProcess.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
     else qaProcess.kill('SIGTERM');
     qaProcess = null;
   }
   globalShortcut.unregisterAll();
+  windowList.stop();
   privateShareServer.stop();
   tray?.destroy();
 });

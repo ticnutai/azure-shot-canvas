@@ -35,7 +35,7 @@
     saveEditorImage: async () => { throw new Error('שמירת פרויקט עריכה זמינה במצב Electron'); },
     copyEditorImage: async (dataUrl) => navigator.clipboard.write([new ClipboardItem({ 'image/png': await (await fetch(dataUrl)).blob() })]),
     openOutput: async () => '', chooseOutput: async () => 'הורדות הדפדפן', getOutput: async () => 'הורדות הדפדפן', getAutostart: async () => false, setAutostart: async () => false,
-    getQuickbarPreferences: async () => ({ enabled: false, edge: 'right', activation: 'click', display: 'cursor', pinned: false }), setQuickbarPreferences: async (patch) => patch, setQuickbarRecordingState: async () => true,
+    getQuickbarPreferences: async () => ({ enabled: false, style: 'strip', edge: 'top', activation: 'click', display: 'cursor', pinned: false }), setQuickbarPreferences: async (patch) => patch, setQuickbarRecordingState: async () => true,
     getQaStatus: async () => ({ available: false, running: false, report: null, comparisons: [], console: 'QA זמין במצב Electron לפיתוח.' }),
     runQa: async () => { throw new Error('QA זמין במצב Electron לפיתוח'); },
     copyText: async (text) => navigator.clipboard.writeText(String(text)), openQaReport: async () => '',

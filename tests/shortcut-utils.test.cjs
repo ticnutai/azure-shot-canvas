@@ -19,9 +19,9 @@ test('legacy shortcut strings migrate to structured trigger bindings', () => {
 });
 
 test('catalog exposes recording capture audio camera library and window actions', () => {
-  assert.equal(Object.keys(ACTION_DEFINITIONS).length, 16);
+  assert.equal(Object.keys(ACTION_DEFINITIONS).length, 19);
   assert.deepEqual(new Set(Object.values(ACTION_DEFINITIONS).map((item) => item.category)), new Set(['recording', 'capture', 'audio', 'camera', 'library', 'window']));
-  assert.equal(Object.keys(DEFAULT_SHORTCUTS).length, 16);
+  assert.equal(Object.keys(DEFAULT_SHORTCUTS).length, 19);
 });
 
 test('single and double press bindings normalize and produce accelerators', () => {
@@ -64,4 +64,15 @@ test('default system-wide shortcuts never take over keys that popular programs r
   for (const [action, binding] of Object.entries(DEFAULT_SHORTCUTS)) if (binding) assert.equal(commonAppConflict(binding), '', action);
   assert.match(commonAppConflict({ kind: 'chord', code: 'KeyC', modifiers: ['Ctrl', 'Shift'] }), /חלון הפקודות/);
   assert.ok(Object.keys(COMMON_APP_SHORTCUTS).length >= 8);
+});
+
+test('the backslash key (as in other capture tools) can be a single global key on every keyboard layout', () => {
+  const binding = normalizeBinding({ kind: 'single', code: 'Backslash', scope: 'global' });
+  assert.deepEqual(binding, { kind: 'single', code: 'Backslash', modifiers: [], scope: 'global', intervalMs: 300 });
+  assert.equal(acceleratorForBinding(binding), '\\');
+  assert.equal(acceleratorForBinding({ kind: 'chord', code: 'Slash', modifiers: ['Ctrl', 'Shift'] }), 'CommandOrControl+Shift+/');
+  assert.equal(normalizeBinding({ kind: 'chord', code: 'Backslash', modifiers: [] }), null);
+  for (const key of ['\\', 'Unidentified']) assert.equal(inputMatchesBinding({ type: 'keyDown', key, code: 'Backslash' }, binding), true);
+  assert.equal(inputMatchesBinding({ type: 'keyDown', key: '\\', code: 'Backslash', control: true }, binding), false);
+  assert.equal(actionForInput({ type: 'keyDown', key: '\\', code: 'Backslash' }, { region: binding }), 'region');
 });

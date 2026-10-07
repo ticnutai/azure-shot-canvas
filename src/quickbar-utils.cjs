@@ -1,54 +1,101 @@
 const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
-  enabled: false,
-  edge: 'right',
+  // On by default: a slim bar hidden in the top edge, like dedicated capture tools.
+  enabled: true,
+  // 'strip' = slim bar with two large buttons and drop-down menus; 'panel' = the full panel of eight actions.
+  style: 'strip',
+  edge: 'top',
+  // Position along the edge, 0 (start) – 1 (end); the user drags the bar to set it.
+  offset: 0.5,
   activation: 'click',
   display: 'cursor',
   pinned: false,
   // Post-capture card: shown above every app right after a capture, hides after captureTimeout seconds (0 = stays).
   capturePreview: true,
-  captureTimeout: 6
+  captureTimeout: 6,
+  // Region capture: show the quick marks toolbar after selecting (off = save at once), wait before freezing,
+  // and put every region capture on the clipboard as well.
+  regionMarkup: true,
+  captureDelay: 0,
+  autoCopy: false
 });
 
 const CAPTURE_TIMEOUTS = [0, 4, 6, 10];
+const CAPTURE_DELAYS = [0, 3, 5, 10];
 const MAX_RECENT_CAPTURES = 6;
 
 function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR_PREFERENCES) {
   const next = { ...DEFAULT_QUICKBAR_PREFERENCES, ...current };
   if ('enabled' in candidate) next.enabled = Boolean(candidate.enabled);
+  if (['strip', 'panel'].includes(candidate.style)) next.style = candidate.style;
   if (['left', 'right', 'top'].includes(candidate.edge)) next.edge = candidate.edge;
+  if (Number.isFinite(Number(candidate.offset)) && candidate.offset !== null && candidate.offset !== '') next.offset = Math.round(Math.min(1, Math.max(0, Number(candidate.offset))) * 1000) / 1000;
   if (['click', 'hover'].includes(candidate.activation)) next.activation = candidate.activation;
   if (['cursor', 'primary'].includes(candidate.display)) next.display = candidate.display;
   if ('pinned' in candidate) next.pinned = Boolean(candidate.pinned);
   if ('capturePreview' in candidate) next.capturePreview = Boolean(candidate.capturePreview);
   if (CAPTURE_TIMEOUTS.includes(Number(candidate.captureTimeout))) next.captureTimeout = Number(candidate.captureTimeout);
+  if ('regionMarkup' in candidate) next.regionMarkup = Boolean(candidate.regionMarkup);
+  if ('autoCopy' in candidate) next.autoCopy = Boolean(candidate.autoCopy);
+  if (CAPTURE_DELAYS.includes(Number(candidate.captureDelay))) next.captureDelay = Number(candidate.captureDelay);
   if (!next.enabled) next.pinned = false;
   return next;
 }
 
 // view 'capture' = the post-capture card (large thumbnail + actions + recent strip); 'actions' = the regular bar,
 // which grows by one row when there are recent captures to show.
-function quickbarBounds(workArea, preferences, expanded = false, { view = 'actions', hasRecent = false } = {}) {
+// 'history' = the scrolling grid of recent captures; menu = a strip drop-down is open.
+// Preferences without a style (saved before the strip existed) keep the classic panel layout.
+// An open menu adds menuLength along the edge's depth (top) or menuDepth inward (sides); sides grow to menuLength tall.
+const STRIP = Object.freeze({ thickness: 64, length: 300, menuDepth: 276, menuLength: 344 });
+const HISTORY_SIZE = Object.freeze({ width: 392, height: 470 });
+
+// Centre of a window of `size` placed at `offset` (0–1) along a span, kept fully inside it.
+function alongEdge(start, span, size, offset = 0.5) {
+  const centre = start + span * (Number.isFinite(offset) ? offset : 0.5);
+  return Math.round(Math.min(Math.max(start, centre - size / 2), start + Math.max(0, span - size)));
+}
+
+function quickbarBounds(workArea, preferences, expanded = false, { view = 'actions', hasRecent = false, menu = false } = {}) {
   const edge = preferences.edge;
+  const offset = preferences.offset;
+  const strip = preferences.style === 'strip';
   if (!expanded) {
-    if (edge === 'top') return { x: Math.round(workArea.x + (workArea.width - 86) / 2), y: workArea.y, width: 86, height: 11 };
+    if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, 86, offset), y: workArea.y, width: 86, height: 11 };
     return {
       x: edge === 'left' ? workArea.x : workArea.x + workArea.width - 11,
-      y: Math.round(workArea.y + (workArea.height - 160) / 2),
+      y: alongEdge(workArea.y, workArea.height, 160, offset),
       width: 11,
       height: 160
     };
   }
-  const width = Math.min(356, workArea.width);
-  const height = Math.min(view === 'capture' ? 382 : hasRecent ? 268 : 194, workArea.height);
+  let width;
+  let height;
+  let margin = Math.min(6, Math.max(0, workArea.width - 356));
+  if (view === 'history') ({ width, height } = HISTORY_SIZE);
+  else if (view === 'capture' || !strip) { width = 356; height = view === 'capture' ? 382 : hasRecent ? 268 : 194; }
+  else {
+    // The strip sits flush against its edge; an open menu grows it inward.
+    margin = 0;
+    if (edge === 'top') { width = STRIP.length; height = STRIP.thickness + (menu ? STRIP.menuLength : 0); }
+    else { width = STRIP.thickness + (menu ? STRIP.menuDepth : 0); height = menu ? Math.max(STRIP.length, STRIP.menuLength) : STRIP.length; }
+  }
+  width = Math.min(width, workArea.width);
+  height = Math.min(height, workArea.height);
+  margin = edge === 'top' ? Math.min(margin, Math.max(0, workArea.height - height)) : Math.min(margin, Math.max(0, workArea.width - width));
   return {
-    x: edge === 'left' ? workArea.x + Math.min(6, Math.max(0, workArea.width - width))
-      : edge === 'right' ? workArea.x + workArea.width - width - Math.min(6, Math.max(0, workArea.width - width))
-        : Math.round(workArea.x + (workArea.width - width) / 2),
-    y: edge === 'top' ? workArea.y + Math.min(6, Math.max(0, workArea.height - height))
-      : Math.round(workArea.y + (workArea.height - height) / 2),
+    x: edge === 'left' ? workArea.x + margin
+      : edge === 'right' ? workArea.x + workArea.width - width - margin
+        : alongEdge(workArea.x, workArea.width, width, offset),
+    y: edge === 'top' ? workArea.y + margin : alongEdge(workArea.y, workArea.height, height, offset),
     width,
     height
   };
+}
+
+// Where a dragged bar lands: the pointer's position along the bar's edge, as 0–1.
+function offsetForPointer(workArea, edge, point) {
+  const ratio = edge === 'top' ? (point.x - workArea.x) / workArea.width : (point.y - workArea.y) / workArea.height;
+  return Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 1000;
 }
 
 function shouldHideMainWindowOnClose(preferences, environment = {}) {
@@ -71,4 +118,4 @@ function addRecentCapture(list, item, max = MAX_RECENT_CAPTURES) {
   return [item, ...list.filter((entry) => entry.path.toLowerCase() !== item.path.toLowerCase())].slice(0, max);
 }
 
-module.exports = { CAPTURE_CARD_KEYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, addRecentCapture, normalizeQuickbarPreferences, quickbarBounds, shouldHideMainWindowOnClose };
+module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, addRecentCapture, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };

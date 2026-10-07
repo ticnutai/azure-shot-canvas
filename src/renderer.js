@@ -1231,6 +1231,23 @@ function chooseRegion() {
   });
 }
 
+function showQuickbarSettings(preferences) {
+  $('#quickbar-enabled').checked = preferences.enabled;
+  $('#quickbar-style').value = preferences.style || 'strip';
+  $('#quickbar-edge').value = preferences.edge;
+  $('#quickbar-activation').value = preferences.activation;
+  $('#quickbar-display').value = preferences.display;
+  $('#quickbar-pinned').checked = preferences.pinned;
+  $$('#quickbar-style,#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
+  $('#capture-preview-enabled').checked = preferences.capturePreview;
+  $('#capture-preview-timeout').value = String(preferences.captureTimeout);
+  $('#capture-preview-timeout').disabled = !preferences.capturePreview;
+  $('#region-markup').checked = preferences.regionMarkup !== false;
+  // One delay for every capture: the studio's setting and the bar's toggle are the same value.
+  if (Number.isFinite(preferences.captureDelay)) applyCaptureDelay(preferences.captureDelay);
+  $('#auto-copy-region').checked = Boolean(preferences.autoCopy);
+}
+
 async function handleSavedScreenshot(result) {
   document.documentElement.dataset.lastSavedPath = result.path;
   document.documentElement.dataset.lastSavedAt = String(Date.now());
@@ -1417,9 +1434,16 @@ async function beginScrollingCapture() {
   showToast('צילום גלילה התחיל — גלול לאט; בסיום לחץ על סיום ושמירה', 7000);
 }
 
-async function beginCapture(kind, forcedScope = null) {
+async function beginCapture(kind, forcedScope = null, presetRegion = null) {
   if (state.finalizing) return showToast('ההקלטה הקודמת עדיין נשמרת — אפשר להתחיל שוב בעוד רגע');
   if (state.busy || state.recorder) return;
+  // In the desktop app every area is chosen on the frozen screen (one picker for buttons, shortcuts and the bar);
+  // the in-window picker below remains only for the browser version.
+  const requestedScope = forcedScope || state.captureScope;
+  if (!presetRegion && api.regionCapture && (requestedScope === 'region' || requestedScope === 'last-region')) {
+    if (kind === 'screenshot') return api.regionCapture(requestedScope === 'last-region' ? 'last' : 'pick', 'capture');
+    return api.regionCapture('pick', 'record');
+  }
   if (!state.selectedSource) return showToast('יש לבחור מסך או חלון תחילה');
   state.busy = true;
   setStatus('מכין מקורות…', 'busy');
@@ -1432,7 +1456,7 @@ async function beginCapture(kind, forcedScope = null) {
     stopLivePreview({ preserveDisplay: true });
     await acquireInputs(kind === 'record');
     // 'last-region' reuses the area chosen last time; with none stored yet it falls back to the picker.
-    const region = scope === 'full' || scope === 'window' ? { x: 0, y: 0, width: 1, height: 1 } : (scope === 'last-region' && readStoredRegion('aurum-last-region')) || await chooseRegion();
+    const region = presetRegion || (scope === 'full' || scope === 'window' ? { x: 0, y: 0, width: 1, height: 1 } : (scope === 'last-region' && readStoredRegion('aurum-last-region')) || await chooseRegion());
     if (!region) {
       stopInputStreams();
       setStatus('מוכן');
@@ -1463,6 +1487,27 @@ async function saveScreenshot() {
   canvas.height = recordingCanvas.height;
   canvas.getContext('2d').drawImage(recordingCanvas, 0, 0);
   stopInputStreams();
+  await finishAndSaveScreenshot(canvas);
+  // The file is safe on disk: free the capture now, so library refresh, OCR and automations never block the next shot.
+  state.busy = false;
+}
+
+// A region cut on the frozen screen by the main process: same finishing and saving as any other screenshot.
+async function saveExternalImage({ bytes, after = 'save' }) {
+  const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0);
+  bitmap.close();
+  document.documentElement.dataset.lastRegionCapture = `${canvas.width}x${canvas.height}`;
+  const result = await finishAndSaveScreenshot(canvas);
+  // 'Editor' on the quick marks toolbar: the saved picture opens in the full editor.
+  if (after === 'edit' && result?.path) await openInEditor(result.path);
+}
+
+// Optional redaction and styling, encoding to the chosen format, saving, then the card and automations.
+async function finishAndSaveScreenshot(canvas) {
   const finish = window.aurumImageFinish;
   if (state.autoRedact && api.detectSensitiveRegions) {
     setStatus('מאתר מידע רגיש…', 'busy');
@@ -1476,9 +1521,8 @@ async function saveScreenshot() {
   if (state.autoBeautify) canvas = await finish.beautifyCanvas(canvas.toDataURL('image/png'), state.autoBeautifyStyle);
   const image = await finish.encode(canvas, state.imageFormat);
   const result = await api.saveScreenshot(image.bytes, { format: state.imageFormat, width: image.width, height: image.height });
-  // The file is safe on disk: free the capture now, so library refresh, OCR and automations never block the next shot.
-  state.busy = false;
   runAfterScreenshot(result);
+  return result;
 }
 
 function runAfterScreenshot(result) {
@@ -1714,7 +1758,23 @@ function togglePause() {
   }
 }
 
-async function executeShortcutAction(action) {
+// An area chosen on the frozen screen (normalized to its screen): record that screen, cropped to the area.
+async function recordChosenRegion(region) {
+  if (!region) return;
+  if (state.recorder) return showToast('כבר קיימת הקלטה פעילה');
+  if (!state.sources.length) await refreshSources();
+  const screens = state.sources.filter((source) => source.type === 'screen');
+  const source = screens.find((item) => String(item.displayId) === String(region.displayId)) || (screens.length === 1 ? screens[0] : null);
+  if (!source) return showToast('לא נמצא המסך שנבחר — בחרו אותו ברשימת המקורות');
+  state.selectedSource = source;
+  renderSources();
+  const { x, y, width, height } = region;
+  return beginCapture('record', 'region', { x, y, width, height });
+}
+
+async function executeShortcutAction(action, meta = {}) {
+  if (action === 'recordRegion') return recordChosenRegion(meta.region);
+  if (action === 'scrollCapture') return beginCapture('screenshot', 'scroll');
   if (action === 'record') return state.recorder ? stopRecording() : beginCapture('record', 'full');
   if (action === 'recordStart') return state.recorder ? showToast('כבר קיימת הקלטה פעילה') : beginCapture('record', 'full');
   if (action === 'recordStop') return state.recorder ? stopRecording() : showToast('אין הקלטה פעילה לעצירה');
@@ -2328,18 +2388,10 @@ async function initialize() {
   $('#quick-edit-latest').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   $('#choose-output').addEventListener('click', async () => { $('#output-path').textContent = await api.chooseOutput(); });
   $('#autostart-app').addEventListener('change', async (event) => { event.target.checked = await api.setAutostart(event.target.checked); });
-  const updateQuickbar = async (patch) => {
-    const preferences = await api.setQuickbarPreferences(patch);
-    $('#quickbar-enabled').checked = preferences.enabled;
-    $('#quickbar-edge').value = preferences.edge;
-    $('#quickbar-activation').value = preferences.activation;
-    $('#quickbar-display').value = preferences.display;
-    $('#quickbar-pinned').checked = preferences.pinned;
-    $$('#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
-    $('#capture-preview-enabled').checked = preferences.capturePreview;
-    $('#capture-preview-timeout').value = String(preferences.captureTimeout);
-    $('#capture-preview-timeout').disabled = !preferences.capturePreview;
-  };
+  const updateQuickbar = async (patch) => showQuickbarSettings(await api.setQuickbarPreferences(patch));
+  $('#quickbar-style').addEventListener('change', (event) => updateQuickbar({ style: event.target.value }));
+  $('#region-markup').addEventListener('change', (event) => updateQuickbar({ regionMarkup: event.target.checked }));
+  $('#auto-copy-region').addEventListener('change', (event) => updateQuickbar({ autoCopy: event.target.checked }));
   $('#capture-preview-enabled').addEventListener('change', (event) => updateQuickbar({ capturePreview: event.target.checked }));
   $('#capture-preview-timeout').addEventListener('change', (event) => updateQuickbar({ captureTimeout: Number(event.target.value) }));
   $('#quickbar-enabled').addEventListener('change', (event) => updateQuickbar({ enabled: event.target.checked }));
@@ -2486,7 +2538,7 @@ async function initialize() {
   $('#default-capture-kind').addEventListener('change', (event) => applyCapturePreferences(event.target.value, state.captureScope));
   $('#default-capture-scope').addEventListener('change', (event) => applyCapturePreferences(state.captureKind, event.target.value));
   $('#after-screenshot-action').addEventListener('change', (event) => applyAfterScreenshotAction(event.target.value));
-  $('#capture-delay').addEventListener('change', (event) => applyCaptureDelay(event.target.value));
+  $('#capture-delay').addEventListener('change', (event) => { applyCaptureDelay(event.target.value); api.setQuickbarPreferences?.({ captureDelay: state.captureDelay }); });
   $$('input[name="screenshot-mode"]').forEach((radio) => radio.addEventListener('change', (event) => {
     if (event.target.checked) applyCapturePreferences(state.captureKind, event.target.value);
   }));
@@ -2519,17 +2571,32 @@ async function initialize() {
       showToast(`הקיצור עבור ${row?.querySelector('b')?.textContent || action} מחובר ותקין`);
       return;
     }
-    executeShortcutAction(action).catch((error) => showToast(`הפעלת הקיצור נכשלה: ${error.message}`));
+    executeShortcutAction(action, meta).catch((error) => showToast(`הפעלת הקיצור נכשלה: ${error.message}`));
   });
   api.onNavigate((page) => showPage(page));
   api.onOpenEditor?.((filePath) => openInEditor(filePath).catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   api.onLibraryChanged?.(() => loadLibrary().catch(() => {}));
+  api.onExternalImage?.((payload) => saveExternalImage(payload).catch((error) => showToast(`שמירת הצילום נכשלה: ${error.message}`, 8000)));
+  api.onToast?.((text) => showToast(text, 8000));
+  api.onQuickbarPreferences?.(showQuickbarSettings);
+  // Once: areas saved with the older in-window picker move to the frozen-screen picker (keys 1–9 there).
+  if (api.importRegionAreas && !localStorage.getItem('aurum-areas-moved')) {
+    let saved = [];
+    try { saved = JSON.parse(localStorage.getItem('aurum-saved-regions') || '[]'); } catch {}
+    const last = readStoredRegion('aurum-last-region');
+    const displayId = state.selectedSource?.type === 'screen' ? state.selectedSource.displayId : null;
+    api.importRegionAreas({ saved: Array.isArray(saved) ? saved : [], last, displayId })
+      .then(() => localStorage.setItem('aurum-areas-moved', '1'))
+      .catch(() => {});
+  }
   document.documentElement.dataset.appReady = 'true';
   setTimeout(() => Promise.all([
-    api.getOutput().then((value) => { $('#output-path').textContent = value; }), api.getAutostart().then((enabled) => { $('#autostart-app').checked = enabled; }), api.getQuickbarPreferences().then((preferences) => {
-      $('#quickbar-enabled').checked = preferences.enabled; $('#quickbar-edge').value = preferences.edge; $('#quickbar-activation').value = preferences.activation; $('#quickbar-display').value = preferences.display; $('#quickbar-pinned').checked = preferences.pinned;
-      $$('#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
-      $('#capture-preview-enabled').checked = preferences.capturePreview; $('#capture-preview-timeout').value = String(preferences.captureTimeout); $('#capture-preview-timeout').disabled = !preferences.capturePreview;
+    api.getOutput().then((value) => { $('#output-path').textContent = value; }), api.getAutostart().then((enabled) => { $('#autostart-app').checked = enabled; }), api.getQuickbarPreferences().then(async (preferences) => {
+      // Once: a delay chosen before the bar shared this setting moves over to the shared value.
+      const saved = Number(localStorage.getItem('aurum-capture-delay') || 0);
+      if (!localStorage.getItem('aurum-delay-shared') && saved && saved !== preferences.captureDelay && api.setQuickbarPreferences) preferences = await api.setQuickbarPreferences({ captureDelay: saved });
+      localStorage.setItem('aurum-delay-shared', '1');
+      showQuickbarSettings(preferences);
     }),
     refreshSources(), loadLibrary(), refreshStorageStatus()
   ]).catch((error) => {

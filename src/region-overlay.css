@@ -1,0 +1,33 @@
+:root{font-family:"Segoe UI",Arial,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;cursor:crosshair;user-select:none}
+#frozen,#marks{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+#loupe{position:fixed;top:0;left:0;width:136px;border:2px solid #f5bd46;border-radius:10px;background:#0b1420;box-shadow:0 10px 28px #000a;overflow:hidden;pointer-events:none;display:none}
+#loupe-canvas{display:block;width:132px;height:132px;image-rendering:pixelated}
+#loupe-info{display:block;padding:3px 6px;font-size:11px;color:#f8f5ed;text-align:center;font-variant-numeric:tabular-nums;direction:ltr;border-top:1px solid #2d4055}
+#size-label{position:fixed;top:0;left:0;padding:3px 8px;border-radius:6px;background:#f5bd46;color:#07172e;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;direction:ltr;pointer-events:none;display:none;white-space:nowrap}
+#hint{position:fixed;top:18px;left:50%;transform:translateX(-50%);display:flex;gap:14px;align-items:center;padding:8px 16px;border-radius:999px;background:#101923ee;border:1px solid #39516d;color:#dce8f5;font-size:12px;box-shadow:0 10px 30px #0008;pointer-events:none;white-space:nowrap;transition:opacity .2s}
+#hint b{color:#ffd36a}
+#hint span::before{content:"·";margin-left:14px;color:#5d7896}
+body[data-dragging="true"] #hint,body[data-near-hint="true"] #hint,body[data-editing="true"] #hint{opacity:0}
+body[data-hint="false"] #hint{display:none}
+
+/* Quick marks toolbar, shown under the chosen area. */
+#toolbar{position:fixed;top:0;left:0;display:flex;align-items:center;gap:8px;padding:6px;border-radius:12px;background:#101923f5;border:1px solid #39516d;box-shadow:0 12px 32px #000a;cursor:default;direction:rtl}
+#toolbar[hidden]{display:none}
+#toolbar .tools,#toolbar .colors,#toolbar .actions{display:flex;align-items:center;gap:3px}
+#toolbar .colors{padding:0 6px;border-inline:1px solid #2d4055}
+#toolbar button{height:32px;min-width:32px;border:1px solid transparent;border-radius:8px;background:transparent;color:#dce8f5;font:inherit;font-size:15px;cursor:pointer;padding:0 8px}
+#toolbar .actions button{font-size:12px;border-color:#2e435c;background:#172536}
+#toolbar button:hover:not(:disabled){background:#21344a;border-color:#3d5878}
+#toolbar button[aria-pressed="true"]{background:#4a3819;border-color:#c99124;color:#ffd36a}
+#toolbar button:disabled{opacity:.35;cursor:default}
+#toolbar .primary{background:#c99124!important;border-color:#f5bd46!important;color:#07172e!important;font-weight:700}
+#toolbar .primary:hover{background:#f5bd46!important}
+#toolbar .close{font-size:17px!important;background:transparent!important}
+#toolbar .swatch{min-width:22px;width:22px;height:22px;padding:0;border-radius:50%;background:var(--swatch);border:2px solid #0b1420;box-shadow:0 0 0 1px #39516d}
+#toolbar .swatch[aria-pressed="true"]{box-shadow:0 0 0 2px #ffd36a}
+#text-input{position:fixed;top:0;left:0;width:260px;min-height:30px;padding:2px 4px;border:1px dashed #ffd36a;border-radius:4px;background:#0006;font:700 20px "Segoe UI",Arial,sans-serif;text-align:right;resize:none;outline:none;overflow:hidden;text-shadow:0 0 3px #000}
+#text-input[hidden]{display:none}
+#note{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:#c99124;color:#07172e;font-size:12px;font-weight:700;box-shadow:0 10px 30px #0008;pointer-events:none}
+#note[hidden]{display:none}

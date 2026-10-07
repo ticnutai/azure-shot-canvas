@@ -14,7 +14,8 @@
     preferences = value;
     document.body.dataset.edge = preferences.edge;
     document.body.dataset.activation = preferences.activation;
-    document.querySelector('#pin')?.setAttribute('aria-pressed', String(preferences.pinned));
+    document.body.dataset.style = preferences.style || 'panel';
+    document.querySelectorAll('.pin-toggle').forEach((button) => button.setAttribute('aria-pressed', String(preferences.pinned)));
   };
   const applyRecordingState = (active) => {
     const button = document.querySelector('[data-action="record"]');
@@ -22,12 +23,20 @@
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
     button.querySelector('span').textContent = active ? 'עצור הקלטה' : 'התחל הקלטה';
+    const stripButton = document.querySelector('[data-strip-action="record"]');
+    stripButton?.classList.toggle('active', active);
+    stripButton?.setAttribute('aria-pressed', String(active));
+    if (stripButton) {
+      stripButton.querySelector('span').textContent = active ? 'עצירה' : 'הקלטה';
+      stripButton.title = active ? 'עצירת ההקלטה ושמירה' : 'התחלת הקלטה';
+    }
     const stateLabel = document.querySelector('#recording-state');
     if (stateLabel) stateLabel.textContent = active ? 'מקליט כעת' : 'מוכן';
   };
   const setView = (view) => {
     root.dataset.view = view;
     document.querySelector('#quickbar-title').textContent = view === 'capture' ? 'נשמר' : 'אורום מהיר';
+    if (view !== 'actions') closeMenu({ notify: false });
   };
   const setExpanded = async (expanded) => {
     clearTimeout(collapseTimer);
@@ -93,15 +102,20 @@
     renderCard();
     renderStrip();
   });
-  api.onCaptures(({ captures: list, fresh, timeout }) => {
+  api.onCaptures(({ captures: list, fresh, timeout, select }) => {
     captures = list;
-    if (fresh) {
+    if (select) {
+      // Opened from the history grid: show its card and leave it open while the pointer is on it.
+      selected = 0;
+      setView('capture');
+      document.body.dataset.expanded = 'true';
+    } else if (fresh) {
       root.dataset.cardShownAt = String(Date.now());
       selected = 0;
       setView('capture');
       document.body.dataset.expanded = 'true';
       scheduleCollapse(timeout * 1000);
-    } else if (!captures.length) {
+    } else if (!captures.length && root.dataset.view === 'capture') {
       setView('actions');
     }
     selected = Math.min(selected, Math.max(0, captures.length - 1));
@@ -114,25 +128,215 @@
   document.querySelector('#edge-handle').addEventListener('mouseenter', () => { if (preferences.activation === 'hover') setExpanded(true); });
   document.querySelector('#collapse').addEventListener('click', () => setExpanded(false));
   document.querySelector('#show-actions').addEventListener('click', async () => { setView('actions'); await api.setView('actions'); renderStrip(); syncCardKeys(); });
-  document.querySelector('#pin').addEventListener('click', async (event) => {
-    const button = event.currentTarget;
+  document.querySelectorAll('.pin-toggle').forEach((pinButton) => pinButton.addEventListener('click', async () => {
     preferences = await api.setPreferences({ pinned: !preferences.pinned });
-    button.setAttribute('aria-pressed', String(preferences.pinned));
-  });
+    document.querySelectorAll('.pin-toggle').forEach((button) => button.setAttribute('aria-pressed', String(preferences.pinned)));
+  }));
   // The bar window can never take focus, so the main process never sees a blur to close a click-opened bar.
   // Click mode therefore closes after the pointer has been away for a while; hover mode closes almost at once;
   // the capture card gives two seconds after the pointer leaves.
-  document.querySelector('#quickbar').addEventListener('mouseenter', () => { clearTimeout(collapseTimer); hovering = true; syncCardKeys(); });
-  document.querySelector('#quickbar').addEventListener('mouseleave', () => {
-    hovering = false;
-    syncCardKeys();
-    if (preferences.pinned) return;
-    scheduleCollapse(root.dataset.view === 'capture' ? 2000 : preferences.activation === 'hover' ? 260 : 1500);
-  });
-  document.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', async () => {
+  // An open menu, the history grid and a drag in progress all keep the bar open a little longer.
+  for (const area of document.querySelectorAll('#quickbar, #strip, #history')) {
+    area.addEventListener('mouseenter', () => { clearTimeout(collapseTimer); hovering = true; syncCardKeys(); });
+    area.addEventListener('mouseleave', () => {
+      hovering = false;
+      syncCardKeys();
+      if (preferences.pinned || dragging) return;
+      const view = root.dataset.view;
+      scheduleCollapse(view === 'capture' || view === 'history' ? 2000 : document.body.dataset.menuOpen === 'true' ? 900 : preferences.activation === 'hover' ? 260 : 1500);
+    });
+  }
+  // Region captures close the bar first, so it never sits on top of the frozen screen.
+  const runBarAction = async (action) => {
+    if (action === 'region' || action === 'repeatRegion') await setExpanded(false);
+    else closeMenu();
+    return api.runAction(action);
+  };
+  document.querySelectorAll('[data-action], [data-strip-action]').forEach((button) => button.addEventListener('click', async () => {
     button.disabled = true;
-    try { await api.runAction(button.dataset.action); } finally { setTimeout(() => { button.disabled = false; }, 350); }
+    try { await runBarAction(button.dataset.action || button.dataset.stripAction); } finally { setTimeout(() => { button.disabled = false; }, 350); }
   }));
+
+  // Strip drop-down menus: every capture and recording action, one click away.
+  const MENUS = {
+    capture: [
+      ['region', '▱', 'אזור או חלון', 'גרירה או לחיצה על חלון'],
+      ['repeatRegion', '↺', 'האזור הקודם', 'בלי לבחור שוב'],
+      ['ocrRegion', 'א', 'העתקת טקסט מאזור', 'גם בעברית'],
+      ['scrollCapture', '⇣', 'עמוד גלילה', 'עמוד ארוך בצילום אחד'],
+      ['screenshot', '▣', 'מסך מלא', 'המקור שנבחר באולפן'],
+      ['screenshotEdit', '✎', 'צילום ופתיחה בעורך', ''],
+      ['openOutput', '⌑', 'פתיחת תיקיית השמירה', '']
+    ],
+    record: [
+      ['record', '●', 'התחלה או עצירה של הקלטה', 'המסך שנבחר באולפן'],
+      ['recordRegion', '▱', 'הקלטת אזור או חלון', 'בוחרים על המסך'],
+      ['pause', 'Ⅱ', 'השהיה או המשך', ''],
+      ['microphone', '🎙', 'מיקרופון', 'הפעלה או השתקה'],
+      ['camera', '◉', 'מצלמה', 'הצגה או הסתרה'],
+      ['openLibrary', '▥', 'הספרייה', '']
+    ]
+  };
+  function closeMenu({ notify = true } = {}) {
+    if (document.body.dataset.menuOpen !== 'true') return;
+    document.body.dataset.menuOpen = 'false';
+    document.querySelectorAll('.strip-more').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+    if (notify) api.setMenu(false);
+  }
+  // Quick toggles for region capture, changed without leaving the menu.
+  const DELAYS = [0, 3, 5, 10];
+  function captureToggles() {
+    const row = document.createElement('div');
+    row.className = 'menu-toggles';
+    const chip = (key, label, pressed, next) => {
+      const button = document.createElement('button');
+      button.className = 'menu-toggle';
+      button.dataset.toggle = key;
+      button.textContent = label;
+      button.setAttribute('aria-pressed', String(pressed));
+      button.addEventListener('click', async (event) => {
+        event.stopPropagation();
+        applyPreferences(await api.setPreferences(next()));
+        row.replaceWith(captureToggles());
+      });
+      return button;
+    };
+    const delay = preferences.captureDelay || 0;
+    row.append(
+      chip('markup', 'סימון אחרי בחירה', preferences.regionMarkup !== false, () => ({ regionMarkup: preferences.regionMarkup === false })),
+      chip('delay', delay ? `השהיה ${delay} שנ׳` : 'בלי השהיה', delay > 0, () => ({ captureDelay: DELAYS[(DELAYS.indexOf(delay) + 1) % DELAYS.length] })),
+      chip('copy', 'העתקה אוטומטית', Boolean(preferences.autoCopy), () => ({ autoCopy: !preferences.autoCopy }))
+    );
+    return row;
+  }
+  async function openMenu(name) {
+    const menu = document.querySelector('#strip-menu');
+    menu.replaceChildren(...MENUS[name].map(([action, icon, label, note]) => {
+      const item = document.createElement('button');
+      item.setAttribute('role', 'menuitem');
+      item.dataset.menuAction = action;
+      item.innerHTML = '<i></i><span></span><small></small>';
+      item.querySelector('i').textContent = icon;
+      item.querySelector('span').textContent = label;
+      item.querySelector('small').textContent = note;
+      item.addEventListener('click', () => runBarAction(action));
+      return item;
+    }));
+    if (name === 'capture') menu.append(captureToggles());
+    document.querySelectorAll('.strip-more').forEach((button) => button.setAttribute('aria-expanded', String(button.dataset.menu === name)));
+    await api.setMenu(true);
+    document.body.dataset.menuOpen = 'true';
+    document.body.dataset.menuName = name;
+  }
+  document.querySelectorAll('.strip-more').forEach((button) => button.addEventListener('click', () => (
+    document.body.dataset.menuOpen === 'true' && document.body.dataset.menuName === button.dataset.menu ? closeMenu() : openMenu(button.dataset.menu)
+  )));
+  document.querySelector('#strip-hide').addEventListener('click', () => setExpanded(false));
+
+  // History grid: the newest captures from the library, with the card's actions one click away.
+  const formatWhen = (time) => {
+    const date = new Date(time);
+    const today = new Date();
+    return date.toDateString() === today.toDateString()
+      ? date.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+      : date.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+  };
+  let historyItems = [];
+  const historyFilter = { text: '', kind: 'all', time: 'all' };
+  const chosen = new Set();
+  const emptyNote = (text) => Object.assign(document.createElement('div'), { className: 'history-empty', textContent: text });
+  // Search by name, kind (image / video) and time (today / last 7 days), all together.
+  const matchesFilter = (item) => {
+    if (historyFilter.kind !== 'all' && item.kind !== historyFilter.kind) return false;
+    if (historyFilter.time === 'today' && new Date(item.modified).toDateString() !== new Date().toDateString()) return false;
+    if (historyFilter.time === 'week' && Date.now() - item.modified > 7 * 24 * 3600 * 1000) return false;
+    return !historyFilter.text || item.name.toLowerCase().includes(historyFilter.text.toLowerCase());
+  };
+  function renderSelection() {
+    const bar = document.querySelector('#history-selection');
+    bar.hidden = chosen.size === 0;
+    document.querySelector('#history-selected-count').textContent = `${chosen.size} נבחרו`;
+    document.querySelectorAll('.history-item').forEach((tile) => tile.setAttribute('aria-selected', String(chosen.has(tile.dataset.path))));
+  }
+  function renderHistory() {
+    const grid = document.querySelector('#history-grid');
+    const visible = historyItems.filter(matchesFilter);
+    document.querySelector('#history-count').textContent = historyItems.length ? `${visible.length} מתוך ${historyItems.length}` : '';
+    root.dataset.historyCount = String(visible.length);
+    if (!historyItems.length) return grid.replaceChildren(emptyNote('עדיין אין צילומים'));
+    if (!visible.length) return grid.replaceChildren(emptyNote('אין צילומים שמתאימים לחיפוש'));
+    grid.replaceChildren(...visible.map((item) => {
+      const tile = document.createElement('button');
+      tile.className = 'history-item';
+      tile.setAttribute('role', 'listitem');
+      tile.title = item.name;
+      tile.dataset.path = item.path;
+      if (item.kind === 'video') tile.dataset.kind = 'video';
+      const image = document.createElement('img');
+      image.src = item.thumbnail || '';
+      image.alt = '';
+      image.draggable = true;
+      const when = document.createElement('time');
+      when.textContent = formatWhen(item.modified);
+      tile.append(image, when);
+      tile.addEventListener('click', (event) => {
+        // Ctrl+click builds a selection; a plain click (with nothing selected) opens the card.
+        if (event.ctrlKey || chosen.size) {
+          if (chosen.has(item.path)) chosen.delete(item.path); else chosen.add(item.path);
+          return renderSelection();
+        }
+        api.openCapture(item.path);
+      });
+      tile.addEventListener('dblclick', () => { if (!chosen.size) api.captureAction(item.path, 'edit').then(() => setExpanded(false)); });
+      image.addEventListener('dragstart', (event) => { event.preventDefault(); api.startDrag(item.path); });
+      return tile;
+    }));
+    renderSelection();
+  }
+  async function showHistory() {
+    setView('history');
+    await api.setView('history');
+    chosen.clear();
+    document.querySelector('#history-grid').replaceChildren(emptyNote('טוען…'));
+    historyItems = await api.history().catch(() => []);
+    renderHistory();
+  }
+  document.querySelector('#history-search').addEventListener('input', (event) => { historyFilter.text = event.target.value.trim(); renderHistory(); });
+  document.querySelectorAll('[data-kind-filter], [data-time-filter]').forEach((chip) => chip.addEventListener('click', () => {
+    const group = chip.dataset.kindFilter ? 'kind' : 'time';
+    historyFilter[group] = chip.dataset.kindFilter || chip.dataset.timeFilter;
+    chip.parentElement.querySelectorAll('button').forEach((button) => button.setAttribute('aria-pressed', String(button === chip)));
+    renderHistory();
+  }));
+  document.querySelector('#history-select-clear').addEventListener('click', () => { chosen.clear(); renderSelection(); });
+  document.querySelector('#history-trash').addEventListener('click', async () => {
+    for (const filePath of [...chosen]) await api.captureAction(filePath, 'trash').catch(() => {});
+    chosen.clear();
+    historyItems = await api.history().catch(() => []);
+    renderHistory();
+  });
+  document.querySelector('#strip-history').addEventListener('click', showHistory);
+  document.querySelector('#show-history').addEventListener('click', showHistory);
+  document.querySelector('#history-back').addEventListener('click', async () => { setView('actions'); await api.setView('actions'); });
+  document.querySelector('#history-library').addEventListener('click', () => { setExpanded(false); api.runAction('openLibrary'); });
+
+  // Dragging the grip slides the strip along its edge; the main process follows the pointer and saves the spot.
+  let dragging = false;
+  const grip = document.querySelector('#strip-grip');
+  grip.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    dragging = true;
+    grip.setPointerCapture(event.pointerId);
+    closeMenu();
+    api.drag(true);
+  });
+  const endDrag = async () => {
+    if (!dragging) return;
+    dragging = false;
+    applyPreferences(await api.drag(false));
+  };
+  grip.addEventListener('pointerup', endDrag);
+  grip.addEventListener('lostpointercapture', endDrag);
 
   const runCaptureAction = async (action) => {
     const item = captures[selected];

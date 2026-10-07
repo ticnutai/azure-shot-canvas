@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { closeStudio, launchStudio } = require('../helpers/electron-app.cjs');
+const { regionOverlay } = require('../helpers/region.cjs');
 const { audioLevels, pngDimensions, probe } = require('../helpers/media.cjs');
 const { metric, summarize } = require('../helpers/metrics.cjs');
 const { version: appVersion } = require('../../package.json');
@@ -242,8 +243,12 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#settings-page')).toHaveClass(/active/);
     await expect(page.locator('#output-path')).toContainText(outputDir);
     await page.locator('[data-preference-tab="shortcuts"]').click();
-    await expect(page.locator('[data-shortcut-action]')).toHaveCount(16);
-    await expect(page.locator('#shortcut-visible-count')).toHaveText('16');
+    await expect(page.locator('[data-shortcut-action]')).toHaveCount(19);
+    await expect(page.locator('#shortcut-visible-count')).toHaveText('19');
+    // The capture key professional tools use: PrtSc for an area, Shift+PrtSc for the previous one, Ctrl+PrtSc for text.
+    await expect(page.locator('[data-shortcut-action="region"]')).toHaveText('PrtSc');
+    await expect(page.locator('[data-shortcut-action="repeatRegion"]')).toHaveText('Shift + PrtSc');
+    await expect(page.locator('[data-shortcut-action="ocrRegion"]')).toHaveText('Ctrl + PrtSc');
     await expect(page.locator('#shortcut-status-banner')).toContainText('כל הקיצורים רשומים ופעילים');
     await expect(page.locator('[data-shortcut-action="record"]')).toHaveText('Ctrl + Shift + 2');
     await expect(page.locator('[data-shortcut-row="repeatRegion"]')).toHaveCount(1);
@@ -403,6 +408,9 @@ test.describe('Electron production workflow', () => {
     await page.locator('[data-page="settings"]').click();
     await page.locator('[data-preference-tab="general"]').click();
     await setCheckbox(page, '#quickbar-enabled', true);
+    // This test covers the full panel on the right edge (the default is the slim strip in the top edge).
+    await page.locator('#quickbar-style').selectOption('panel');
+    await page.locator('#quickbar-edge').selectOption('right');
 
     await expect.poll(() => app.windows().filter((candidate) => candidate.url().includes('quickbar.html')).length).toBe(1);
     const quickbarPage = app.windows().find((candidate) => candidate.url().includes('quickbar.html'));
@@ -456,7 +464,7 @@ test.describe('Electron production workflow', () => {
     await quickbarPage.locator('#edge-handle').dispatchEvent('mouseenter');
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'true');
     const hiddenForQuickbar = await app.evaluate(({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows().find((candidate) => !candidate.webContents.getURL().includes('quickbar.html'));
+      const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().endsWith('index.html'));
       win.hide();
       return { destroyed: win.isDestroyed(), visible: win.isVisible() };
     });
@@ -493,12 +501,17 @@ test.describe('Electron production workflow', () => {
     samples.push(performance.now() - started);
     dimensions.push(await pngDimensions(filePath));
     await setCaptureDefaults(page, 'screenshot', 'region');
+    const region = regionOverlay(app);
     for (let i = 0; i < 4; i += 1) {
       before = new Set(await fs.readdir(outputDir));
       started = performance.now();
+      const since = Date.now();
       await page.locator('#screenshot-button').dispatchEvent('click');
-      await expect(page.locator('#region-modal')).toBeVisible();
-      await page.locator('#full-region').dispatchEvent('click');
+      // The studio's button opens the same frozen-screen picker as the shortcut: whole screen (Space), then save.
+      const overlay = await region.opened(since);
+      await expect(page.locator('#region-modal')).toBeHidden();
+      await region.key(overlay, { key: ' ', code: 'Space' });
+      await region.key(overlay, { key: 'Enter' });
       filePath = await waitForNewFile(outputDir, '.png', before);
       samples.push(performance.now() - started);
       dimensions.push(await pngDimensions(filePath));
@@ -531,33 +544,41 @@ test.describe('Electron production workflow', () => {
   test('scroll stitching and reusable capture regions', async ({}, testInfo) => {
     test.setTimeout(90_000);
     await setCaptureDefaults(page, 'screenshot', 'region');
+    const region = regionOverlay(app);
+    // Select an area on the frozen screen, keep it for reuse (⊕), then save the picture.
     let before = new Set(await fs.readdir(outputDir));
+    let since = Date.now();
     await page.locator('#screenshot-button').click();
-    await expect(page.locator('#region-modal')).toBeVisible();
-    const canvas = page.locator('#preview-canvas');
-    const bounds = await canvas.boundingBox();
-    expect(bounds).toBeTruthy();
-    await page.mouse.move(bounds.x + bounds.width * 0.12, bounds.y + bounds.height * 0.14);
-    await page.mouse.down();
-    await page.mouse.move(bounds.x + bounds.width * 0.78, bounds.y + bounds.height * 0.74, { steps: 6 });
-    await page.mouse.up();
-    await expect(page.locator('#save-region')).toBeEnabled();
-    await page.locator('#save-region').click();
+    let overlay = await region.opened(since);
+    await region.drag(overlay, { x: 60, y: 50 }, { x: 360, y: 250 });
+    await overlay.locator('[data-command="save-area"]').click();
+    await expect(overlay.locator('#note')).toContainText('נשמר');
+    await expect(overlay.locator('html')).toHaveAttribute('data-saved-areas', '1');
+    await overlay.locator('[data-after="save"]').click();
     const savedRegionCapture = await waitForNewFile(outputDir, '.png', before);
 
+    // Enter on a fresh frozen screen: the last area, then save.
     before = new Set(await fs.readdir(outputDir));
+    since = Date.now();
     await page.locator('#screenshot-button').click();
-    await page.locator('#last-region').click();
-    await expect(page.locator('#confirm-region')).toBeEnabled();
-    await page.locator('#confirm-region').click();
+    overlay = await region.opened(since);
+    await region.key(overlay, { key: 'Enter' });
+    await expect(overlay.locator('html')).toHaveAttribute('data-region-editing', 'true');
+    await region.key(overlay, { key: 'Enter' });
     const lastRegionCapture = await waitForNewFile(outputDir, '.png', before);
 
+    // Key 1: the saved area.
     before = new Set(await fs.readdir(outputDir));
+    since = Date.now();
     await page.locator('#screenshot-button').click();
-    await expect(page.locator('#saved-region option')).toHaveCount(2);
-    await page.locator('#saved-region').selectOption('0');
-    await page.locator('#confirm-region').click();
+    overlay = await region.opened(since);
+    await expect(overlay.locator('html')).toHaveAttribute('data-saved-areas', '1');
+    await expect(overlay.locator('#hint')).toContainText('מקש 1 האזור השמור');
+    await region.key(overlay, { key: '1', code: 'Digit1' });
+    await region.key(overlay, { key: 'Enter' });
     const reusableRegionCapture = await waitForNewFile(outputDir, '.png', before);
+    const [savedSize, reusedSize] = await Promise.all([savedRegionCapture, reusableRegionCapture].map(pngDimensions));
+    expect([reusedSize.width, reusedSize.height]).toEqual([savedSize.width, savedSize.height]);
 
     // 'Capture last region' shortcut: shoots the stored area at once, without opening the picker.
     before = new Set(await fs.readdir(outputDir));
@@ -917,9 +938,13 @@ test.describe('Electron production workflow', () => {
     await setCheckbox(page, '#system-audio', true);
     await setCheckbox(page, '#microphone', false);
     const before = new Set(await fs.readdir(outputDir));
+    const region = regionOverlay(app);
+    const since = Date.now();
     await page.locator('#record-button').dispatchEvent('click');
-    await expect(page.locator('#region-modal')).toBeVisible();
-    await page.locator('#full-region').dispatchEvent('click');
+    // Recording an area: chosen on the frozen screen (Space = whole screen), then the recording starts.
+    const overlay = await region.opened(since);
+    await expect(overlay.locator('#hint b')).toHaveText('גררו לבחירת אזור להקלטה');
+    await region.key(overlay, { key: ' ', code: 'Space' });
     await expect(page.locator('#recording-bar')).toBeVisible();
     await page.waitForTimeout(2200);
     await page.locator('#stop-recording').dispatchEvent('click');
