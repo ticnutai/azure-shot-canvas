@@ -3,7 +3,7 @@
 (() => {
   const root = document.documentElement;
   const read = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
-  const layouts = ['lemaan', 'acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio', 'islands'];
+  const layouts = ['lemaan', 'acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio', 'islands', 'canvas'];
   const kits = ['auto', 'compact', 'tiles', 'list', 'icons', 'minimal', 'sharp', 'glass', 'contrast'];
   const lineStyles = ['plain', 'hairline', 'glow', 'gradient', 'fade', 'accent'];
   const layout = read('aurum-layout');

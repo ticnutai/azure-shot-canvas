@@ -1,5 +1,21 @@
 (() => {
-  const api = window.quickbarApi;
+  // Opened in a plain browser (the local preview address): the bar shown open, for looking at its designs.
+  // ?look=graphite shows the dark look, ?edge=left|right a side edge.
+  function previewApi() {
+    const params = new URLSearchParams(location.search);
+    document.documentElement.classList.add('preview');
+    let preferences = { enabled: true, style: 'strip', edge: params.get('edge') || 'top', offset: 0.5, activation: 'click', pinned: true, barLook: params.get('look') || 'office', regionMarkup: false, captureDelay: 0, autoCopy: true, historyStyle: 'panel' };
+    const quiet = async () => true;
+    return {
+      getState: async () => ({ preferences, expanded: true, recording: false, view: 'actions', captures: [] }),
+      setExpanded: async (expanded) => ({ expanded: true || expanded }),
+      setPreferences: async (patch) => { preferences = { ...preferences, ...patch }; return preferences; },
+      runAction: quiet, setView: quiet, setMenu: quiet, history: async () => [], openCapture: quiet, captureAction: quiet,
+      cardHover: async () => [], startDrag: () => {}, drag: async () => preferences, openWorkspace: quiet,
+      onRecordingState: () => {}, onPreferences: () => {}, onCaptures: () => {}, onCardKey: () => {}
+    };
+  }
+  const api = window.quickbarApi || previewApi();
   const root = document.documentElement;
   let preferences = { activation: 'click', pinned: false };
   let collapseTimer = null;
@@ -15,6 +31,7 @@
     document.body.dataset.edge = preferences.edge;
     document.body.dataset.activation = preferences.activation;
     document.body.dataset.style = preferences.style || 'panel';
+    document.body.dataset.look = preferences.barLook || 'graphite';
     document.querySelectorAll('.pin-toggle').forEach((button) => button.setAttribute('aria-pressed', String(preferences.pinned)));
   };
   const applyRecordingState = (active) => {

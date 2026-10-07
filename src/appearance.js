@@ -19,7 +19,8 @@
     { id: 'ribbon', name: 'רצועת כלים', description: 'כמו מעבד התמלילים: לשוניות למעלה ושורת כותרת כחולה', light: 'ribbon-light', dark: 'ribbon-dark', mini: [0, 10, 2] },
     { id: 'fluent', name: 'חלונות 11', description: 'סרגל ניווט רחב עם שמות, כמו מסך ההגדרות של חלונות', light: 'fluent-light', dark: 'fluent-dark', mini: [28, 10, 4] },
     { id: 'studio', name: 'אולפן עריכה', description: 'אפור פחם וצפוף, כמו תוכנות עריכת וידאו', light: 'studio-light', dark: 'studio-dark', mini: [9, 8, 1] },
-    { id: 'islands', name: 'איים צפים', description: 'סרגלים צפים ומעוגלים עם זוהר עדין, כמו הדפדפנים החדשים', light: 'islands-light', dark: 'islands-dark', mini: [14, 12, 6] }
+    { id: 'islands', name: 'איים צפים', description: 'סרגלים צפים ומעוגלים עם זוהר עדין, כמו הדפדפנים החדשים', light: 'islands-light', dark: 'islands-dark', mini: [14, 12, 6] },
+    { id: 'canvas', name: 'לוח צבעוני', description: 'לבן ונקי, לשוניות עם קו כחול ואייקון צבעוני לכל לשונית — כמו לוח הצילומים', light: 'canvas-light', dark: 'canvas-dark', mini: [0, 12, 3] }
   ];
   const MODES = [
     { id: 'match', name: 'לפי המצב הנוכחי' },

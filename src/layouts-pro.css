@@ -138,3 +138,59 @@ html:is([data-layout]:not([data-layout="lemaan"]), [data-kit]:not([data-kit="aut
 /* אזהרה בהגדרות הקיצורים: צירוף שתוכנות נפוצות משתמשות בו */
 .shortcut-warning { display: block; margin-top: 4px; color: var(--danger); font-size: 11px; }
 .shortcut-warning:empty { display: none; }
+
+/* ---------- פריסה: לוח צבעוני (כמו לוח הצילומים בעיצוב "משרדי בהיר") ----------
+   לבן ונקי: שורת כותרת לבנה, לשוניות עם קו כחול מתחת לפעילה ואייקון צבעוני לכל לשונית,
+   קווים דקים של פיקסל אחד, פינות של 6 פיקסלים, בלי צללים כבדים. צבע הדגשה אחד: כחול. */
+[data-theme="canvas-light"] { color-scheme: light; --bg: #f5f6f8; --top: #ffffff; --panel: #ffffff; --panel-2: #f8f9fb; --line: #e1e4ea; --line-soft: #eceef2; --text: #1f2633; --muted: #687183; --gold: #1f6fe5; --gold-2: #185bc2; --accent-text: #ffffff; --success: #2a9d5b; --danger: #d93636; --shadow: #1f263314; }
+[data-theme="canvas-dark"] { color-scheme: dark; --bg: #16191e; --top: #1c2026; --panel: #1f232a; --panel-2: #252a32; --line: #30363f; --line-soft: #282d35; --text: #e8eaee; --muted: #9aa2ae; --gold: #5b9bff; --gold-2: #4a8af2; --accent-text: #0b1220; --success: #4cc27e; --danger: #f06b6b; --shadow: #00000066; }
+html[data-layout="canvas"] {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", Arial, sans-serif;
+  --ui-sidebar-w: 0px; --ui-topbar-h: 52px; --ui-page-pad: 20px; --ui-gap: 16px;
+  --ui-radius-panel: 8px; --ui-radius-card: 6px; --ui-radius-control: 6px; --ui-control-h: 32px;
+  --ui-shadow: 0 1px 2px #1f26330d; --ui-border: 1px solid var(--line);
+  --canvas-tabs-h: 50px;
+  /* Tab colours, the same family as the captures window's icons */
+  --tab-capture: #d93636; --tab-editor: #1c8fc4; --tab-library: #c99124; --tab-tools: #7a4ddb; --tab-settings: #4b5565;
+}
+html[data-layout="canvas"][data-theme="canvas-dark"] { --tab-capture: #ff7a7a; --tab-editor: #5cc2f0; --tab-library: #f0c260; --tab-tools: #b393ff; --tab-settings: #b4bcc8; }
+:root:root[data-layout="canvas"] .app-shell { grid-template-columns: minmax(0, 1fr); }
+:root:root[data-layout="canvas"] .topbar { position: sticky; top: 0; z-index: 17; margin-bottom: var(--canvas-tabs-h); background: var(--top); border-bottom: 1px solid var(--line-soft); }
+:root:root[data-layout="canvas"] .sidebar { position: fixed; top: var(--ui-topbar-h); left: 0; right: 0; width: auto; height: var(--canvas-tabs-h); flex-direction: row; align-items: stretch; gap: 8px; padding: 0 20px; background: var(--top); border: 0; border-bottom: 1px solid var(--line); box-shadow: none; z-index: 16; }
+:root:root[data-layout="canvas"] .logo-mark { display: none; }
+:root:root[data-layout="canvas"] .sidebar nav { display: flex; gap: 4px; width: auto; }
+:root:root[data-layout="canvas"] .nav-item { position: relative; height: auto; display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 0 14px; border: 0; border-radius: 0; background: transparent; color: var(--text); box-shadow: none; }
+:root:root[data-layout="canvas"] .nav-item > span { color: var(--tab-color, var(--gold)); font-size: 17px; }
+:root:root[data-layout="canvas"] .nav-item .glyph-icon { color: var(--tab-color, var(--gold)); }
+:root:root[data-layout="canvas"] .nav-item small { font-size: 14px; font-weight: 400; color: var(--text); }
+:root:root[data-layout="canvas"] .nav-item[data-page="capture"] { --tab-color: var(--tab-capture); }
+:root:root[data-layout="canvas"] .nav-item[data-page="editor"] { --tab-color: var(--tab-editor); }
+:root:root[data-layout="canvas"] .nav-item[data-page="library"] { --tab-color: var(--tab-library); }
+:root:root[data-layout="canvas"] .nav-item[data-page="tools"] { --tab-color: var(--tab-tools); }
+:root:root[data-layout="canvas"] .nav-item[data-page="settings"] { --tab-color: var(--tab-settings); }
+:root:root[data-layout="canvas"] .nav-item:hover:not(.active):not(:disabled) { background: color-mix(in srgb, var(--text) 4%, transparent); color: var(--text); }
+:root:root[data-layout="canvas"] .nav-item.active { background: transparent; color: var(--text); box-shadow: none; }
+:root:root[data-layout="canvas"] .nav-item.active small { font-weight: 600; }
+/* The active tab: a blue line under it, like the captures window and office programs */
+:root:root[data-layout="canvas"] .nav-item.active::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--gold); }
+:root:root[data-layout="canvas"] .help-button { margin: 0 auto 0 0; align-self: center; color: var(--muted); }
+:root:root[data-layout="canvas"] .content-shell { max-width: none; }
+/* Panels: white, one hairline, almost no shadow */
+:root:root[data-layout="canvas"] :is(.panel, .page-panel, .quick-panel, .system-panel, .settings-cards article, .library-item, .clip-card, .source-card) { box-shadow: none; border: 1px solid var(--line); }
+:root:root[data-layout="canvas"] :is(.source-card.selected, .library-item.selected) { border-color: var(--gold); box-shadow: inset 0 -3px 0 var(--gold); }
+/* Every row of tabs inside the pages: plain text with the same blue underline */
+:root:root[data-layout="canvas"] .settings-tabs { border-bottom: 1px solid var(--line); gap: 4px; background: transparent; }
+:root:root[data-layout="canvas"] .settings-tab { position: relative; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--muted); padding-inline: 14px; }
+:root:root[data-layout="canvas"] .settings-tab:hover { color: var(--text); background: transparent; }
+:root:root[data-layout="canvas"] .settings-tab.active { color: var(--text); background: transparent; }
+:root:root[data-layout="canvas"] .settings-tab.active::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--gold); }
+:root:root[data-layout="canvas"] .source-type.active { background: color-mix(in srgb, var(--gold) 10%, var(--panel)); border-color: var(--gold); color: var(--gold); }
+:root:root[data-layout="canvas"] :is(.primary, .gold-button) { background: var(--gold); border-color: var(--gold); color: var(--accent-text); box-shadow: none; }
+:root:root[data-layout="canvas"] .search-box { background: var(--panel-2); border: 1px solid var(--line); }
+/* Gallery preview of the layout */
+.layout-mini[data-layout-preview="canvas"] { --m-side: var(--m-top); }
+.layout-mini[data-layout-preview="canvas"] i { top: var(--m-top-h); left: 0; right: 0; bottom: auto; width: auto; height: 9px; background: var(--m-top); border-bottom: 1px solid #0000001a; }
+.layout-mini[data-layout-preview="canvas"] i::before { top: auto; bottom: 0; left: auto; right: 10px; width: 14px; height: 2px; border-radius: 2px 2px 0 0; background: #1f6fe5; }
+.layout-mini[data-layout-preview="canvas"]::before { right: 0; }
+.layout-mini[data-layout-preview="canvas"] :is(em, u) { top: calc(var(--m-top-h) + 15px); }
+.layout-mini[data-layout-preview="canvas"] u { right: 7px; }

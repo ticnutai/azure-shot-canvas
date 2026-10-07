@@ -1,0 +1,67 @@
+/* Bar icons drawn as thin lines (both looks). */
+.strip-icon{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.strip-big[data-strip-action="region"]{color:#ffd36a}
+.strip-big.record{color:#ff6b78}
+.strip-big.record.active .strip-icon{animation:recording-pulse 1.2s ease-in-out infinite}
+@keyframes recording-pulse{50%{opacity:.45}}
+@media (prefers-reduced-motion: reduce){.strip-big.record.active .strip-icon{animation:none}}
+
+/* ---- Light look (body[data-look="office"]): white, hairlines, coloured line icons with labels — the same family
+   as the captures window's "light office" design. ---- */
+body[data-look="office"]{color:#1f2633}
+body[data-look="office"] #edge-handle{background:#1f6fe5}
+body[data-look="office"] .strip-bar,
+body[data-look="office"] #strip-menu,
+body[data-look="office"] #quickbar,
+body[data-look="office"] #history{background:#ffffff;border-color:#e1e4ea;box-shadow:0 8px 24px #1f263322;color:#1f2633}
+body[data-look="office"] .strip-group{background:#ffffff;border-color:#e1e4ea}
+body[data-look="office"] .strip-big{color:#1f2633}
+body[data-look="office"] .strip-big .strip-icon{color:var(--ink)}
+body[data-look="office"] .strip-big[data-strip-action="region"]{--ink:#d93636}
+body[data-look="office"] .strip-big.record{--ink:#d63a72}
+body[data-look="office"] .strip-big.record.active{background:#fdeef3}
+body[data-look="office"] .strip-big span{color:#1f2633;font-size:11px}
+body[data-look="office"] .strip-more{background:#f7f8fa;color:#687183;border-color:#e1e4ea}
+body[data-look="office"] :is(.strip-big, .strip-more):hover{background:#eef3fb;color:#1f2633}
+body[data-look="office"] .strip-more[aria-expanded="true"]{background:#e3eeff;color:#1f6fe5}
+body[data-look="office"] .strip-tools button,
+body[data-look="office"] header button{background:#ffffff;border-color:#e1e4ea;color:#4b5565}
+body[data-look="office"] .strip-tools button:hover,
+body[data-look="office"] header button:hover{background:#eef3fb;border-color:#c9d6ea}
+body[data-look="office"] .pin-toggle[aria-pressed="true"]{background:#e3eeff;border-color:#1f6fe5;color:#1f6fe5}
+body[data-look="office"] #strip-grip span{background:repeating-linear-gradient(0deg,#b8c0cc 0 2px,transparent 2px 4px)}
+body[data-look="office"]:not([data-edge="top"]) #strip-grip span{background:repeating-linear-gradient(90deg,#b8c0cc 0 2px,transparent 2px 4px)}
+/* Menus */
+body[data-look="office"] #strip-menu button{color:#1f2633}
+body[data-look="office"] #strip-menu button:hover{background:#eef3fb;border-color:transparent}
+body[data-look="office"] #strip-menu i{color:#1f6fe5}
+body[data-look="office"] #strip-menu small{color:#687183}
+body[data-look="office"] .menu-toggles{border-top-color:#e1e4ea}
+body[data-look="office"] #strip-menu .menu-toggle{background:#f7f8fa;border-color:#e1e4ea;color:#4b5565}
+body[data-look="office"] #strip-menu .menu-toggle[aria-pressed="true"]{background:#e3eeff;border-color:#1f6fe5;color:#1f6fe5}
+/* Full panel, capture card and small history grid */
+body[data-look="office"] header{border-bottom-color:#e1e4ea}
+body[data-look="office"] header span,body[data-look="office"] #history-count{color:#687183}
+body[data-look="office"] nav button,
+body[data-look="office"] .capture-actions button{background:#ffffff;border-color:#e1e4ea;color:#1f2633}
+body[data-look="office"] nav button:hover,
+body[data-look="office"] .capture-actions button:hover:not(:disabled){background:#eef3fb;border-color:#c9d6ea}
+body[data-look="office"] nav i,body[data-look="office"] .capture-actions i{color:#1f6fe5}
+body[data-look="office"] .capture-actions button.danger:hover{background:#fdecec;border-color:#d93636}
+body[data-look="office"] #capture-figure{background:#f7f8fa;border-color:#e1e4ea}
+body[data-look="office"] #capture-thumb{background:#f7f8fa}
+body[data-look="office"] #capture-figure figcaption{background:#ffffff;border-top-color:#e1e4ea}
+body[data-look="office"] #capture-meta{color:#687183}
+body[data-look="office"] .recent-strip{border-top-color:#e1e4ea}
+body[data-look="office"] .recent-item,body[data-look="office"] .history-item{background:#f7f8fa;border-color:#e1e4ea}
+body[data-look="office"] .recent-item[aria-pressed="true"]{border-color:#1f6fe5;box-shadow:0 0 0 1px #1f6fe5}
+body[data-look="office"] #history-search{background:#f7f8fa;border-color:#e1e4ea;color:#1f2633}
+body[data-look="office"] .history-chips button{background:#ffffff;border-color:#e1e4ea;color:#4b5565}
+body[data-look="office"] .history-chips button[aria-pressed="true"]{background:#e3eeff;border-color:#1f6fe5;color:#1f6fe5}
+body[data-look="office"] .history-empty,body[data-look="office"] .history-tip{color:#687183}
+/* Browser preview only: the bar drawn at its real size on a neutral background. */
+html.preview{background:#e9edf3}
+html.preview body{position:relative;width:300px;height:420px;margin:24px auto;overflow:visible}
+html.preview body[data-edge="left"],html.preview body[data-edge="right"]{width:340px;height:360px}
+.tool-icon{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block;margin:auto}
+#strip-history .tool-icon{width:17px;height:17px}

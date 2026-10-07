@@ -1527,16 +1527,16 @@ test.describe('Electron production workflow', () => {
     expect(metrics.every((item) => item.pass)).toBeTruthy();
   });
   test('window layouts, layout colours and design kits apply, persist and never overflow', async ({}, testInfo) => {
-    // Eleven layouts × three screens in a hidden window that paints slowly.
+    // Twelve layouts × three screens in a hidden window that paints slowly.
     test.setTimeout(240_000);
     await page.locator('.nav-item[data-page="settings"]').click();
     await page.locator('[data-preference-tab="appearance"]').click();
-    await expect(page.locator('#layout-gallery [role="radio"]')).toHaveCount(11);
+    await expect(page.locator('#layout-gallery [role="radio"]')).toHaveCount(12);
     await expect(page.locator('#kit-switch [role="radio"]')).toHaveCount(9);
     await expect(page.locator('#lines-switch [role="radio"]')).toHaveCount(6);
     await page.locator('[data-layout-mode="light"]').click();
     const switchTimes = [];
-    for (const layout of ['acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio', 'islands', 'lemaan']) {
+    for (const layout of ['acrobat', 'finereader', 'classic', 'apple', 'office', 'modern', 'ribbon', 'fluent', 'studio', 'islands', 'canvas', 'lemaan']) {
       await page.locator(`[data-layout-choice="${layout}"]`).click();
       await expect(page.locator('html')).toHaveAttribute('data-layout', layout);
       // Measured in-page (apply + style recalculation): the hidden QA window paints at ~1 fps, so click latency is not representative.

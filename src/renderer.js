@@ -1259,6 +1259,7 @@ function showQuickbarSettings(preferences) {
   $('#auto-copy-region').checked = Boolean(preferences.autoCopy);
   $('#laptop-capture-key').checked = preferences.laptopCaptureKey !== false;
   $('#history-style').value = preferences.historyStyle || 'workspace';
+  $('#bar-look').value = preferences.barLook || 'office';
 }
 
 async function handleSavedScreenshot(result) {
@@ -2407,6 +2408,7 @@ async function initialize() {
   $('#auto-copy-region').addEventListener('change', (event) => updateQuickbar({ autoCopy: event.target.checked }));
   $('#laptop-capture-key').addEventListener('change', (event) => updateQuickbar({ laptopCaptureKey: event.target.checked }));
   $('#history-style').addEventListener('change', (event) => updateQuickbar({ historyStyle: event.target.value }));
+  $('#bar-look').addEventListener('change', (event) => updateQuickbar({ barLook: event.target.value }));
   $('#capture-preview-enabled').addEventListener('change', (event) => updateQuickbar({ capturePreview: event.target.checked }));
   $('#capture-preview-timeout').addEventListener('change', (event) => updateQuickbar({ captureTimeout: Number(event.target.value) }));
   $('#quickbar-enabled').addEventListener('change', (event) => updateQuickbar({ enabled: event.target.checked }));
