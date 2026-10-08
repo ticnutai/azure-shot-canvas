@@ -292,7 +292,8 @@ class RegionCapture {
       // The window the area was taken from (front-most under its centre) names the file.
       return cropped ? { ...cropped, after, marks: Number(choice.options.marks) || 0, title: titleAt(windows.get(choice.displayId), choice.rect) } : { cancelled: true };
     } finally {
-      for (const { entry } of entries) if (!entry.window.isDestroyed()) entry.window.hide();
+      // Hidden, the window waits for the next capture without holding the frozen screen picture.
+      for (const { entry } of entries) if (!entry.window.isDestroyed()) { entry.window.hide(); entry.window.webContents.send('region:release'); }
       this.active = null;
     }
   }

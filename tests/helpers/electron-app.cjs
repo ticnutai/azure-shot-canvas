@@ -2,12 +2,22 @@ const { _electron: electron } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { rmSync } = require('node:fs');
+const { readdirSync, rmSync, statSync } = require('node:fs');
 
 // Folders this helper created are removed when the test process ends (not at app close: some tests restart
 // the app on the same folder). Without this every run left its captures behind in the temp folder.
 const createdDirectories = new Set();
 process.once('exit', () => { for (const directory of createdDirectories) { try { rmSync(directory, { recursive: true, force: true, maxRetries: 2 }); } catch {} } });
+// A run that was stopped half-way never reaches 'exit': its folders (about 20 MB each) piled up into gigabytes and
+// filled the disk. Folders of earlier runs, older than six hours, are removed when the next run starts.
+const staleBefore = Date.now() - 6 * 60 * 60 * 1000;
+try {
+  for (const entry of readdirSync(os.tmpdir(), { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^(screen-studio-|aurum-)/.test(entry.name)) continue;
+    const fullPath = path.join(os.tmpdir(), entry.name);
+    try { if (statSync(fullPath).mtimeMs < staleBefore) rmSync(fullPath, { recursive: true, force: true, maxRetries: 2 }); } catch {}
+  }
+} catch {}
 
 async function launchStudio(testName, options = {}) {
   const outputDir = options.outputDir || await fs.mkdtemp(path.join(os.tmpdir(), `screen-studio-${testName}-`));
@@ -30,7 +40,8 @@ async function launchStudio(testName, options = {}) {
       SCREEN_STUDIO_OUTPUT_DIR: outputDir,
       SCREEN_STUDIO_QA_REPORT_DIR: qaReportDir,
       SCREEN_STUDIO_USER_DATA_DIR: path.join(outputDir, 'electron-user-data'),
-      SCREEN_STUDIO_QA: '1'
+      SCREEN_STUDIO_QA: '1',
+      ...(options.env || {})
     },
     timeout: 30_000
   });

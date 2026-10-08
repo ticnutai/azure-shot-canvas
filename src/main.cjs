@@ -535,8 +535,11 @@ function createWindow() {
 
 // The studio page pauses everything costly (the live screen stream) while nobody can see the window.
 function reportVisibility() {
-  // Test runs keep their windows hidden on purpose: there the studio behaves as if it were on screen.
-  if (!mainWindow || mainWindow.isDestroyed() || process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') return;
+  // Test runs keep their windows hidden on purpose: there the studio behaves as if it were on screen (unless a test
+  // checks this very behaviour).
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const testRun = process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1';
+  if (testRun && process.env.SCREEN_STUDIO_TRACK_VISIBILITY !== '1') return;
   mainWindow.webContents.send('app:visibility', mainWindow.isVisible() && !mainWindow.isMinimized());
 }
 // The page asks once it is listening, so the first answer is never lost (it may load before it subscribes).

@@ -514,6 +514,17 @@
     if (textAt) { textAt = null; textInput.hidden = true; return schedule(); }
     cancel();
   });
+  // The capture is over and the window hidden: give back the two full-screen pictures (tens of megabytes on large
+  // screens). The next start draws them again at full size.
+  api.onRelease?.(() => {
+    session = null;
+    shapes = [];
+    frozen.width = 0;
+    frozen.height = 0;
+    marks.width = 0;
+    marks.height = 0;
+    root.dataset.regionReleased = String(Date.now());
+  });
   // Report the first painted frame after the window appears, so it is revealed without a stale picture.
   api.onShown(() => requestAnimationFrame(() => requestAnimationFrame(() => api.visible(session?.displayId))));
 })();

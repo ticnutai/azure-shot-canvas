@@ -898,7 +898,21 @@ async function ensureDevicePermission(kind) {
   await refreshDevices();
 }
 
+// Watching for plugged/unplugged devices keeps the browser's audio and video-capture services running (about 170 MB),
+// so the studio watches only while a microphone or a camera is chosen.
+let watchingDevices = false;
+function watchDevices() {
+  const wanted = Boolean($('#microphone')?.checked || $('#camera')?.checked);
+  document.documentElement.dataset.watchingDevices = String(wanted);
+  if (wanted === watchingDevices) return;
+  watchingDevices = wanted;
+  if (wanted) navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+  else navigator.mediaDevices.removeEventListener('devicechange', refreshDevices);
+}
+
 async function refreshDevices() {
+  watchDevices();
+  if (!watchingDevices) { $('#device-selects').innerHTML = ''; return; }
   const devices = await navigator.mediaDevices.enumerateDevices();
   const container = $('#device-selects');
   const audioInputs = devices.filter((device) => device.kind === 'audioinput');
@@ -2617,7 +2631,7 @@ async function initialize() {
   $('#copy-qa-console').addEventListener('click', (event) => copyWithFeedback(event.currentTarget, $('#qa-console').textContent));
   $('#copy-qa-report').addEventListener('click', (event) => copyWithFeedback(event.currentTarget, qaReportText(latestQaStatus)));
   $('#open-qa-report').addEventListener('click', () => api.openQaReport());
-  navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+  watchDevices();
   api.onShortcut((action, meta = {}) => {
     if (meta.test) {
       const row = $(`[data-shortcut-row="${action}"]`);
