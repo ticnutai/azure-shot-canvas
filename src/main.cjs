@@ -24,6 +24,12 @@ const { Updater } = require('./updater.cjs');
 const { RecordingControls } = require('./recording-controls.cjs');
 
 if (process.env.SCREEN_STUDIO_USER_DATA_DIR) app.setPath('userData', path.resolve(process.env.SCREEN_STUDIO_USER_DATA_DIR));
+// Live inspection of the running program without touching its windows (scripts/cdp.cjs): only when asked for,
+// and only on this computer (the debugging port listens on 127.0.0.1).
+if (/^\d{4,5}$/.test(process.env.SCREEN_STUDIO_DEBUG_PORT || '')) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.SCREEN_STUDIO_DEBUG_PORT);
+  app.commandLine.appendSwitch('remote-debugging-address', '127.0.0.1');
+}
 
 let mainWindow;
 let pendingCapture = null;
@@ -524,7 +530,19 @@ function createWindow() {
     }
   });
   mainWindow.on('closed', () => { mainWindow = null; });
+  for (const name of ['show', 'hide', 'minimize', 'restore']) mainWindow.on(name, reportVisibility);
 }
+
+// The studio page pauses everything costly (the live screen stream) while nobody can see the window.
+function reportVisibility() {
+  // Test runs keep their windows hidden on purpose: there the studio behaves as if it were on screen.
+  if (!mainWindow || mainWindow.isDestroyed() || process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') return;
+  mainWindow.webContents.send('app:visibility', mainWindow.isVisible() && !mainWindow.isMinimized());
+}
+// The page asks once it is listening, so the first answer is never lost (it may load before it subscribes).
+ipcMain.on('app:visibility-request', (event) => {
+  if (mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents) reportVisibility();
+});
 
 async function ensureOutputDirectory() {
   outputDirectory ||= process.env.SCREEN_STUDIO_OUTPUT_DIR || path.join(app.getPath('videos'), 'אולפן צילום מסך');

@@ -760,6 +760,8 @@ function monitorPreviewFrames(requestId) {
 
 async function startLivePreview(source = state.selectedSource) {
   if (state.livePreviewEnabled === false) { showLivePreviewOff(); return false; }
+  // Minimized or hidden in the tray: no one sees the preview, so no screen stream at all.
+  if (state.windowHidden) return false;
   if (state.collapsed?.preview) return false;
   if (!source || state.recorder || state.busy) return false;
   const sameSource = state.previewStream?.active && document.documentElement.dataset.previewSourceId === source.id;
@@ -775,7 +777,9 @@ async function startLivePreview(source = state.selectedSource) {
     await api.prepareCapture({ sourceId: source.id, includeSystemAudio: false });
     let stream;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: false });
+      // The preview is only for looking: 12 frames a second at up to 1600 points wide is plenty, and costs a
+      // fraction of a full-resolution 30-frame stream. Captures and recordings open their own full-quality stream.
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: { max: 12 }, width: { max: 1600 }, height: { max: 1000 } }, audio: false });
     } catch (error) {
       if (!api.captureStill || !STREAM_REFUSED.has(error?.name)) throw error;
       // Slow preview (one picture a second) instead of none; capture and editing are unaffected.
@@ -2629,6 +2633,15 @@ async function initialize() {
   api.onLibraryChanged?.(() => loadLibrary().catch(() => {}));
   api.onExternalImage?.((payload) => saveExternalImage(payload).catch((error) => showToast(`שמירת הצילום נכשלה: ${error.message}`, 8000)));
   api.onToast?.((text) => showToast(text, 8000));
+  // The window minimized or hidden: stop the live screen stream (it costs processor and graphics all the time);
+  // shown again: the preview comes back by itself. A recording in progress is never touched.
+  api.onVisibility?.((visible) => {
+    state.windowHidden = !visible;
+    document.documentElement.dataset.windowHidden = String(!visible);
+    if (state.recorder || state.busy) return;
+    if (visible) restoreLivePreview();
+    else stopLivePreview();
+  });
   api.onQuickbarPreferences?.(showQuickbarSettings);
   api.onUpdateState?.(showUpdateState);
   api.getUpdateState?.().then(showUpdateState).catch(() => {});
