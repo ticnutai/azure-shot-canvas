@@ -27,8 +27,9 @@ class RecordingControls {
     this.state = { startedAt: Date.now(), pausedMs: 0, paused: false, pausedAt: 0, ...this.state, ...details };
     const display = screen.getAllDisplays().find((item) => String(item.id) === String(this.state.displayId)) || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const area = areaOnScreen(display, this.state.region);
-    await this.showBar(display, area);
+    // The frame first: it marks what is being recorded at once, while the bar's page is still loading.
     this.showFrame(area);
+    await this.showBar(display, area);
     this.bar?.webContents.send('recording-controls:state', this.state);
   }
 

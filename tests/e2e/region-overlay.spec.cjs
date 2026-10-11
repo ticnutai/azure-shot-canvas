@@ -211,10 +211,11 @@ test.describe.serial('region capture on the frozen screen', () => {
     expect(region.x).toBeCloseTo(20 / bounds.width, 3);
     expect(region.width).toBeCloseTo(400 / bounds.width, 3);
     // The floating bar and a frame around the area appear while recording.
-    await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.recordingControls?.bar), { timeout: 10_000 }).toBe(true);
+    await expect.poll(() => app.evaluate(() => Boolean(globalThis.__aurumQa.recordingControls?.bar && globalThis.__aurumQa.recordingControls?.frame)), { timeout: 10_000 }).toBe(true);
     const controls = await app.evaluate(() => globalThis.__aurumQa.recordingControls);
     expect(controls.frame.width).toBe(400 + 6);
     expect(controls.frame.height).toBe(240 + 6);
+    await expect.poll(() => app.windows().some((candidate) => candidate.url().includes('recording-controls.html')), { timeout: 10_000 }).toBe(true);
     const bar = app.windows().find((candidate) => candidate.url().includes('recording-controls.html'));
     await expect(bar.locator('#state')).toHaveText('מקליט');
     // Pause and resume from the bar; the timer does not count paused time.
