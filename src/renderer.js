@@ -857,6 +857,10 @@ function mediaErrorText(error) {
   };
   // Errors from the main process arrive wrapped: "Error invoking remote method 'x': Error: <message>" — keep only the message.
   const message = String(error?.message || '').replace(/^Error invoking remote method '[^']*':\s*(?:\w*Error:\s*)?/, '');
+  // In a web browser there is no other route to the screen: say so instead of promising that screenshots still work.
+  if (api.browserMode && error?.name === 'NotReadableError') {
+    return 'חלונות לא מעביר כרגע את המסך לדפדפן (גם לדף ריק). הפעלה מחדש של המחשב פותרת בדרך כלל; עד אז — התוכנה המותקנת מצלמת כרגיל בדרך משלה';
+  }
   return known[error?.name] || (/permission denied/i.test(message) ? known.NotAllowedError : message || 'שגיאה לא ידועה');
 }
 
