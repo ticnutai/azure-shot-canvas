@@ -698,6 +698,8 @@ test.describe('Electron production workflow', () => {
     await page.locator('.sidebar .nav-item[data-action="edit"]').click();
     await expect(page.locator('#image-editor-shell')).toBeVisible();
     await expect(page.locator('[data-editor-tool]')).toHaveCount(19);
+    // Every tool as its own button for this walk through all of them (grouping is covered in editor-toolbar.spec).
+    await page.evaluate(() => window.aurumEditorToolbar.set({ grouped: false }));
     await page.locator('button[data-editor-mode="professional"]').click();
     const canvas = page.locator('#image-editor-shell .upper-canvas');
     await expect(canvas).toBeVisible();
@@ -1449,6 +1451,7 @@ test.describe('Electron production workflow', () => {
     await fs.writeFile(imagePath, Buffer.from(dataUrl.split(',')[1], 'base64'));
     await page.evaluate((file) => window.aurumEditor.open(file, 'professional'), imagePath);
     await expect(page.locator('#image-editor-shell')).toHaveAttribute('data-editor-ready', 'true');
+    await page.evaluate(() => window.aurumEditorToolbar.set({ grouped: false }));
     const started = performance.now();
     await page.locator('#editor-smart-redact').click();
     await expect.poll(() => page.locator('#image-editor-shell').getAttribute('data-smart-redact'), { timeout: 120_000 }).not.toBe('running');

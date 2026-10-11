@@ -25,6 +25,17 @@
   const selectTool = (tool) => {
     engine?.setTool(tool);
     $$('[data-editor-tool]').forEach((button) => button.classList.toggle('active', button.dataset.editorTool === tool));
+    shell.dispatchEvent(new CustomEvent('aurum:editor-tool', { detail: tool }));
+  };
+
+  // The picture fits the whole work area, less only the area's own padding.
+  const fitSpace = () => {
+    const workspace = $('#editor-workspace');
+    const style = getComputedStyle(workspace);
+    return [
+      Math.max(50, workspace.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)),
+      Math.max(50, workspace.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))
+    ];
   };
 
   const setMode = (next) => {
@@ -56,8 +67,7 @@
       },
       onRequestImage: () => $('#editor-overlay-file').click()
     });
-    const workspace = $('#editor-workspace');
-    engine.setViewportSize(workspace.clientWidth - 50, workspace.clientHeight - 50);
+    engine.setViewportSize(...fitSpace());
   };
 
   async function openEditor(filePath, requestedMode = 'quick') {
@@ -68,6 +78,7 @@
     document.documentElement.dataset.activePage = 'edit';
     document.querySelectorAll('.sidebar .nav-item').forEach((button) => button.classList.toggle('active', button.dataset.action === 'edit'));
     setMode(requestedMode);
+    window.aurumEditorToolbar?.place();
     createEngine();
     sourcePath = payload.path;
     $('#editor-file-name').textContent = payload.name;
@@ -193,7 +204,14 @@
     event.preventDefault();
     if (file) addImageFile(file); else engine.pasteCopied();
   });
-  window.addEventListener('resize', () => { if (engine) engine.setViewportSize($('#editor-workspace').clientWidth - 50, $('#editor-workspace').clientHeight - 50); });
+  // Window resized, tool bar moved, a side panel folded: the picture is fitted again to the new free space
+  // (unless the user set the zoom by hand).
+  new ResizeObserver(() => {
+    if (!engine || shell.classList.contains('hidden')) return;
+    const [width, height] = fitSpace();
+    if ($('#editor-workspace').dataset.manualZoom === 'true') engine.viewportSize = { width, height };
+    else engine.setViewportSize(width, height);
+  }).observe($('#editor-workspace'));
   document.addEventListener('keydown', (event) => {
     if (!engine || shell.classList.contains('hidden')) return;
     const targetIsInput = /input|textarea/i.test(event.target.tagName);
