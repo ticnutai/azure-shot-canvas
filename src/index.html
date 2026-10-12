@@ -113,7 +113,7 @@
                   <div class="capture-layout-menu hidden" id="capture-layout-menu" role="menu">
                     <button type="button" data-capture-layout-choice="clean"><span>▣</span><b>נקייה</b><small>הגדרות נפתחות בדיאלוג</small></button>
                     <button type="button" data-capture-layout-choice="professional"><span>▥</span><b>מקצועית</b><small>הגדרות קבועות לצד התצוגה</small></button>
-                    <button type="button" data-capture-layout-choice="focus"><span>□</span><b>ממוקדת</b><small>תצוגה מקדימה בלבד</small></button>
+                    <button type="button" data-capture-layout-choice="focus"><span>□</span><b>ממוקדת</b><small>תצוגה מקדימה בלבד</small></button><button type="button" data-capture-layout-choice="compact"><span>▭</span><b>מצומצמת</b><small>בלי תצוגה — שורה אחת של צילום והקלטה</small></button>
                   </div>
                 </div>
                 <button class="layout-settings-button" id="open-capture-settings" type="button">⚙ <span>הגדרות צילום</span></button>
@@ -122,14 +122,14 @@
                 <button class="source-type unavailable" disabled>▭ <span>לשונית</span></button>
                 <button class="refresh-button" id="refresh-sources">↻ רענון</button>
                 <span class="countdown-note" id="countdown-note">◷ צילום מיידי</span>
-                <span class="collapse-toggles" role="group" aria-label="הצגה והסתרה של חלקי המסך"><button type="button" class="collapse-toggle" data-collapse-toggle="sources" aria-expanded="true"><i aria-hidden="true">▴</i> מקורות</button><button type="button" class="collapse-toggle" data-collapse-toggle="preview" aria-expanded="true"><i aria-hidden="true">▴</i> תצוגה</button></span>
+                <button type="button" id="live-preview-toggle" class="live-switch" role="switch" aria-pressed="false" aria-checked="false" title="תצוגה חיה כבויה — לחיצה להפעלה"><i aria-hidden="true"></i><span>תצוגה חיה</span></button><span class="collapse-toggles" role="group" aria-label="הצגה והסתרה של חלקי המסך"><button type="button" class="collapse-toggle" data-collapse-toggle="sources" aria-expanded="true"><i aria-hidden="true">▴</i> מקורות</button><button type="button" class="collapse-toggle" data-collapse-toggle="preview" aria-expanded="true"><i aria-hidden="true">▴</i> תצוגה</button></span>
               </div>
               <div class="source-drawer" id="source-drawer"><div class="source-grid" id="source-grid"><div class="loading">טוען מסכים וחלונות…</div></div></div>
               <div class="capture-preview">
                 <video id="display-video" class="live-preview-video" autoplay muted playsinline></video>
                 <div class="preview-shade" id="preview-shade"></div>
                 <div class="preview-safe-area" id="preview-safe-area" aria-hidden="true"></div>
-                <div class="preview-display-controls" aria-label="בקרי תצוגה מקדימה"><button id="live-preview-toggle" aria-pressed="true" title="תצוגה חיה פעילה — לחיצה לכיבוי">◍</button><button class="active" data-preview-fit="contain" title="התאמה מלאה">⊡</button><button data-preview-fit="cover" title="מילוי השטח">⤢</button><label title="זום תצוגה"><span>⌕</span><input id="preview-zoom" type="range" min="100" max="200" value="100"><output id="preview-zoom-output">100%</output></label><button id="toggle-safe-area" aria-pressed="false" title="קווי שטח בטוח">⊞</button></div>
+                <div class="preview-display-controls" aria-label="בקרי תצוגה מקדימה"><button class="active" data-preview-fit="contain" title="התאמה מלאה">⊡</button><button data-preview-fit="cover" title="מילוי השטח">⤢</button><label title="זום תצוגה"><span>⌕</span><input id="preview-zoom" type="range" min="100" max="200" value="100"><output id="preview-zoom-output">100%</output></label><button id="toggle-safe-area" aria-pressed="false" title="קווי שטח בטוח">⊞</button></div>
                 <div class="preview-status"><span id="quality-status">4K · 60fps</span><span id="stage-time">00:00</span></div>
                 <button class="expand-button" id="expand-preview" aria-label="הגדלת התצוגה המקדימה">⛶</button>
                 <div class="empty-preview"><span>▰</span><b id="selected-source-label">תצוגה מקדימה — מסך מלא</b><p>בחר מקור למעלה, כוון את ההגדרות ולחץ על הקלטה כדי להתחיל</p></div>
@@ -138,9 +138,9 @@
               </div>
               <div class="transport-bar">
                 <div class="capture-chips">
-                  <button id="mic-chip">♩ מיקרופון</button><button id="camera-chip">◘ מצלמה</button><button class="active">⌁ הדגשת עכבר</button>
+                  <button id="mic-chip" title="מיקרופון">♩ מיקרופון</button><button id="camera-chip" title="מצלמה">◘ מצלמה</button><button class="active" title="הדגשת עכבר">⌁ הדגשת עכבר</button>
                 </div>
-                <div class="transport-actions"><button class="pause-main" id="pause-recording">Ⅱ <span>השהה</span></button><button class="record-main" id="record-button" data-recording="false"><i class="record-action-icon" aria-hidden="true"></i><span>התחל הקלטה</span></button></div>
+                <button type="button" class="collapse-toggle transport-collapse" data-collapse-toggle="transport" aria-expanded="true"><i aria-hidden="true">▴</i> <span>כיתוב</span></button><div class="transport-actions"><button class="pause-main" id="pause-recording">Ⅱ <span>השהה</span></button><button class="record-main" id="record-button" data-recording="false"><i class="record-action-icon" aria-hidden="true"></i><span>התחל הקלטה</span></button></div>
               </div>
             </div>
 
@@ -210,7 +210,7 @@
             <div class="preference-section active" data-preference-section="general">
               <h2>פריסת המסך הראשי</h2>
               <div class="capture-default-grid">
-                <label><span><b>פריסה מועדפת</b><small>אפשר לשנות גם מהאייקון הקטן במסך הצילום</small></span><select id="capture-layout-select"><option value="clean">נקייה — הגדרות בדיאלוג</option><option value="professional">מקצועית — הגדרות קבועות</option><option value="focus">ממוקדת — תצוגה מקדימה בלבד</option></select></label>
+                <label><span><b>פריסה מועדפת</b><small>אפשר לשנות גם מהאייקון הקטן במסך הצילום</small></span><select id="capture-layout-select"><option value="clean">נקייה — הגדרות בדיאלוג</option><option value="professional">מקצועית — הגדרות קבועות</option><option value="focus">ממוקדת — תצוגה מקדימה בלבד</option><option value="compact">מצומצמת — בלי תצוגה, שורה אחת</option></select></label>
               </div>
               <h2>ברירות מחדל לצילום</h2>
               <div class="capture-default-grid">

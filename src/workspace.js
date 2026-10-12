@@ -21,6 +21,12 @@
       runAction: async () => {}, startDrag: () => {}, close: async () => {}, toggleMaximize: async () => {},
       setOnTop: async (value) => value, openStudio: async () => {}, getState: async () => ({ onTop: false }), onChanged: () => {},
       setFolder: async (paths, folder) => { list = list.map((item) => (paths.includes(item.path) ? { ...item, folder } : item)); },
+      rename: async (path, name) => {
+        const item = list.find((entry) => entry.path === path);
+        const full = `${name}${item?.name.slice(item.name.lastIndexOf('.')) || ''}`;
+        list = list.map((entry) => (entry.path === path ? { ...entry, name: full } : entry));
+        return { path, name: full };
+      },
       createGuide: async () => ({ path: 'מדריך צעדים.pdf' }), trim: async () => ({ path: 'קטע.mp4' })
     };
   }
@@ -137,6 +143,7 @@
     syncSelection();
   }
   function choose(item, event) {
+    rangeStart = null;
     const list = visible();
     if (event.shiftKey && anchor) {
       const from = list.findIndex((entry) => entry.path === anchor);
@@ -352,7 +359,15 @@
       button.append(swatch, Object.assign(document.createElement('span'), { textContent: label }));
       button.addEventListener('click', () => { closeMenu(); applyLook({ theme: key }); });
       return button;
-    }));
+    }), document.createElement('hr'), Object.assign(document.createElement('div'), { className: 'menu-title', textContent: 'סרגל הפעולות (קונטרול + F1)' }), ...BAR_LOOKS.map(([key, label]) => {
+      const button = document.createElement('button');
+      button.setAttribute('role', 'menuitemradio');
+      button.setAttribute('aria-checked', String(root.dataset.bar === key));
+      button.dataset.barChoice = key;
+      button.append(Object.assign(document.createElement('span'), { className: 'bar-mark' }), Object.assign(document.createElement('span'), { textContent: label }));
+      button.addEventListener('click', () => { closeMenu(); applyBar(key); });
+      return button;
+    }), document.createElement('hr'), Object.assign(document.createElement('button'), { textContent: 'מקשי קיצור (?)', onclick: () => { closeMenu(); keysDialog(); } }));
     menu.hidden = false;
     const width = menu.getBoundingClientRect().width;
     menu.style.left = `${Math.max(6, Math.min(box.left, window.innerWidth - width - 6))}px`;
@@ -370,16 +385,168 @@
   $('#search').addEventListener('input', (event) => { filter = event.target.value.trim(); render(); });
   $('#folder-filter').addEventListener('change', (event) => { folderFilter = event.target.value; chosen.clear(); render(); });
   grid.addEventListener('click', (event) => { if (event.target === grid) { chosen.clear(); syncSelection(); } });
+  // ---- Top action bar: full, compact (one row), icons only, or hidden ---------------------------------------
+  const BAR_LOOKS = [['full', 'מלא'], ['compact', 'מצומצם — שורה אחת'], ['icons', 'סמלים בלבד'], ['hidden', 'מוסתר']];
+  let lastShownBar = 'compact';
+  function applyBar(look) {
+    if (!BAR_LOOKS.some(([key]) => key === look)) return;
+    if (look !== 'hidden') lastShownBar = look;
+    root.dataset.bar = look;
+    store('aurum-ws-bar', look);
+  }
+  applyBar(stored('aurum-ws-bar', 'full'));
+
+  // ---- Keys: one table drives the handler, the button hints and the help window (so no key is listed twice) --
+  const NUMBER_ACTIONS = ['region', 'repeatRegion', 'screenshot', 'scrollCapture', 'ocrRegion', 'recordRegion'];
+  const KEYS = [
+    ['חיצים', 'מעבר בין הצילומים (עם שיפט — בחירת טווח)'],
+    ['בית / סוף', 'הצילום הראשון / האחרון'],
+    ['אנטר', 'עריכה'],
+    ['רווח', 'תצוגה גדולה של הצילום'],
+    ['F2', 'שינוי שם'],
+    ['Delete', 'העברה לסל המיחזור'],
+    ['קונטרול + C', 'העתקה'],
+    ['קונטרול + A', 'בחירת הכל'],
+    ['קונטרול + F', 'חיפוש'],
+    ['1 עד 6', 'צילום אזור · האזור הקודם · מסך מלא · עמוד גלילה · טקסט מאזור · הקלטת אזור'],
+    ['קונטרול + 1 עד 4', 'תצוגה: גדולה · רשת · רשימה · טבלה'],
+    ['קונטרול + פלוס / מינוס', 'הגדלה / הקטנה של התמונות (גם קונטרול + גלגלת)'],
+    ['קונטרול + F1', 'הסתרה / הצגה של סרגל הפעולות'],
+    ['? או F1', 'החלון הזה'],
+    ['אסקייפ', 'סגירה']
+  ];
+  // The number shows on each button of the bar and in its hint.
+  NUMBER_ACTIONS.forEach((action, index) => {
+    document.querySelectorAll(`.ribbon [data-action="${action}"]`).forEach((button) => {
+      button.dataset.key = String(index + 1);
+      button.title = `${button.querySelector('span:last-child')?.textContent || ''} (${index + 1})`;
+    });
+  });
+
+  // The neighbour in the direction of an arrow, as the pictures sit on screen (right-to-left rows).
+  function neighbour(key) {
+    const tiles = [...grid.querySelectorAll('.item')];
+    if (!tiles.length) return null;
+    const current = tiles.find((tile) => tile.dataset.path === anchor) || null;
+    if (!current) return tiles[0];
+    if (key === 'Home') return tiles[0];
+    if (key === 'End') return tiles.at(-1);
+    const index = tiles.indexOf(current);
+    if (key === 'ArrowLeft') return tiles[Math.min(tiles.length - 1, index + 1)];
+    if (key === 'ArrowRight') return tiles[Math.max(0, index - 1)];
+    const box = current.getBoundingClientRect();
+    const middle = box.left + box.width / 2;
+    const rows = tiles.filter((tile) => {
+      const other = tile.getBoundingClientRect();
+      return key === 'ArrowDown' ? other.top > box.bottom - 4 : other.bottom < box.top + 4;
+    });
+    if (!rows.length) return current;
+    const rowTop = key === 'ArrowDown' ? Math.min(...rows.map((tile) => tile.getBoundingClientRect().top)) : Math.max(...rows.map((tile) => tile.getBoundingClientRect().top));
+    const row = rows.filter((tile) => Math.abs(tile.getBoundingClientRect().top - rowTop) < 4);
+    return row.reduce((best, tile) => {
+      const distance = Math.abs(tile.getBoundingClientRect().left + tile.getBoundingClientRect().width / 2 - middle);
+      return distance < best.distance ? { tile, distance } : best;
+    }, { tile: row[0], distance: Infinity }).tile;
+  }
+  // Arrows choose the neighbour; with Shift the choice stretches from where the range began.
+  let rangeStart = null;
+  function moveTo(key, extend) {
+    const target = neighbour(key);
+    if (!target) return;
+    const list = visible();
+    const to = list.findIndex((entry) => entry.path === target.dataset.path);
+    if (to === -1) return;
+    chosen.clear();
+    if (extend) {
+      rangeStart = rangeStart || anchor || list[to].path;
+      const from = Math.max(0, list.findIndex((entry) => entry.path === rangeStart));
+      list.slice(Math.min(from, to), Math.max(from, to) + 1).forEach((entry) => chosen.add(entry.path));
+    } else {
+      rangeStart = null;
+      chosen.add(list[to].path);
+    }
+    anchor = list[to].path;
+    syncSelection();
+    target.scrollIntoView({ block: 'nearest' });
+  }
+
+  function previewDialog(item) {
+    openDialog((box) => {
+      box.dataset.kind = 'preview';
+      const media = item.kind === 'video'
+        ? make('video', { src: item.url || '', controls: true, autoplay: true })
+        : make('img', { src: item.url || item.thumbnail || '', alt: item.name });
+      box.append(make('h2', { textContent: item.name }), media, make('p', { className: 'hint', textContent: 'רווח או אסקייפ — סגירה · חיצים — הצילום הבא' }));
+    });
+  }
+  function renameDialog(item) {
+    openDialog((box) => {
+      box.dataset.kind = 'rename';
+      const extension = item.name.includes('.') ? item.name.slice(item.name.lastIndexOf('.')) : '';
+      const input = make('input', { type: 'text', value: item.name.slice(0, item.name.length - extension.length), maxLength: 160 });
+      const error = errorLine();
+      const save = async () => {
+        error.hidden = true;
+        try {
+          // Only the name: the main process keeps the file's own extension.
+          const result = await api.rename(item.path, input.value.trim());
+          chosen.clear(); chosen.add(result.path); anchor = result.path;
+          closeDialog();
+          await load();
+        } catch (failure) { error.textContent = failure.message; error.hidden = false; }
+      };
+      input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && input.value.trim()) save(); });
+      box.append(make('h2', { textContent: 'שינוי שם' }), input, error,
+        make('div', { className: 'buttons' }, make('button', { textContent: 'ביטול', onclick: closeDialog }), make('button', { className: 'primary', textContent: 'שמירה', onclick: () => input.value.trim() && save() })));
+      setTimeout(() => { input.focus(); input.select(); });
+    });
+  }
+  function keysDialog() {
+    openDialog((box) => {
+      box.dataset.kind = 'keys';
+      const table = make('table', { className: 'keys' });
+      KEYS.forEach(([key, what]) => table.append(make('tr', {}, make('td', {}, make('kbd', { textContent: key })), make('td', { textContent: what }))));
+      box.append(make('h2', { textContent: 'מקשי קיצור בלוח הצילומים' }), table, make('div', { className: 'buttons' }, make('button', { className: 'primary', textContent: 'סגירה', onclick: closeDialog })));
+    });
+  }
+
   document.addEventListener('keydown', (event) => {
     // An open dialog takes the keys: Escape closes it (not the window), typing in it never acts on captures.
-    if (!backdrop.hidden) { if (event.key === 'Escape') { event.preventDefault(); closeDialog(); } return; }
+    if (!backdrop.hidden) {
+      const kind = root.dataset.dialog;
+      if (event.key === 'Escape' || (kind === 'preview' && event.key === ' ')) { event.preventDefault(); return closeDialog(); }
+      if (kind === 'preview' && /^Arrow(Left|Right)$/.test(event.key)) {
+        event.preventDefault();
+        closeDialog();
+        moveTo(event.key, false);
+        const item = selectedItems()[0];
+        if (item) previewDialog(item);
+      }
+      return;
+    }
     if (event.target.id === 'search') { if (event.key === 'Escape') { event.target.value = ''; filter = ''; render(); grid.focus(); } return; }
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName)) return;
+    const one = selectedItems();
     if (event.key === 'Escape') { if (!menu.hidden) return closeMenu(); return api.close(); }
+    if (event.key === 'F1' && event.ctrlKey) { event.preventDefault(); return applyBar(root.dataset.bar === 'hidden' ? lastShownBar : 'hidden'); }
+    if (event.key === 'F1' || event.key === '?') { event.preventDefault(); return keysDialog(); }
     if (event.key === 'Enter') return run('edit');
     if (event.key === 'Delete') return run('trash');
+    if (event.key === 'F2') { event.preventDefault(); if (one.length === 1) renameDialog(one[0]); return; }
+    if (event.key === ' ') { event.preventDefault(); if (one.length) previewDialog(one[0]); return; }
+    if (/^(Arrow(Left|Right|Up|Down)|Home|End)$/.test(event.key) && !event.ctrlKey) { event.preventDefault(); return moveTo(event.key, event.shiftKey); }
     if (event.ctrlKey && event.code === 'KeyC') return run('copy');
     if (event.ctrlKey && event.code === 'KeyA') { event.preventDefault(); visible().forEach((item) => chosen.add(item.path)); return syncSelection(); }
+    if (event.ctrlKey && event.code === 'KeyF') { event.preventDefault(); $('#search').focus(); $('#search').select(); return; }
+    if (event.ctrlKey && /^Digit[1-4]$/.test(event.code)) { event.preventDefault(); applyLook({ view: VIEWS[Number(event.code.slice(5)) - 1] }); return render(); }
+    if (event.ctrlKey && (event.code === 'Equal' || event.code === 'NumpadAdd')) { event.preventDefault(); return applyLook({ size: Number($('#thumb-size').value) + 20 }); }
+    if (event.ctrlKey && (event.code === 'Minus' || event.code === 'NumpadSubtract')) { event.preventDefault(); return applyLook({ size: Number($('#thumb-size').value) - 20 }); }
+    if (!event.ctrlKey && !event.altKey && !event.metaKey && /^(Digit|Numpad)[1-6]$/.test(event.code)) {
+      event.preventDefault();
+      return api.runAction(NUMBER_ACTIONS[Number(event.code.slice(-1)) - 1]);
+    }
   });
+  window.aurumWorkspace = { keys: () => KEYS.map(([key]) => key), bar: () => root.dataset.bar, setBar: applyBar };
 
   api.onChanged(() => load());
   api.getState().then((state) => { $('#on-top').setAttribute('aria-pressed', String(Boolean(state.onTop))); });

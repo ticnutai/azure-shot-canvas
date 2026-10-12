@@ -59,6 +59,11 @@ async function launchStudio(testName, options = {}) {
   page.on('pageerror', (error) => runtimeErrors.push({ type: 'pageerror', text: error.message }));
   // Generous: on a busy machine (other heavy processes) a cold start can take well over 20 s.
   await page.waitForFunction(() => document.documentElement.dataset.appReady === 'true', null, { timeout: 45_000 });
+  // The live view starts off for users; most tests exercise it, so they turn it on (as a user would, remembered).
+  // { livePreview: 'default' } keeps the real first-run state.
+  if (options.livePreview !== 'default') {
+    await page.evaluate(() => { localStorage.setItem('aurum-live-preview', 'on'); setLivePreviewEnabled(true, false); });
+  }
   await page.waitForFunction(() => document.documentElement.dataset.sourcesLoading === 'false' && document.querySelectorAll('.source-card').length > 0, null, { timeout: 20_000 });
   return { app, page, outputDir, runtimeErrors };
 }

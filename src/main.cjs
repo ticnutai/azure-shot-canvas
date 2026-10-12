@@ -1138,12 +1138,33 @@ async function recentLibrary(limit = 48) {
     return stat && { name: entry.name, path: fullPath, size: stat.size, modified: stat.mtimeMs, extension: path.extname(entry.name).slice(1).toLowerCase(), kind: mediaKind(entry.name) };
   }));
   const newest = items.filter(Boolean).sort((a, b) => b.modified - a.modified).slice(0, limit);
-  // Folder tag and (for videos) a playable address, for the captures window.
-  return Promise.all(newest.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item), folder: (await readJson(`${item.path}.meta.json`))?.folder || '', url: item.kind === 'video' ? pathToFileURL(item.path).href : null })));
+  // Folder tag and the file's address (videos play from it; Space shows a picture full size), for the captures window.
+  return Promise.all(newest.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item), folder: (await readJson(`${item.path}.meta.json`))?.folder || '', url: pathToFileURL(item.path).href })));
 }
 
 // Only the app's own pages may call the main process: a foreign page that slipped into a window
 // would otherwise reach file, clipboard and ffmpeg handlers through the preload bridge.
+// Renames a capture in the library together with its companion files (edit project, labels, captions…).
+// Used by the studio's library and by the captures window.
+async function renameLibraryFile(filePath, requestedName) {
+  const directory = await ensureOutputDirectory();
+  const targetPath = renamedLibraryPath(filePath, directory, requestedName);
+  if (targetPath.toLowerCase() === path.resolve(filePath).toLowerCase()) return { path: filePath, name: path.basename(filePath) };
+  try { await fs.access(targetPath); throw new Error('כבר קיים קובץ בשם הזה'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  await fs.rename(filePath, targetPath);
+  const oldProjectPath = projectPathFor(filePath);
+  const newProjectPath = projectPathFor(targetPath);
+  try {
+    await fs.rename(oldProjectPath, newProjectPath);
+    const project = await readJson(newProjectPath);
+    if (project) await fs.writeFile(newProjectPath, JSON.stringify({ ...project, sourcePath: targetPath, outputPath: targetPath }, null, 2), 'utf8');
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  for (const suffix of ['.meta.json', '.quality.json', '.transcript.json', '.srt', '.chapters.json', '.cursor.json', '.timeline.json']) {
+    await fs.rename(`${filePath}${suffix}`, `${targetPath}${suffix}`).catch((error) => { if (error.code !== 'ENOENT') throw error; });
+  }
+  return { path: targetPath, name: path.basename(targetPath) };
+}
+
 function isTrustedSender(event) {
   return isAppUrl(event.senderFrame?.url);
 }
@@ -1304,24 +1325,7 @@ function registerIpc() {
   const openableLibraryFile = extensionPattern([...LIBRARY_FILE.source.match(/\(([^)]+)\)/)[1].split('|'), 'm4a']);
   ipcMain.handle('library:open', async (_event, filePath) => shell.openPath(await assertLibraryFile(filePath, openableLibraryFile)));
   ipcMain.handle('library:show', async (_event, filePath) => shell.showItemInFolder(await assertLibraryFile(filePath, openableLibraryFile)));
-  ipcMain.handle('library:rename', async (_event, filePath, requestedName) => {
-    const directory = await ensureOutputDirectory();
-    const targetPath = renamedLibraryPath(filePath, directory, requestedName);
-    if (targetPath.toLowerCase() === path.resolve(filePath).toLowerCase()) return { path: filePath, name: path.basename(filePath) };
-    try { await fs.access(targetPath); throw new Error('כבר קיים קובץ בשם הזה'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await fs.rename(filePath, targetPath);
-    const oldProjectPath = projectPathFor(filePath);
-    const newProjectPath = projectPathFor(targetPath);
-    try {
-      await fs.rename(oldProjectPath, newProjectPath);
-      const project = await readJson(newProjectPath);
-      if (project) await fs.writeFile(newProjectPath, JSON.stringify({ ...project, sourcePath: targetPath, outputPath: targetPath }, null, 2), 'utf8');
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    for (const suffix of ['.meta.json', '.quality.json', '.transcript.json', '.srt', '.chapters.json', '.cursor.json', '.timeline.json']) {
-      await fs.rename(`${filePath}${suffix}`, `${targetPath}${suffix}`).catch((error) => { if (error.code !== 'ENOENT') throw error; });
-    }
-    return { path: targetPath, name: path.basename(targetPath) };
-  });
+  ipcMain.handle('library:rename', (_event, filePath, requestedName) => renameLibraryFile(filePath, requestedName));
   ipcMain.handle('library:metadata', async (_event, filePath, metadata) => {
     const directory = path.resolve(await ensureOutputDirectory());
     const resolved = path.resolve(filePath);
@@ -1499,6 +1503,11 @@ function registerIpc() {
     return runFromWorkspace(action);
   });
   ipcMain.handle('workspace:folder', (_event, paths, folder) => setCaptureFolder(Array.isArray(paths) ? paths : [], folder));
+  ipcMain.handle('workspace:rename', async (_event, filePath, name) => {
+    const result = await renameLibraryFile(filePath, name);
+    notifyWorkspace();
+    return result;
+  });
   ipcMain.handle('workspace:guide', (_event, options) => createStepsGuide(options || {}));
   ipcMain.handle('workspace:trim', (_event, filePath, start, end) => trimVideo(filePath, start, end));
   ipcMain.handle('workspace:close', () => { workspaceWindow?.close(); return true; });

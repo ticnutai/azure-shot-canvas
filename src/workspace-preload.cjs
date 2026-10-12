@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('workspaceApi', {
   getState: () => ipcRenderer.invoke('workspace:state'),
   onChanged: (callback) => ipcRenderer.on('workspace:changed', () => callback()),
   setFolder: (paths, folder) => ipcRenderer.invoke('workspace:folder', paths, folder),
+  rename: (filePath, name) => ipcRenderer.invoke('workspace:rename', filePath, name),
   createGuide: (options) => ipcRenderer.invoke('workspace:guide', options),
   trim: (filePath, start, end) => ipcRenderer.invoke('workspace:trim', filePath, start, end)
 });

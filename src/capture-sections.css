@@ -26,3 +26,28 @@ html[data-collapsed-recent="true"] #capture-page .library-strip .recent-controls
 
 /* The toolbar wraps onto a second row in narrow windows instead of growing its own scrollbar. */
 #capture-page .source-toolbar { height: auto; min-height: 70px; flex-wrap: wrap; row-gap: 8px; padding-block: 12px; overflow: visible; }
+
+/* The live view switch: a clear on/off in the toolbar (off by default — the screen stream holds about 120 MB). */
+.live-switch { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 8px; border: 1px solid var(--line); border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.live-switch i { position: relative; width: 26px; height: 15px; border-radius: 999px; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background .12s; }
+.live-switch i::after { content: ""; position: absolute; top: 2px; inset-inline-start: 2px; width: 11px; height: 11px; border-radius: 50%; background: var(--panel, #fff); box-shadow: 0 1px 2px #0004; transition: inset-inline-start .12s; }
+.live-switch[aria-pressed="true"] { color: var(--text); border-color: color-mix(in srgb, var(--gold) 55%, var(--line)); }
+#live-preview-toggle.live-switch[aria-pressed="true"] i { background: var(--gold); }
+#live-preview-toggle.live-switch[aria-pressed="true"] i::after { inset-inline-start: 13px; }
+.live-switch:hover { color: var(--text); }
+html[data-preview-idle="true"] .live-switch span::after { content: " (מושהית)"; color: var(--muted); }
+
+/* Compact capture screen: no preview area, no source cards — one row to choose the source, one row to act. */
+html[data-capture-layout="compact"] #capture-page .capture-stage { grid-column: 1 / -1; }
+html[data-capture-layout="compact"] #capture-settings { display: none; }
+html[data-capture-layout="compact"] .layout-settings-button { display: inline-flex; }
+html[data-capture-layout="compact"] #capture-page :is(.capture-preview, .source-drawer) { display: none; }
+html[data-capture-layout="compact"] #capture-page :is(.live-switch, [data-collapse-toggle="sources"], [data-collapse-toggle="preview"]) { display: none; }
+html[data-capture-layout="compact"] #capture-page .transport-bar { min-height: 0; padding-block: 8px; }
+
+/* The recording row without its captions: chips and buttons shrink to their symbols (titles keep the names). */
+.transport-collapse { margin-inline-start: auto; }
+html[data-collapsed-transport="true"] #capture-page .capture-chips button { font-size: 0; padding-inline: 8px; }
+html[data-collapsed-transport="true"] #capture-page .capture-chips button .glyph-icon { font-size: 15px; margin: 0; }
+html[data-collapsed-transport="true"] #capture-page .transport-actions span { display: none; }
+html[data-collapsed-transport="true"] #capture-page .transport-bar { min-height: 0; padding-block: 6px; }

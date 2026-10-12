@@ -282,7 +282,11 @@ function openCaptureSettingsDialog() {
 }
 
 function applyCaptureLayout(layout = 'clean', persist = true) {
-  state.captureLayout = ['clean', 'professional', 'focus'].includes(layout) ? layout : 'clean';
+  const before = state.captureLayout;
+  state.captureLayout = ['clean', 'professional', 'focus', 'compact'].includes(layout) ? layout : 'clean';
+  // The compact layout has no preview area, so no screen stream either; leaving it brings the view back.
+  if (state.captureLayout === 'compact') stopLivePreview();
+  else if (before === 'compact') restoreLivePreview();
   document.documentElement.dataset.captureLayout = state.captureLayout;
   if ($('#capture-layout-select')) $('#capture-layout-select').value = state.captureLayout;
   $$('[data-capture-layout-choice]').forEach((button) => {
@@ -373,7 +377,8 @@ function restoreUserPreferences() {
   try { collapsed = JSON.parse(localStorage.getItem('aurum-collapsed') || '{}') || {}; } catch {}
   for (const section of Object.keys(COLLAPSIBLE_SECTIONS)) setSectionCollapsed(section, Boolean(collapsed[section]), false);
   applyAutomaticSwitches({ ...Object.fromEntries(Object.entries(AUTOMATIC_SWITCHES).map(([name, { key }]) => [name, localStorage.getItem(key) === 'on'])), autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean', imageFormat: localStorage.getItem('aurum-image-format') || 'png' }, false);
-  setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') !== 'off', false);
+  // Off unless the user turned it on: the live screen stream holds about 120 MB the whole time it runs.
+  setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') === 'on', false);
   setCaptureExclusion(localStorage.getItem('aurum-exclude-studio-window') !== 'off', false);
   applyCaptureLayout(localStorage.getItem('aurum-capture-layout') || 'clean', false);
   applyCapturePreferences(localStorage.getItem('aurum-default-capture-kind') || 'record', localStorage.getItem('aurum-default-capture-scope') || 'full', false);
@@ -722,7 +727,7 @@ function renderSources() {
 function setPreviewState(mode, message = '') {
   const stage = $('.capture-preview');
   if (!stage) return;
-  stage.classList.remove('preview-loading', 'preview-ready', 'preview-error');
+  stage.classList.remove('preview-loading', 'preview-ready', 'preview-error', 'preview-off');
   if (mode) stage.classList.add(`preview-${mode}`);
   document.documentElement.dataset.previewState = mode || 'idle';
   const help = stage.querySelector('.empty-preview p');
@@ -762,7 +767,7 @@ async function startLivePreview(source = state.selectedSource) {
   if (state.livePreviewEnabled === false) { showLivePreviewOff(); return false; }
   // Minimized or hidden in the tray: no one sees the preview, so no screen stream at all.
   if (state.windowHidden) return false;
-  if (state.collapsed?.preview) return false;
+  if (state.collapsed?.preview || state.captureLayout === 'compact') return false;
   if (!source || state.recorder || state.busy) return false;
   const sameSource = state.previewStream?.active && document.documentElement.dataset.previewSourceId === source.id;
   if (sameSource) {
@@ -817,6 +822,30 @@ async function startLivePreview(source = state.selectedSource) {
   }
 }
 
+// Two minutes without a touch on the studio window: the live view stops by itself (memory and processor back);
+// the first movement over the window brings it back. A recording is never touched.
+const PREVIEW_IDLE_MS = 120_000;
+state.lastActivity = Date.now();
+function noteActivity() {
+  state.lastActivity = Date.now();
+  if (state.previewIdlePaused && state.livePreviewEnabled && !state.recorder) {
+    state.previewIdlePaused = false;
+    document.documentElement.dataset.previewIdle = 'false';
+    restoreLivePreview();
+  }
+}
+function checkPreviewIdle(now = Date.now()) {
+  if (!state.previewStream || state.recorder || state.busy || state.previewIdlePaused) return false;
+  if (now - state.lastActivity < PREVIEW_IDLE_MS) return false;
+  stopLivePreview();
+  state.previewIdlePaused = true;
+  document.documentElement.dataset.previewIdle = 'true';
+  setPreviewState('off', 'התצוגה החיה נעצרה אחרי שתי דקות בלי פעולה, כדי לחסוך זיכרון — תזוזה של העכבר מחזירה אותה');
+  return true;
+}
+for (const name of ['pointermove', 'pointerdown', 'keydown', 'wheel']) window.addEventListener(name, noteActivity, { passive: true, capture: true });
+setInterval(() => checkPreviewIdle(), 15_000);
+
 function showLivePreviewOff() {
   setPreviewState('off', 'התצוגה החיה כבויה — הצילום וההקלטה עובדים כרגיל. כפתור העין בפינה מפעיל אותה.');
   if (state.selectedSource) $('#selected-source-label').textContent = state.selectedSource.name;
@@ -829,9 +858,10 @@ function setLivePreviewEnabled(enabled, persist = true) {
   const button = $('#live-preview-toggle');
   if (button) {
     button.setAttribute('aria-pressed', String(state.livePreviewEnabled));
-    button.textContent = state.livePreviewEnabled ? '◍' : '◌';
-    button.title = state.livePreviewEnabled ? 'תצוגה חיה פעילה — לחיצה לכיבוי' : 'תצוגה חיה כבויה — לחיצה להפעלה';
+    button.setAttribute('aria-checked', String(state.livePreviewEnabled));
+    button.title = state.livePreviewEnabled ? 'תצוגה חיה פועלת — לחיצה לכיבוי (חוסך כ־120 מגה זיכרון)' : 'תצוגה חיה כבויה — לחיצה להפעלה';
   }
+  state.previewIdlePaused = false;
   if ($('#live-preview-enabled')) $('#live-preview-enabled').checked = state.livePreviewEnabled;
   if (persist) localStorage.setItem('aurum-live-preview', state.livePreviewEnabled ? 'on' : 'off');
   if (state.recorder || state.busy) return;
@@ -865,7 +895,7 @@ function mediaErrorText(error) {
 }
 
 // Capture-screen sections that can be collapsed, remembered per user. Collapsing the preview stops its screen stream.
-const COLLAPSIBLE_SECTIONS = { sources: 'רצועת המקורות', preview: 'התצוגה', recent: 'המדיה האחרונה' };
+const COLLAPSIBLE_SECTIONS = { sources: 'רצועת המקורות', preview: 'התצוגה', recent: 'המדיה האחרונה', transport: 'הכיתוב בשורת ההקלטה' };
 function setSectionCollapsed(section, collapsed, persist = true) {
   if (!(section in COLLAPSIBLE_SECTIONS)) return;
   state.collapsed = { ...(state.collapsed || {}), [section]: Boolean(collapsed) };
@@ -2353,6 +2383,14 @@ async function initialize() {
   $('#preview-zoom').addEventListener('input', (event) => applyVisualCapturePreferences({ previewZoom: event.target.value }));
   $('#toggle-safe-area').addEventListener('click', () => applyVisualCapturePreferences({ safeArea: !state.safeArea }));
   $('#live-preview-toggle')?.addEventListener('click', () => setLivePreviewEnabled(!state.livePreviewEnabled));
+  // With the recording row's captions folded, the hint carries the name — always the button's current label.
+  for (const button of $$('#pause-recording, #record-button')) {
+    const label = button.querySelector('span');
+    if (!label) continue;
+    const sync = () => { button.title = label.textContent.trim(); };
+    sync();
+    new MutationObserver(sync).observe(label, { childList: true, characterData: true, subtree: true });
+  }
   $$('[data-collapse-toggle]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); setSectionCollapsed(button.dataset.collapseToggle, !state.collapsed?.[button.dataset.collapseToggle]); }));
   for (const [name, { control }] of Object.entries(AUTOMATIC_SWITCHES)) $(control)?.addEventListener('change', (event) => applyAutomaticSwitches({ [name]: event.target.checked }));
   $('#auto-beautify-style')?.addEventListener('change', (event) => applyAutomaticSwitches({ autoBeautifyStyle: event.target.value }));

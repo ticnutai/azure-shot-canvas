@@ -72,6 +72,10 @@ html[data-view="list"] .size-control,html[data-view="table"] .size-control{visib
 .item .thumb{width:100%;height:calc(var(--thumb) * .68);display:grid;place-items:end center;overflow:hidden}
 .item img{max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:3px;box-shadow:var(--shadow);background:#fff}
 .item .name{font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;padding:1px 5px;border-radius:4px;unicode-bidi:plaintext}
+/* The text box never grows past its card (it used to take the full width of a long name and push the page sideways). */
+.item .text{width:100%;min-width:0;max-width:100%}
+/* Large pictures: the name may take two lines, then ends with "…"; the full name shows on hover. */
+html[data-view="large"] .item .name{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:normal;overflow-wrap:anywhere;line-height:1.35;margin-inline:auto;width:fit-content}
 .item .meta{display:none;color:var(--muted);font-size:12px}
 .item[data-kind="video"] .thumb{position:relative}
 .item[data-kind="video"] .thumb::after{content:"▶";position:absolute;bottom:10px;left:50%;transform:translateX(-50%);width:34px;height:34px;border-radius:50%;background:#000a;color:#fff;display:grid;place-items:center;font-size:14px}
@@ -219,3 +223,48 @@ html[data-theme="graphite"] #dialog .buttons .primary{color:#1b1b1b}
 #dialog .error{color:#d93636}
 /* With many actions the ribbon groups wrap to a second row instead of being cut off. */
 html:not([data-theme="graphite"]) .ribbon{flex-wrap:wrap;row-gap:4px;overflow:visible}
+
+/* ---- Action bar looks (light designs: the ribbon; dark design: the round buttons at the bottom) ---- */
+/* Compact: one row, small icon with its name beside it, no group titles. */
+html[data-bar="compact"] .ribbon{flex-wrap:nowrap;overflow-x:auto;padding:4px 8px;row-gap:0}
+html[data-bar="compact"] .ribbon-group{flex-direction:row;padding:0 4px}
+html[data-bar="compact"] .ribbon-label{display:none}
+html[data-bar="compact"] .ribbon-buttons button{width:auto;display:flex;align-items:center;gap:6px;padding:4px 8px;white-space:nowrap}
+html[data-bar="compact"] .ribbon-buttons .tile{width:24px;height:24px;border-radius:6px}
+html[data-bar="compact"] .ribbon-buttons .tile svg{width:18px;height:18px}
+/* Icons only: one thin row, the name in the hint. */
+html[data-bar="icons"] .ribbon{flex-wrap:nowrap;overflow-x:auto;padding:2px 6px;row-gap:0}
+html[data-bar="icons"] .ribbon-group{flex-direction:row;padding:0 3px}
+html[data-bar="icons"] .ribbon-label,html[data-bar="icons"] .ribbon-buttons button>span:last-child{display:none}
+html[data-bar="icons"] .ribbon-buttons button{width:32px;padding:2px 0}
+html[data-bar="icons"] .ribbon-buttons .tile{width:24px;height:24px;border-radius:6px}
+html[data-bar="icons"] .ribbon-buttons .tile svg{width:18px;height:18px}
+html[data-bar="icons"] .ribbon-buttons button[data-key]::after{display:none}
+html[data-bar="hidden"] .ribbon,html[data-bar="hidden"] .actions{display:none!important}
+/* The dark design's round buttons follow the same choice. */
+html[data-bar="compact"] .actions{flex-basis:84px}
+html[data-bar="compact"] .round-action .ring{width:48px;height:48px;border-width:3px}
+html[data-bar="compact"] .round-action .ring svg{width:24px;height:24px}
+html[data-bar="compact"] .round-action .label{font-size:12px}
+html[data-bar="compact"] .more{height:48px;margin-bottom:22px}
+html[data-bar="icons"] .actions{flex-basis:62px}
+html[data-bar="icons"] .round-action .ring{width:42px;height:42px;border-width:3px}
+html[data-bar="icons"] .round-action .ring svg{width:21px;height:21px}
+html[data-bar="icons"] .round-action .label{display:none}
+html[data-bar="icons"] .more{height:42px;margin-bottom:0}
+/* The key number on each capture button of the bar. */
+.ribbon-buttons button[data-key]{position:relative}
+.ribbon-buttons button[data-key]::after{content:attr(data-key);position:absolute;top:2px;inset-inline-start:4px;min-width:14px;height:14px;padding:0 3px;border-radius:4px;background:var(--hover);color:var(--muted);font-size:10px;line-height:14px;text-align:center}
+html[data-bar="compact"] .ribbon-buttons button[data-key]::after{position:static;order:3}
+#menu .bar-mark{width:18px;height:18px;border-radius:5px;border:1px solid var(--line)}
+#menu button[aria-checked="true"] .bar-mark{background:var(--accent);border-color:var(--accent)}
+
+/* ---- Quick look (Space) and the keys window ---- */
+#dialog[data-kind="preview"]{width:min(1100px,calc(100vw - 32px))}
+#dialog[data-kind="preview"] h2{font-size:14px;unicode-bidi:plaintext;overflow-wrap:anywhere}
+#dialog[data-kind="preview"] img,#dialog[data-kind="preview"] video{width:100%;max-height:calc(100vh - 170px);object-fit:contain;background:#0002;border-radius:6px}
+#dialog .hint{font-size:12px}
+#dialog table.keys{border-collapse:collapse;width:100%;font-size:13px}
+#dialog table.keys td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+#dialog table.keys td:first-child{white-space:nowrap;width:1%}
+#dialog kbd{display:inline-block;padding:2px 7px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--card);font:inherit;font-size:12px}
