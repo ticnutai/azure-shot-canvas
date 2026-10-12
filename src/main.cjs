@@ -53,6 +53,7 @@ let quickbarWindow = null;
 let quickbarExpanded = false;
 let quickbarPreferences = { ...DEFAULT_QUICKBAR_PREFERENCES };
 let quickbarCursorTimer = null;
+let lastQuickbarTarget = null; // the place last asked for (Windows may keep the window slightly bigger)
 // Post-capture card: which view the bar shows and the recent captures it lists (newest first).
 let quickbarView = 'actions';
 let recentCaptures = [];
@@ -120,11 +121,23 @@ function quickbarDisplay() {
 function quickbarBounds(expanded = quickbarExpanded) {
   return calculateQuickbarBounds(quickbarDisplay().workArea, quickbarPreferences, expanded, { view: quickbarView, hasRecent: recentCaptures.length > 0, menu: quickbarMenu });
 }
-function positionQuickbar(expanded = quickbarExpanded) {
+// `onlyIfMoved`: the cursor-following check. Re-asserting the bar's place and its always-on-top level changes the
+// window order, and Windows then closes any open drop-down list in every window (they opened and shut at once);
+// so when the bar is already where it belongs, nothing is touched.
+function positionQuickbar(expanded = quickbarExpanded, { onlyIfMoved = false } = {}) {
   if (!quickbarWindow || quickbarWindow.isDestroyed()) return;
+  const target = quickbarBounds(Boolean(expanded || quickbarPreferences.pinned));
+  if (onlyIfMoved && lastQuickbarTarget) {
+    // Windows may keep the window a little larger than asked (a 6-point strip stays 10 tall), so compare with what
+    // was last asked for, and check that the window still sits where it was put.
+    const current = quickbarWindow.getBounds();
+    const sameTarget = ['x', 'y', 'width', 'height'].every((key) => target[key] === lastQuickbarTarget[key]);
+    if (sameTarget && Math.abs(current.x - target.x) <= 1 && Math.abs(current.y - target.y) <= 1) return;
+  }
   quickbarExpanded = Boolean(expanded || quickbarPreferences.pinned);
   if (!quickbarExpanded) { quickbarView = 'actions'; quickbarMenu = false; quickbarWindow.setFocusable(false); setCardKeys(null); }
-  quickbarWindow.setBounds(quickbarBounds(quickbarExpanded), false);
+  lastQuickbarTarget = quickbarBounds(quickbarExpanded);
+  quickbarWindow.setBounds(lastQuickbarTarget, false);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
   // With the bar switched off, the window only exists to show the capture card: no edge tab once it closes.
   const canShow = process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1';
@@ -138,7 +151,7 @@ function updateQuickbarCursorTracking() {
   quickbarCursorTimer = null;
   if (!quickbarPreferences.enabled || quickbarPreferences.display !== 'cursor') return;
   quickbarCursorTimer = setInterval(() => {
-    if (!quickbarExpanded && quickbarWindow && !quickbarWindow.isDestroyed()) positionQuickbar(false);
+    if (!quickbarExpanded && quickbarWindow && !quickbarWindow.isDestroyed()) positionQuickbar(false, { onlyIfMoved: true });
   }, 800);
   quickbarCursorTimer.unref?.();
 }
