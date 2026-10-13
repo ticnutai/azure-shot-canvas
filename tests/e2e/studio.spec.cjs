@@ -423,7 +423,8 @@ test.describe('Electron production workflow', () => {
       const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html'));
       return { bounds: win.getBounds(), workArea: screen.getDisplayMatching(win.getBounds()).workArea, alwaysOnTop: win.isAlwaysOnTop(), focusable: win.isFocusable() };
     });
-    expect(collapsed.bounds.width).toBe(6);
+    // The folded bar: an 18px strip (a thin line with a small tab in the middle).
+    expect(collapsed.bounds.width).toBe(18);
     expect(collapsed.bounds.x + collapsed.bounds.width).toBe(collapsed.workArea.x + collapsed.workArea.width);
     expect(collapsed.alwaysOnTop).toBeTruthy();
     expect(collapsed.focusable).toBeFalsy();
@@ -456,8 +457,8 @@ test.describe('Electron production workflow', () => {
       return { bounds: win.getBounds(), workArea: screen.getDisplayMatching(win.getBounds()).workArea };
     });
     expect(topBounds.bounds).toMatchObject({ width: 120, y: topBounds.workArea.y });
-    expect(topBounds.bounds.height).toBeGreaterThanOrEqual(6);
-    expect(topBounds.bounds.height).toBeLessThanOrEqual(19);
+    expect(topBounds.bounds.height).toBeGreaterThanOrEqual(18);
+    await expect.poll(async () => (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).getBounds().height))).toBeLessThanOrEqual(24);
 
     await page.locator('#quickbar-activation').selectOption('hover');
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-activation', 'hover');
