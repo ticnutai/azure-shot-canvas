@@ -64,6 +64,8 @@ contextBridge.exposeInMainWorld('screenStudio', {
   onLibraryChanged: (callback) => ipcRenderer.on('app:library-changed', () => callback()),
   onExternalImage: (callback) => ipcRenderer.on('capture:external-image', (_event, payload) => callback(payload)),
   onToast: (callback) => ipcRenderer.on('app:toast', (_event, text) => callback(text)),
+  getAppIcon: () => ipcRenderer.invoke('app:get-icon'),
+  setAppIcon: (choice) => ipcRenderer.invoke('app:set-icon', choice),
   onVisibility: (callback) => {
     ipcRenderer.on('app:visibility', (_event, visible) => callback(visible));
     ipcRenderer.send('app:visibility-request');

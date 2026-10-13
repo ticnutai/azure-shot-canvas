@@ -26,8 +26,15 @@ const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
   // The bar's own look: 'office' = white with coloured line icons (like the captures window); 'graphite' = dark.
   barLook: 'office',
   // Captures named after the window they came from ('Word – הצעת מחיר_…') instead of 'צילום_…'.
-  autoName: true
+  autoName: true,
+  // The folded bar's tab: its shape, and its colour ('look' = the bar look's own colour, or one of the icon colours).
+  tabStyle: 'tab',
+  tabColor: 'look'
 });
+
+const TAB_STYLES = ['tab', 'line', 'pill', 'dot', 'glass'];
+// The same colours as the program's icon (one list, in app-icons.js).
+const TAB_COLORS = ['look', ...require('./app-icons.js').COLORS.map((color) => color.id)];
 
 const CAPTURE_TIMEOUTS = [0, 4, 6, 10];
 const CAPTURE_DELAYS = [0, 3, 5, 10];
@@ -50,6 +57,8 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
   if (['workspace', 'panel'].includes(candidate.historyStyle)) next.historyStyle = candidate.historyStyle;
   if (['office', 'graphite'].includes(candidate.barLook)) next.barLook = candidate.barLook;
   if ('autoName' in candidate) next.autoName = Boolean(candidate.autoName);
+  if (TAB_STYLES.includes(candidate.tabStyle)) next.tabStyle = candidate.tabStyle;
+  if (TAB_COLORS.includes(candidate.tabColor)) next.tabColor = candidate.tabColor;
   if (CAPTURE_DELAYS.includes(Number(candidate.captureDelay))) next.captureDelay = Number(candidate.captureDelay);
   if (!next.enabled) next.pinned = false;
   return next;
@@ -142,4 +151,4 @@ function addRecentCapture(list, item, max = MAX_RECENT_CAPTURES) {
   return [item, ...list.filter((entry) => entry.path.toLowerCase() !== item.path.toLowerCase())].slice(0, max);
 }
 
-module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };
+module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };

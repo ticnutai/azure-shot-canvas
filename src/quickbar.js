@@ -32,6 +32,12 @@
     document.body.dataset.activation = preferences.activation;
     document.body.dataset.style = preferences.style || 'panel';
     document.body.dataset.look = preferences.barLook || 'graphite';
+    // The folded tab: shape, and (unless it follows the bar look) one of the program icon's colours.
+    document.body.dataset.tabStyle = preferences.tabStyle || 'tab';
+    const tabColor = window.AurumAppIcons?.COLORS.find((color) => color.id === preferences.tabColor);
+    document.body.dataset.tabColor = tabColor ? 'own' : 'look';
+    document.body.style.setProperty('--tab-light', tabColor?.light || '');
+    document.body.style.setProperty('--tab-dark', tabColor?.dark || '');
     document.querySelectorAll('.pin-toggle').forEach((button) => button.setAttribute('aria-pressed', String(preferences.pinned)));
   };
   const applyRecordingState = (active) => {

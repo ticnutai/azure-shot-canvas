@@ -56,6 +56,45 @@ let quickbarCursorTimer = null;
 let lastQuickbarTarget = null; // the place last asked for (Windows may keep the window slightly bigger)
 // The program's own icon for its windows and the taskbar (drawn from build/icon.svg by scripts/build-icons.cjs).
 const APP_ICON = path.join(__dirname, 'assets', 'app-icon.png');
+// The icon the user chose in settings (shape + colour): its pictures are drawn by the settings page and kept here.
+// Without a choice, the built-in pictures are used.
+const ICON_SIZES = [16, 20, 24, 32, 40, 48, 64, 256];
+let chosenIcon = null; // { shape, color, images: { size: 'data:image/png;base64,…' } }
+function appIconStatePath() { return path.join(app.getPath('userData'), 'app-icon.json'); }
+function windowIcon() {
+  return chosenIcon?.images?.[256] ? nativeImage.createFromDataURL(chosenIcon.images[256]) : APP_ICON;
+}
+// The tray picture at every screen scale (16 at 100%, 24 at 150%, 32 at 200% …), so it stays sharp.
+function trayIcon() {
+  if (!chosenIcon?.images) return nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png'));
+  const image = nativeImage.createEmpty();
+  for (const [scale, size] of [[1, 16], [1.25, 20], [1.5, 24], [2, 32], [2.5, 40], [3, 48]]) {
+    if (chosenIcon.images[size]) image.addRepresentation({ scaleFactor: scale, dataURL: chosenIcon.images[size] });
+  }
+  return image.isEmpty() ? nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png')) : image;
+}
+async function loadChosenIcon() {
+  const saved = await readJson(appIconStatePath());
+  if (saved?.images && typeof saved.shape === 'string') chosenIcon = saved;
+}
+async function setChosenIcon(choice) {
+  if (choice === null) chosenIcon = null;
+  else {
+    const images = {};
+    for (const size of ICON_SIZES) {
+      const value = choice?.images?.[size];
+      // Only small PNG pictures drawn by the settings page are accepted.
+      if (typeof value !== 'string' || !value.startsWith('data:image/png;base64,') || value.length > 600_000) throw new Error('תמונת הסמל אינה תקינה');
+      images[size] = value;
+    }
+    chosenIcon = { shape: String(choice.shape || '').slice(0, 30), color: String(choice.color || '').slice(0, 30), images };
+  }
+  if (chosenIcon) await fs.writeFile(appIconStatePath(), JSON.stringify(chosenIcon), 'utf8');
+  else await fs.rm(appIconStatePath(), { force: true });
+  tray?.setImage(trayIcon());
+  for (const win of [mainWindow, workspaceWindow]) if (win && !win.isDestroyed()) win.setIcon(windowIcon());
+  return { shape: chosenIcon?.shape || null, color: chosenIcon?.color || null };
+}
 // Post-capture card: which view the bar shows and the recent captures it lists (newest first).
 let quickbarView = 'actions';
 let recentCaptures = [];
@@ -501,7 +540,7 @@ function runQa() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    icon: APP_ICON,
+    icon: windowIcon(),
     // Started with Windows: stays in the tray (shortcuts and the bar work at once) until opened.
     show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1' && !startHidden,
     width: 1280,
@@ -1016,7 +1055,7 @@ async function openWorkspace() {
   });
   const bounds = savedOnScreen ? saved.bounds : { ...size, x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 };
   workspaceWindow = new BrowserWindow({
-    ...bounds, minWidth: 420, minHeight: 380, frame: false, show: false, title: 'לוח הצילומים', backgroundColor: '#5c5c5c', icon: APP_ICON,
+    ...bounds, minWidth: 420, minHeight: 380, frame: false, show: false, title: 'לוח הצילומים', backgroundColor: '#5c5c5c', icon: windowIcon(),
     alwaysOnTop: Boolean(saved.onTop), webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
   });
   workspaceWindow.setMenuBarVisibility(false);
@@ -1542,6 +1581,8 @@ function registerIpc() {
     return Boolean(onTop);
   });
   ipcMain.handle('workspace:open-studio', () => { showMainWindow(); mainWindow?.focus(); return true; });
+  ipcMain.handle('app:get-icon', () => ({ shape: chosenIcon?.shape || null, color: chosenIcon?.color || null }));
+  ipcMain.handle('app:set-icon', (_event, choice) => setChosenIcon(choice));
   ipcMain.handle('workspace:state', () => ({ onTop: Boolean(workspaceWindow?.isAlwaysOnTop()) }));
   ipcMain.on('workspace:start-drag', async (event, filePath) => {
     if (!isTrustedSender(event)) return;
@@ -1723,7 +1764,7 @@ function createTray() {
   if (tray || process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') return;
   // A real picture (tray.png, with @2x / @3x for scaled screens): Windows cannot draw an SVG here and showed an
   // empty white square.
-  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png'));
+  const icon = trayIcon();
   tray = new Tray(icon);
   tray.setToolTip('אורום סטודיו — צילום והקלטת מסך');
   buildTrayMenu();
@@ -1765,6 +1806,7 @@ app.whenReady().then(async () => {
   await ensureOutputDirectory();
   await recoverInterruptedRecordings();
   await loadQuickbarPreferences();
+  await loadChosenIcon();
   await applyFirstRunDefaults();
   registerIpc();
   // Deny every permission except the three the app uses, and only for its own pages.

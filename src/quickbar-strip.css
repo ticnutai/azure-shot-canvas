@@ -115,3 +115,38 @@ body[data-edge] #edge-handle span{display:block;position:absolute;width:10px;hei
 body[data-edge="top"] #edge-handle span{width:10px;height:10px;left:calc(50% - 5px);top:6px}
 body[data-edge="left"] #edge-handle span{top:calc(50% - 5px);left:6px}
 body[data-edge="right"] #edge-handle span{top:calc(50% - 5px);right:6px}
+
+/* ---- Tab styles (settings → appearance → the top bar's tab) ---- */
+/* Own colour: one of the program icon's colours instead of the bar look's. */
+body[data-tab-color="own"] #edge-handle{background:linear-gradient(135deg,var(--tab-light),var(--tab-dark))}
+/* Thin line: only the line, no tab. */
+body[data-tab-style="line"][data-edge="top"] #edge-handle{clip-path:inset(0 0 calc(100% - 4px) 0)}
+body[data-tab-style="line"][data-edge="left"] #edge-handle{clip-path:inset(0 calc(100% - 4px) 0 0)}
+body[data-tab-style="line"][data-edge="right"] #edge-handle{clip-path:inset(0 0 0 calc(100% - 4px))}
+body[data-tab-style="line"] #edge-handle span{display:none}
+/* Pill: a small floating capsule just off the edge, with a white dot. */
+body[data-tab-style="pill"][data-edge="top"] #edge-handle{clip-path:inset(3px calc(50% - 30px) 3px calc(50% - 30px) round 6px)}
+body[data-tab-style="pill"][data-edge="left"] #edge-handle{clip-path:inset(calc(50% - 30px) 3px calc(50% - 30px) 3px round 6px)}
+body[data-tab-style="pill"][data-edge="right"] #edge-handle{clip-path:inset(calc(50% - 30px) 3px calc(50% - 30px) 3px round 6px)}
+body[data-tab-style="pill"][data-edge] #edge-handle span{width:6px;height:6px;border:0;background:#fff}
+body[data-tab-style="pill"][data-edge="top"] #edge-handle span{left:calc(50% - 3px);top:6px}
+body[data-tab-style="pill"][data-edge="left"] #edge-handle span{top:calc(50% - 3px);left:6px}
+body[data-tab-style="pill"][data-edge="right"] #edge-handle span{top:calc(50% - 3px);right:6px}
+/* Dot: one round button at the middle of the edge with a white ring. */
+body[data-tab-style="dot"][data-edge="top"] #edge-handle{clip-path:circle(8px at 50% 8px)}
+body[data-tab-style="dot"][data-edge="left"] #edge-handle{clip-path:circle(8px at 8px 50%)}
+body[data-tab-style="dot"][data-edge="right"] #edge-handle{clip-path:circle(8px at calc(100% - 8px) 50%)}
+body[data-tab-style="dot"][data-edge] #edge-handle span{width:8px;height:8px;border-width:1.5px}
+body[data-tab-style="dot"][data-edge="top"] #edge-handle span{left:calc(50% - 4px);top:4px}
+body[data-tab-style="dot"][data-edge="left"] #edge-handle span{top:calc(50% - 4px);left:4px}
+body[data-tab-style="dot"][data-edge="right"] #edge-handle span{top:calc(50% - 4px);right:4px}
+/* Glass: a light frosted capsule with a coloured dot — quiet on any background. */
+body[data-tab-style="glass"] #edge-handle{background:#ffffffe6!important;box-shadow:inset 0 0 0 1px #0002}
+body[data-tab-style="glass"][data-edge="top"] #edge-handle{clip-path:inset(2px calc(50% - 26px) 4px calc(50% - 26px) round 7px)}
+body[data-tab-style="glass"][data-edge="left"] #edge-handle{clip-path:inset(calc(50% - 26px) 4px calc(50% - 26px) 2px round 7px)}
+body[data-tab-style="glass"][data-edge="right"] #edge-handle{clip-path:inset(calc(50% - 26px) 2px calc(50% - 26px) 4px round 7px)}
+body[data-tab-style="glass"][data-edge] #edge-handle span{width:7px;height:7px;border:0;background:var(--tab-dark,#1f6fe5)}
+body[data-tab-style="glass"][data-look="graphite"]:not([data-tab-color="own"]) #edge-handle span{background:#c99124}
+body[data-tab-style="glass"][data-edge="top"] #edge-handle span{left:calc(50% - 3.5px);top:5.5px}
+body[data-tab-style="glass"][data-edge="left"] #edge-handle span{top:calc(50% - 3.5px);left:5.5px}
+body[data-tab-style="glass"][data-edge="right"] #edge-handle span{top:calc(50% - 3.5px);right:5.5px}

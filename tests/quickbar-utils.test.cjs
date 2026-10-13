@@ -4,7 +4,7 @@ const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeF
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
-  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: false, captureDelay: 0, autoCopy: true, laptopCaptureKey: true, historyStyle: 'workspace', barLook: 'office', autoName: true });
+  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: false, captureDelay: 0, autoCopy: true, laptopCaptureKey: true, historyStyle: 'workspace', barLook: 'office', autoName: true, tabStyle: 'tab', tabColor: 'look' });
   assert.deepEqual(normalizeQuickbarPreferences({ enabled: false, edge: 'bottom' }, normalized), { ...normalized, enabled: false, pinned: false });
   assert.deepEqual(normalizeQuickbarPreferences({}), DEFAULT_QUICKBAR_PREFERENCES);
 });
@@ -128,4 +128,13 @@ test('the bar opens on touch by default, and a drag decides its edge: top band s
   const second = { x: 1920, y: 0, width: 1280, height: 984 };
   assert.equal(edgeForPointer(second, { x: 3100, y: 500 }), 'right');
   assert.equal(offsetForPointer(second, 'right', { x: 3100, y: 492 }), 0.5);
+});
+test('tab style and colour: only known values are kept, colours come from the icon list', () => {
+  const { normalizeQuickbarPreferences: normalize, TAB_COLORS, TAB_STYLES } = require('../src/quickbar-utils.cjs');
+  const icons = require('../src/app-icons.js');
+  assert.deepEqual(TAB_COLORS, ['look', ...icons.COLORS.map((color) => color.id)]);
+  assert.equal(new Set(TAB_STYLES).size, TAB_STYLES.length);
+  assert.deepEqual([normalize({}).tabStyle, normalize({}).tabColor], ['tab', 'look']);
+  assert.deepEqual([normalize({ tabStyle: 'pill', tabColor: 'green' }).tabStyle, normalize({ tabStyle: 'pill', tabColor: 'green' }).tabColor], ['pill', 'green']);
+  assert.deepEqual([normalize({ tabStyle: 'star', tabColor: '#fff' }).tabStyle, normalize({ tabStyle: 'star', tabColor: '#fff' }).tabColor], ['tab', 'look']);
 });
