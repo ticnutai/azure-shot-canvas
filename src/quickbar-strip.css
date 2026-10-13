@@ -106,3 +106,12 @@ body[data-edge="top"] #edge-handle{bottom:auto;height:6px}
 body[data-edge="left"] #edge-handle{right:auto;width:6px}
 body[data-edge="right"] #edge-handle{left:auto;width:6px}
 body[data-expanded="false"]{background:transparent}
+/* The folded bar, easy to find: a thin line along the edge with a small tab in its middle carrying a white lens
+   (the program's symbol). The shape is cut from the handle itself, so every bar look keeps its own colour. */
+body[data-edge="top"] #edge-handle{height:18px;border-radius:0;clip-path:polygon(0 0,100% 0,100% 5px,calc(50% + 24px) 5px,calc(50% + 24px) 12px,calc(50% + 18px) 18px,calc(50% - 18px) 18px,calc(50% - 24px) 12px,calc(50% - 24px) 5px,0 5px)}
+body[data-edge="left"] #edge-handle{width:18px;border-radius:0;clip-path:polygon(0 0,5px 0,5px calc(50% - 24px),12px calc(50% - 24px),18px calc(50% - 18px),18px calc(50% + 18px),12px calc(50% + 24px),5px calc(50% + 24px),5px 100%,0 100%)}
+body[data-edge="right"] #edge-handle{width:18px;border-radius:0;clip-path:polygon(100% 0,100% 100%,calc(100% - 5px) 100%,calc(100% - 5px) calc(50% + 24px),calc(100% - 12px) calc(50% + 24px),calc(100% - 18px) calc(50% + 18px),calc(100% - 18px) calc(50% - 18px),calc(100% - 12px) calc(50% - 24px),calc(100% - 5px) calc(50% - 24px),calc(100% - 5px) 0)}
+body[data-edge] #edge-handle span{display:block;position:absolute;width:10px;height:10px;border:2px solid #fff;border-radius:50%;box-sizing:border-box;background:transparent;box-shadow:none;pointer-events:none}
+body[data-edge="top"] #edge-handle span{width:10px;height:10px;left:calc(50% - 5px);top:6px}
+body[data-edge="left"] #edge-handle span{top:calc(50% - 5px);left:6px}
+body[data-edge="right"] #edge-handle span{top:calc(50% - 5px);right:6px}

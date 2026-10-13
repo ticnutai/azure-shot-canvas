@@ -11,9 +11,9 @@ test('quickbar preferences reject unknown values and unpin when disabled', () =>
 
 test('collapsed quickbar handle hugs every supported work-area edge', () => {
   const workArea = { x: -1920, y: 40, width: 1920, height: 1040 };
-  assert.deepEqual(quickbarBounds(workArea, { edge: 'left' }, false), { x: -1920, y: 500, width: 6, height: 120 });
-  assert.deepEqual(quickbarBounds(workArea, { edge: 'right' }, false), { x: -6, y: 500, width: 6, height: 120 });
-  assert.deepEqual(quickbarBounds(workArea, { edge: 'top' }, false), { x: -1020, y: 40, width: 120, height: 6 });
+  assert.deepEqual(quickbarBounds(workArea, { edge: 'left' }, false), { x: -1920, y: 500, width: 18, height: 120 });
+  assert.deepEqual(quickbarBounds(workArea, { edge: 'right' }, false), { x: -18, y: 500, width: 18, height: 120 });
+  assert.deepEqual(quickbarBounds(workArea, { edge: 'top' }, false), { x: -1020, y: 40, width: 120, height: 18 });
 });
 
 test('expanded quickbar stays inside normal and very small work areas', () => {
@@ -88,7 +88,7 @@ test('strip hugs its edge at the dragged position, grows inward for a menu and n
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.5 }, true, { menu: true }).height, 408);
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0 }, true).x, 0);
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 1 }, true).x, 1620);
-  assert.deepEqual(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.25 }, false), { x: 420, y: 0, width: 120, height: 6 });
+  assert.deepEqual(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.25 }, false), { x: 420, y: 0, width: 120, height: 18 });
   const right = quickbarBounds(workArea, { style: 'strip', edge: 'right', offset: 0.5 }, true, { menu: true });
   assert.deepEqual(right, { x: 1580, y: 348, width: 340, height: 344 });
   const left = quickbarBounds(workArea, { style: 'strip', edge: 'left', offset: 0.5 }, true);

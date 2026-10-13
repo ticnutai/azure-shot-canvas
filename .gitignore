@@ -9,3 +9,7 @@ playwright-report/
 *.mp4
 *.png
 !.github/**/*.png
+
+# The program's icon files (drawn by scripts/build-icons.cjs) are part of the source.
+!src/assets/*.png
+!build/icon.png

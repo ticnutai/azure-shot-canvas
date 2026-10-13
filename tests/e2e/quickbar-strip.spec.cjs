@@ -27,9 +27,11 @@ test.describe.serial('slim capture strip', () => {
   test('on by default: a tab in the top edge that opens into a slim strip flush with the edge', async () => {
     const collapsed = await barBounds();
     expect(collapsed.bounds).toMatchObject({ width: 120, y: collapsed.workArea.y });
-    // 6px line; Windows may keep the window itself a few pixels taller (invisible catch area).
-    expect(collapsed.bounds.height).toBeLessThanOrEqual(19);
-    expect(await strip.locator('#edge-handle').evaluate((node) => node.getBoundingClientRect().height)).toBe(6);
+    // An 18px strip (5px line + a tab with the lens in the middle); Windows may keep the window a few pixels taller.
+    // Right after start the window is a little taller for a moment, then settles.
+    await expect.poll(async () => (await barBounds()).bounds.height, { timeout: 5000 }).toBeLessThanOrEqual(24);
+    expect(await strip.locator('#edge-handle').evaluate((node) => node.getBoundingClientRect().height)).toBe(18);
+    expect(await strip.locator('#edge-handle span').evaluate((node) => getComputedStyle(node).display)).toBe('block');
     await strip.locator('#edge-handle').click();
     await expect.poll(async () => (await barBounds()).bounds.width).toBe(300);
     const open = await barBounds();

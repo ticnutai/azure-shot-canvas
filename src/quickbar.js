@@ -68,6 +68,12 @@
     if (preferences.pinned || !milliseconds) return;
     collapseTimer = setTimeout(() => setExpanded(false), milliseconds);
   };
+  // Program opened by hand: a short look at the open bar, then it folds back to its tab (unless pointed at).
+  api.onPeek?.(async (milliseconds) => {
+    if (document.body.dataset.expanded === 'true') return;
+    await setExpanded(true);
+    if (!hovering) scheduleCollapse(milliseconds);
+  });
 
   const formatDuration = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
   const formatSize = (bytes) => (bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);

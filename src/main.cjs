@@ -54,6 +54,8 @@ let quickbarExpanded = false;
 let quickbarPreferences = { ...DEFAULT_QUICKBAR_PREFERENCES };
 let quickbarCursorTimer = null;
 let lastQuickbarTarget = null; // the place last asked for (Windows may keep the window slightly bigger)
+// The program's own icon for its windows and the taskbar (drawn from build/icon.svg by scripts/build-icons.cjs).
+const APP_ICON = path.join(__dirname, 'assets', 'app-icon.png');
 // Post-capture card: which view the bar shows and the recent captures it lists (newest first).
 let quickbarView = 'actions';
 let recentCaptures = [];
@@ -173,6 +175,10 @@ async function createQuickbarWindow({ forCapture = false } = {}) {
   quickbarWindow.setContentProtection(true);
   quickbarWindow.webContents.send('quickbar:recording-state', Boolean(recordingSessions.size));
   updateQuickbarCursorTracking();
+  // Opened by hand (not at Windows start-up): the bar opens for a moment and folds back, so it is easy to find.
+  if (quickbarPreferences.enabled && !startHidden && !quickbarPreferences.pinned && process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') {
+    quickbarWindow.webContents.send('quickbar:peek', 2500);
+  }
   return quickbarWindow;
 }
 async function applyQuickbarPreferences(patch = {}) {
@@ -495,6 +501,7 @@ function runQa() {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    icon: APP_ICON,
     // Started with Windows: stays in the tray (shortcuts and the bar work at once) until opened.
     show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1' && !startHidden,
     width: 1280,
@@ -1009,7 +1016,7 @@ async function openWorkspace() {
   });
   const bounds = savedOnScreen ? saved.bounds : { ...size, x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 };
   workspaceWindow = new BrowserWindow({
-    ...bounds, minWidth: 420, minHeight: 380, frame: false, show: false, title: 'לוח הצילומים', backgroundColor: '#5c5c5c',
+    ...bounds, minWidth: 420, minHeight: 380, frame: false, show: false, title: 'לוח הצילומים', backgroundColor: '#5c5c5c', icon: APP_ICON,
     alwaysOnTop: Boolean(saved.onTop), webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
   });
   workspaceWindow.setMenuBarVisibility(false);
@@ -1714,7 +1721,9 @@ function showMainWindow(page = null) {
 
 function createTray() {
   if (tray || process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') return;
-  const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="9" fill="#c99124"/><circle cx="16" cy="16" r="7" fill="#071a34"/><circle cx="16" cy="16" r="3" fill="#fff"/></svg>').toString('base64')}`).resize({ width: 16, height: 16 });
+  // A real picture (tray.png, with @2x / @3x for scaled screens): Windows cannot draw an SVG here and showed an
+  // empty white square.
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'assets', 'tray.png'));
   tray = new Tray(icon);
   tray.setToolTip('אורום סטודיו — צילום והקלטת מסך');
   buildTrayMenu();

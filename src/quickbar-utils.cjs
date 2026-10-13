@@ -62,8 +62,9 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
 // An open menu adds menuLength along the edge's depth (top) or menuDepth inward (sides); sides grow to menuLength tall.
 const STRIP = Object.freeze({ thickness: 64, length: 300, menuDepth: 276, menuLength: 344 });
 const HISTORY_SIZE = Object.freeze({ width: 392, height: 470 });
-// The hidden bar: a thin line along the edge (thick enough to find with the pointer by pushing it to the edge).
-const TAB = Object.freeze({ thickness: 6, length: 120 });
+// The hidden bar: a thin line along the edge with a small tab in its middle (the tab shows where the bar is and is
+// easy to point at; the rest of the strip stays see-through).
+const TAB = Object.freeze({ thickness: 18, length: 120 });
 
 // Centre of a window of `size` placed at `offset` (0–1) along a span, kept fully inside it.
 function alongEdge(start, span, size, offset = 0.5) {
