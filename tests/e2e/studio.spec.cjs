@@ -434,11 +434,13 @@ test.describe('Electron production workflow', () => {
     await expect(quickbarPage.locator('[data-action]')).toHaveCount(8);
     await quickbarPage.locator('#pin').click();
     await expect(quickbarPage.locator('#pin')).toHaveAttribute('aria-pressed', 'true');
-    await quickbarPage.locator('#collapse').click();
+    // Pinned, it stays open when the pointer leaves; hide (×) still folds it and lets go of the pin.
+    await quickbarPage.locator('#quickbar').dispatchEvent('mouseleave');
+    await quickbarPage.waitForTimeout(1200);
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'true');
-    await quickbarPage.locator('#pin').click();
     await quickbarPage.locator('#collapse').click();
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'false');
+    await expect(quickbarPage.locator('#pin')).toHaveAttribute('aria-pressed', 'false');
     // Click mode closes on its own once the pointer leaves: the bar can never take focus, so no blur ever arrives.
     await quickbarPage.locator('#edge-handle').click();
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-expanded', 'true');
