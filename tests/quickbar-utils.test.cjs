@@ -45,8 +45,8 @@ test('capture card preferences accept only known timeouts and can be switched of
 
 test('capture card and recent strip get taller bounds that still fit the work area', () => {
   const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
-  assert.equal(quickbarBounds(workArea, { edge: 'right' }, true).height, 194);
-  assert.equal(quickbarBounds(workArea, { edge: 'right' }, true, { hasRecent: true }).height, 268);
+  assert.equal(quickbarBounds(workArea, { edge: 'right' }, true).height, 212);
+  assert.equal(quickbarBounds(workArea, { edge: 'right' }, true, { hasRecent: true }).height, 286);
   assert.equal(quickbarBounds(workArea, { edge: 'right' }, true, { view: 'capture' }).height, 382);
   assert.equal(quickbarBounds({ x: 0, y: 0, width: 400, height: 300 }, { edge: 'right' }, true, { view: 'capture' }).height, 300);
 });

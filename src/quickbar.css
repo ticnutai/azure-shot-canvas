@@ -26,3 +26,5 @@ body[data-has-recent="true"] .recent-strip{display:grid}
 .capture-actions button:focus-visible,.recent-item:focus-visible{outline:2px solid #ffd36a;outline-offset:-3px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 #show-actions{display:none}html[data-view="capture"] #show-actions{display:block}
+/* The bar is a set of buttons, not a page: clicking or dragging on it never selects its labels (that left grey boxes). */
+html,body{user-select:none}

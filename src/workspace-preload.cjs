@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('workspaceApi', {
   copy: (paths) => ipcRenderer.invoke('workspace:copy', paths),
   setDock: (patch) => ipcRenderer.invoke('workspace:dock', patch),
   dragDock: (active) => ipcRenderer.invoke('workspace:dock-drag', active),
+  resizeFrom: (grip) => ipcRenderer.send('workspace:resize', grip),
   setBusy: (busy) => ipcRenderer.send('workspace:busy', busy),
   onDock: (callback) => ipcRenderer.on('workspace:dock', (_event, state) => callback(state)),
   // Split in two windows: the list shares its choice with the tools window, which hands its buttons back to the list.

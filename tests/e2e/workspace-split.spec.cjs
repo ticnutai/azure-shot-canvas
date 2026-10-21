@@ -146,4 +146,36 @@ test.describe.serial('captures window split in two', () => {
     await expect(list.locator('html')).toHaveAttribute('data-split', 'on');
     await expect(list.locator('.ribbon')).toBeHidden();
   });
+
+  test('8 · handles on every side: dragging one makes the window bigger or smaller from that side', async () => {
+    const pointer = (point) => app.evaluate(({ screen }, value) => {
+      if (!globalThis.__realCursor) globalThis.__realCursor = screen.getCursorScreenPoint.bind(screen);
+      screen.getCursorScreenPoint = value ? () => value : globalThis.__realCursor;
+    }, point);
+    const bounds = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('workspace.html') && !candidate.webContents.getURL().includes('part=tools')).getBounds());
+    const press = (grip, type, buttons) => list.locator(`[data-grip="${grip}"]`).dispatchEvent(type, { button: 0, buttons, pointerId: 1 });
+    await expect(list.locator('[data-grip]')).toHaveCount(8);
+    const start = await bounds();
+    // The left side, dragged 100 points further left: wider, and the right side stays put.
+    await pointer({ x: start.x, y: start.y + 200 });
+    await press('w', 'pointerdown', 1);
+    await pointer({ x: start.x - 100, y: start.y + 200 });
+    await expect.poll(async () => (await bounds()).width).toBe(start.width + 100);
+    expect((await bounds()).x + (await bounds()).width).toBe(start.x + start.width);
+    await press('w', 'pointerup', 0);
+    // The bottom-right corner, dragged up and in: smaller on both sides, never below the smallest size.
+    const wide = await bounds();
+    await pointer({ x: wide.x + wide.width, y: wide.y + wide.height });
+    await press('se', 'pointerdown', 1);
+    await pointer({ x: wide.x + wide.width - 50, y: wide.y + wide.height - 2000 });
+    await expect.poll(async () => (await bounds()).height).toBe(380);
+    expect((await bounds()).width).toBe(wide.width - 50);
+    await press('se', 'pointerup', 0);
+    // Let go: moving the pointer no longer changes the window.
+    const after = await bounds();
+    await pointer({ x: 10, y: 10 });
+    await list.waitForTimeout(150);
+    expect(await bounds()).toEqual(after);
+    await pointer(null);
+  });
 });

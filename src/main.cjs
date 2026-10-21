@@ -228,6 +228,7 @@ async function applyQuickbarPreferences(patch = {}) {
   const wasEnabled = quickbarPreferences.enabled;
   await saveQuickbarPreferences(patch);
   if ('laptopCaptureKey' in patch) applyLaptopCaptureKey();
+  if ('tabStyle' in patch) workspacePanels().forEach((panel) => panel.refreshShape());
   // The settings screen shows the same values the bar's toggles change.
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:quickbar-preferences', quickbarPreferences);
   // Switching the bar off closes its window; other setting changes while it is off keep the capture card's window.
@@ -1081,7 +1082,7 @@ const workspacePanel = new DockPanel({
   page: path.join(__dirname, 'workspace.html'), preload: path.join(__dirname, 'workspace-preload.cjs'),
   title: 'לוח הצילומים', icon: () => windowIcon(), size: { width: 736, height: 612 }, min: { width: 420, height: 380 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 }),
-  defaultDock: { edge: 'right', offset: 0.5 },
+  defaultDock: { edge: 'right', offset: 0.5 }, tabStyle: () => quickbarPreferences.tabStyle,
   // The buttons belong to the list: closing the list closes them too (the split is kept for next time).
   onClosed: () => toolsPanel.close()
 });
@@ -1091,7 +1092,7 @@ const toolsPanel = new DockPanel({
   title: 'כלי הצילום', icon: () => windowIcon(), size: { width: 760, height: 190 }, min: { width: 280, height: 70 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + 12 }),
   // Its tab sits higher on the same edge, so the two tabs never cover each other.
-  defaultDock: { edge: 'right', offset: 0.22 }
+  defaultDock: { edge: 'right', offset: 0.22 }, tabStyle: () => quickbarPreferences.tabStyle
 });
 const workspacePanels = () => [workspacePanel, toolsPanel];
 const panelFor = (event) => workspacePanels().find((panel) => panel.owns(event.sender)) || workspacePanel;
@@ -1610,6 +1611,7 @@ function registerIpc() {
   ipcMain.handle('workspace:folder', (_event, paths, folder) => setCaptureFolder(Array.isArray(paths) ? paths : [], folder));
   ipcMain.handle('workspace:copy', (_event, paths) => copyCapturesToClipboard(paths));
   ipcMain.handle('workspace:dock', (event, patch) => panelFor(event).setDock(patch && typeof patch === 'object' ? patch : {}));
+  ipcMain.on('workspace:resize', (event, grip) => { const panel = workspacePanels().find((candidate) => candidate.owns(event.sender)); panel?.resizeFrom(typeof grip === 'string' ? grip : null); });
   ipcMain.handle('workspace:dock-drag', (event, active) => { panelFor(event).dragTab(Boolean(active)); return true; });
   ipcMain.on('workspace:busy', (event, busy) => { const panel = workspacePanels().find((candidate) => candidate.owns(event.sender)); if (panel) panel.busy = Boolean(busy); });
   ipcMain.handle('workspace:split', (_event, split) => setWorkspaceSplit(Boolean(split)));

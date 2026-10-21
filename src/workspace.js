@@ -437,6 +437,22 @@
   api.onDock?.(applyDock);
   $('#dock').addEventListener('click', async () => applyDock(await api.setDock?.({ enabled: !dockState.enabled }) || { enabled: !dockState.enabled, expanded: !dockState.enabled }));
 
+  // Handles on every side and corner: pressing one lets the main process follow the pointer until the button is let go.
+  document.querySelectorAll('[data-grip]').forEach((grip) => {
+    let held = false;
+    const letGo = () => { if (!held) return; held = false; delete root.dataset.resizing; api.resizeFrom?.(null); };
+    grip.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      held = true;
+      root.dataset.resizing = grip.dataset.grip;
+      grip.setPointerCapture(event.pointerId);
+      api.resizeFrom?.(grip.dataset.grip);
+    });
+    grip.addEventListener('pointermove', (event) => { if (held && !(event.buttons & 1)) letGo(); });
+    grip.addEventListener('pointerup', letGo);
+    grip.addEventListener('lostpointercapture', letGo);
+  });
+
   // The folded tab: pointing opens (after a breath, so a drag can start), a click opens, pressing and moving drags.
   const tab = $('#dock-tab');
   let tabTimer = 0;

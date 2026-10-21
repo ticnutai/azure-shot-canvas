@@ -14,14 +14,16 @@ async function readJson(filePath) {
 }
 
 // The folded window is cut to the tab's own shape — a thin line along the edge and a small tab in its middle — so
-// nothing else of the (non-transparent) window shows. An empty list gives the whole window back.
-function tabShape(edge) {
+// nothing else of the (non-transparent) window shows. An empty list gives the whole window back. With the "line" tab
+// style (chosen for the top bar in the settings) every tab of the program is the thin line only.
+function tabShape(edge, style = 'tab') {
+  if (style === 'line') return edge === 'top' ? [{ x: 0, y: 0, width: 120, height: 5 }] : [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }];
   if (edge === 'top') return [{ x: 0, y: 0, width: 120, height: 5 }, { x: 36, y: 0, width: 48, height: 18 }];
   return [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }, { x: 0, y: 36, width: 18, height: 48 }];
 }
 
 class DockPanel {
-  // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock · onClosed()
+  // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock · tabStyle() · onClosed()
   constructor(options) {
     this.options = options;
     this.window = null;
@@ -32,6 +34,7 @@ class DockPanel {
     this.busy = false;
     this.pointerTimer = null;
     this.dragTimer = null;
+    this.resizeTimer = null;
   }
 
   readDock(saved) {
@@ -90,7 +93,7 @@ class DockPanel {
     };
     win.on('move', remember);
     win.on('resize', remember);
-    win.on('closed', () => { this.window = null; this.busy = false; this.watchPointer(false); this.dragTab(false); this.options.onClosed?.(); });
+    win.on('closed', () => { this.window = null; this.busy = false; this.watchPointer(false); this.dragTab(false); this.resizeFrom(null); this.options.onClosed?.(); });
     await win.loadFile(this.options.page, this.options.query ? { query: this.options.query } : undefined);
     if (!this.isOpen()) return { opened: false };
     // Hidden in an edge last time: back in its edge, open for a moment so it is clear where it went.
@@ -160,8 +163,10 @@ class DockPanel {
   }
   shape(folded) {
     if (typeof this.window?.setShape !== 'function') return;
-    try { this.window.setShape(folded ? tabShape(this.dock.edge) : []); } catch {}
+    try { this.window.setShape(folded ? tabShape(this.dock.edge, this.options.tabStyle?.()) : []); } catch {}
   }
+  // The tab style was changed in the settings: a folded tab takes the new shape at once.
+  refreshShape() { if (this.isOpen() && this.dock.enabled && !this.dock.expanded) this.shape(true); }
   setExpanded(expanded) {
     if (!this.isOpen() || !this.dock.enabled) return;
     const { min } = this.options;
@@ -216,6 +221,30 @@ class DockPanel {
     else if ('pinned' in patch) { this.sendDock(); this.watchPointer(this.dock.expanded && !this.dock.pinned); }
     this.save();
     return this.state();
+  }
+  // A handle on a side or a corner is being dragged: the window grows or shrinks from that side, following the
+  // pointer (the title bar moves the window, so the system's own resize border does not reach the top). Not while
+  // folded or full screen. `grip` is n, s, e, w or a corner (ne, nw, se, sw); null lets go.
+  resizeFrom(grip) {
+    clearInterval(this.resizeTimer);
+    this.resizeTimer = null;
+    if (!grip || !/^(n|s|e|w|ne|nw|se|sw)$/.test(grip) || !this.isOpen() || this.window.isMaximized() || (this.dock.enabled && !this.dock.expanded)) return;
+    const start = this.window.getBounds();
+    const from = screen.getCursorScreenPoint();
+    const { min } = this.options;
+    this.resizeTimer = setInterval(() => {
+      if (!this.isOpen()) return this.resizeFrom(null);
+      const point = screen.getCursorScreenPoint();
+      const dx = point.x - from.x;
+      const dy = point.y - from.y;
+      let { x, y, width, height } = start;
+      if (grip.includes('e')) width = Math.max(min.width, start.width + dx);
+      if (grip.includes('w')) { width = Math.max(min.width, start.width - dx); x = start.x + start.width - width; }
+      if (grip.includes('s')) height = Math.max(min.height, start.height + dy);
+      if (grip.includes('n')) { height = Math.max(min.height, start.height - dy); y = start.y + start.height - height; }
+      const now = this.window.getBounds();
+      if (now.x !== x || now.y !== y || now.width !== width || now.height !== height) this.window.setBounds({ x, y, width, height });
+    }, 16);
   }
   // Dragging the folded tab: it follows the pointer along the nearest edge (left, right or top) of any screen.
   dragTab(active) {

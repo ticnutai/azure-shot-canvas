@@ -181,7 +181,15 @@
     if (wasDragging) await endDrag();
     else setExpanded(true);
   });
-  document.querySelector('#collapse').addEventListener('click', () => setExpanded(false));
+  // Hide (×) always folds the bar, also when it is pinned: the pin is let go first (pinned, it used to stay open).
+  const hideNow = async () => {
+    if (preferences.pinned) {
+      preferences = await api.setPreferences({ pinned: false });
+      document.querySelectorAll('.pin-toggle').forEach((button) => button.setAttribute('aria-pressed', 'false'));
+    }
+    await setExpanded(false);
+  };
+  document.querySelector('#collapse').addEventListener('click', hideNow);
   document.querySelector('#show-actions').addEventListener('click', async () => { setView('actions'); await api.setView('actions'); renderStrip(); syncCardKeys(); });
   document.querySelectorAll('.pin-toggle').forEach((pinButton) => pinButton.addEventListener('click', async () => {
     preferences = await api.setPreferences({ pinned: !preferences.pinned });
@@ -286,7 +294,7 @@
   document.querySelectorAll('.strip-more').forEach((button) => button.addEventListener('click', () => (
     document.body.dataset.menuOpen === 'true' && document.body.dataset.menuName === button.dataset.menu ? closeMenu() : openMenu(button.dataset.menu)
   )));
-  document.querySelector('#strip-hide').addEventListener('click', () => setExpanded(false));
+  document.querySelector('#strip-hide').addEventListener('click', hideNow);
 
   // History grid: the newest captures from the library, with the card's actions one click away.
   const formatWhen = (time) => {

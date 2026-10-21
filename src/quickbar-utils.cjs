@@ -99,7 +99,7 @@ function quickbarBounds(workArea, preferences, expanded = false, { view = 'actio
   let height;
   let margin = Math.min(6, Math.max(0, workArea.width - 356));
   if (view === 'history') ({ width, height } = HISTORY_SIZE);
-  else if (view === 'capture' || !strip) { width = 356; height = view === 'capture' ? 382 : hasRecent ? 268 : 194; }
+  else if (view === 'capture' || !strip) { width = 356; height = view === 'capture' ? 382 : hasRecent ? 286 : 212; }
   else {
     // The strip sits flush against its edge; an open menu grows it inward.
     margin = 0;

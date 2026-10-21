@@ -311,3 +311,19 @@ html[data-part="tools"][data-bar="hidden"] .ribbon{display:flex!important}
 html[data-part="tools"][data-bar="hidden"][data-theme="graphite"] .ribbon{display:none!important}
 html[data-part="tools"] .actions{flex-wrap:wrap;align-content:center;overflow:hidden}
 html[data-part="tools"][data-bar="hidden"][data-theme="graphite"] .actions{display:flex!important}
+
+/* ---- Handles on every side and corner (the window has no system frame) ---- */
+.grips i{position:fixed;z-index:30;-webkit-app-region:no-drag;display:block}
+.grips [data-grip="n"],.grips [data-grip="s"]{left:14px;right:14px;height:6px;cursor:ns-resize}
+.grips [data-grip="n"]{top:0}.grips [data-grip="s"]{bottom:0}
+.grips [data-grip="e"],.grips [data-grip="w"]{top:14px;bottom:14px;width:6px;cursor:ew-resize}
+.grips [data-grip="e"]{right:0}.grips [data-grip="w"]{left:0}
+.grips [data-grip="ne"],.grips [data-grip="nw"],.grips [data-grip="se"],.grips [data-grip="sw"]{width:14px;height:14px}
+.grips [data-grip="ne"]{top:0;right:0;cursor:nesw-resize}.grips [data-grip="sw"]{bottom:0;left:0;cursor:nesw-resize}
+.grips [data-grip="nw"]{top:0;left:0;cursor:nwse-resize}.grips [data-grip="se"]{bottom:0;right:0;cursor:nwse-resize}
+/* A thin accent line shows the side under the pointer (and the one being dragged). */
+.grips [data-grip]:hover,html[data-resizing] .grips [data-grip]:active{background:color-mix(in srgb,var(--select) 55%,transparent)}
+.grips [data-grip]:is([data-grip="ne"],[data-grip="nw"],[data-grip="se"],[data-grip="sw"]):hover{border-radius:3px}
+/* A small corner mark so the handles can be found. */
+.grips [data-grip="sw"]::after{content:"";position:absolute;left:3px;bottom:3px;width:7px;height:7px;border-left:2px solid var(--muted);border-bottom:2px solid var(--muted);opacity:.55}
+html[data-docked="folded"] .grips{display:none}

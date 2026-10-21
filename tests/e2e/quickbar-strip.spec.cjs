@@ -87,9 +87,10 @@ test.describe.serial('slim capture strip', () => {
     await strip.locator('#strip').dispatchEvent('mouseleave');
     await strip.waitForTimeout(1800);
     await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'true');
-    await strip.locator('#strip-pin').click();
+    // Hide works while pinned too: the pin is let go and the bar folds (it used to stay stuck open).
     await strip.locator('#strip-hide').click();
     await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'false');
+    await expect(strip.locator('#strip-pin')).toHaveAttribute('aria-pressed', 'false');
     await expect.poll(async () => (await barBounds()).bounds.width).toBe(120);
   });
 
