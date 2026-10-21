@@ -187,6 +187,19 @@ test.describe.serial('region capture on the frozen screen', () => {
     expect(await pngsSince(before)).toEqual([]);
   });
 
+  test('a QR code in the area is read first: its content goes to the clipboard, a link opens from the notice', async () => {
+    const QRCode = require('qrcode');
+    const png = await QRCode.toBuffer('https://example.com/קוד', { margin: 4, scale: 6 });
+    const result = await app.evaluate(async ({ clipboard }, bytes) => {
+      const outcome = await globalThis.__aurumQa.copyTextFromImage(Buffer.from(bytes));
+      return { outcome, clipboard: clipboard.readText(), notice: globalThis.__aurumQa.lastNotice };
+    }, [...png]);
+    expect(result.outcome).toMatchObject({ code: true });
+    expect(result.clipboard).toBe('https://example.com/קוד');
+    expect(result.notice.title).toContain('נקרא קוד');
+    expect(result.notice.clickable).toBe(true);
+  });
+
   test('a delayed capture shows the countdown first and freezes the screen only after it', async () => {
     await setPreferences({ captureDelay: 3 });
     const since = Date.now();

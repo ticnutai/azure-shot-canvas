@@ -9,6 +9,7 @@ const { EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, captureFilePath, develope
 const { pdfFromJpeg } = require('./pdf-utils.cjs');
 const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
+const { isOpenableLink, readCode } = require('./code-reader.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, imageMimeType, projectPathFor } = require('./editor-utils.cjs');
 const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, registerWithFallbacks, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
@@ -133,7 +134,7 @@ let recordingControls = null;
 let lastNotice = null;
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, ...(process.env.SCREEN_STUDIO_QA === '1' ? { copyTextFromImage } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -382,6 +383,18 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture' } = {}) {
 
 // Text recognition (Hebrew and English) of a cut area, straight to the clipboard; no image is saved.
 async function copyTextFromImage(png) {
+  // A QR code in the area comes first: its content (often a link) goes to the clipboard; a link opens from the notice.
+  try {
+    const image = nativeImage.createFromBuffer(Buffer.from(png));
+    const size = image.getSize();
+    const code = readCode(image.toBitmap(), size.width, size.height);
+    if (code) {
+      clipboard.writeText(code);
+      lastOcrText = code;
+      notify('נקרא קוד — התוכן הועתק ללוח', isOpenableLink(code) ? `${code.slice(0, 110)}\nלחיצה כאן פותחת את הקישור` : code.slice(0, 120), isOpenableLink(code) ? () => shell.openExternal(code) : null);
+      return { ocr: true, code: true, characters: code.length };
+    }
+  } catch {}
   const temporaryPath = path.join(os.tmpdir(), `aurum-ocr-${process.pid}-${Date.now()}.png`);
   try {
     await fs.writeFile(temporaryPath, png);
@@ -400,10 +413,14 @@ async function copyTextFromImage(png) {
 }
 
 // A short system notice (the studio window is usually hidden during quick captures).
-function notify(title, body = '') {
-  if (process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') { lastNotice = { title, body }; return; }
-  if (Notification.isSupported()) new Notification({ title, body, silent: true }).show();
-  else mainWindow?.webContents.send('app:toast', `${title} ${body}`);
+// `onClick`: what a click on the notice does (e.g. open the link read from a code).
+function notify(title, body = '', onClick = null) {
+  if (process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') { lastNotice = { title, body, clickable: Boolean(onClick) }; return; }
+  if (Notification.isSupported()) {
+    const notice = new Notification({ title, body, silent: true });
+    if (onClick) notice.on('click', onClick);
+    notice.show();
+  } else mainWindow?.webContents.send('app:toast', `${title} ${body}`);
 }
 
 // Big countdown in the middle of the screen before a delayed capture; it never appears in the capture itself.
