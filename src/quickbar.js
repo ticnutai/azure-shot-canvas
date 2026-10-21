@@ -169,6 +169,7 @@
     handle.setPointerCapture(event.pointerId);
   });
   handle.addEventListener('pointermove', (event) => {
+    if (dragging && !(event.buttons & 1)) { pressedAt = null; endDrag(); return; }
     if (!pressedAt || dragging || Math.hypot(event.screenX - pressedAt.x, event.screenY - pressedAt.y) < 5) return;
     dragging = true;
     root.dataset.dragging = 'true';
@@ -380,16 +381,25 @@
   document.querySelector('#history-library').addEventListener('click', () => { setExpanded(false); api.runAction('openLibrary'); });
 
   // Dragging the grip slides the strip along its edge; the main process follows the pointer and saves the spot.
+  // A plain click on the grip moves nothing: the drag starts only after the pointer travels a few pixels,
+  // and it ends the moment the button is no longer held, even if the release itself was missed.
   let dragging = false;
+  let gripPressedAt = null;
   const grip = document.querySelector('#strip-grip');
   grip.addEventListener('pointerdown', (event) => {
     if (event.button !== 0) return;
-    dragging = true;
+    gripPressedAt = { x: event.screenX, y: event.screenY };
     grip.setPointerCapture(event.pointerId);
     closeMenu();
+  });
+  grip.addEventListener('pointermove', (event) => {
+    if (dragging && !(event.buttons & 1)) { endDrag(); return; }
+    if (!gripPressedAt || dragging || Math.hypot(event.screenX - gripPressedAt.x, event.screenY - gripPressedAt.y) < 5) return;
+    dragging = true;
     api.drag(true);
   });
   const endDrag = async () => {
+    gripPressedAt = null;
     if (!dragging) return;
     dragging = false;
     root.dataset.dragging = 'false';

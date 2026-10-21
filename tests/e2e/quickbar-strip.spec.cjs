@@ -41,6 +41,34 @@ test.describe.serial('slim capture strip', () => {
     await expect(strip.locator('[data-strip-action]')).toHaveCount(2);
   });
 
+  test('a plain click on the grip moves nothing; a drag ends as soon as the button is no longer held', async () => {
+    const dragging = () => app.evaluate(() => globalThis.__aurumQa.quickbarDragging);
+    const prefs = () => strip.evaluate(() => window.quickbarApi.getState().then((state) => state.preferences));
+    const before = await prefs();
+    const fire = (type, dx, buttons) => strip.locator('#strip-grip').evaluate((grip, [kind, x, held]) => {
+      const box = grip.getBoundingClientRect();
+      grip.dispatchEvent(new PointerEvent(kind, { bubbles: true, button: 0, buttons: held, pointerId: 1, screenX: window.screenX + box.x + x, screenY: window.screenY + box.y + 4, clientX: box.x + x, clientY: box.y + 4 }));
+    }, [type, dx, buttons]);
+    // A click (press and release in place) — the bar stays where it is.
+    await fire('pointerdown', 4, 1);
+    await fire('pointermove', 6, 1);
+    expect(await dragging()).toBe(false);
+    await fire('pointerup', 6, 0);
+    expect(await dragging()).toBe(false);
+    expect(await prefs()).toMatchObject({ edge: before.edge, offset: before.offset });
+    // A real drag starts only after moving a few pixels, and stops on the first move with the button let go.
+    await fire('pointerdown', 4, 1);
+    await fire('pointermove', 30, 1);
+    await expect.poll(dragging).toBe(true);
+    await fire('pointermove', 32, 0);
+    await expect.poll(dragging).toBe(false);
+    // While it was dragging the bar followed the real pointer; put it back for the next tests.
+    await strip.evaluate((spot) => window.quickbarApi.setPreferences(spot), { edge: before.edge, offset: before.offset, display: before.display });
+    await expect(strip.locator('body')).toHaveAttribute('data-edge', 'top');
+    if (await strip.locator('body').getAttribute('data-expanded') !== 'true') await strip.locator('#edge-handle').click();
+    await expect.poll(async () => (await barBounds()).bounds.width).toBe(300);
+  });
+
   test('each large button has a drop-down menu that grows the strip and closes again', async () => {
     await strip.locator('.strip-more[data-menu="capture"]').click();
     await expect.poll(async () => (await barBounds()).bounds.height).toBe(408);
