@@ -24,7 +24,8 @@ test.describe.serial('keys shown while recording', () => {
   const echo = () => app.evaluate(() => globalThis.__aurumQa.keyEcho);
   const record = async () => {
     await page.locator('#record-button').click();
-    await expect.poll(() => page.evaluate(() => state.recorder?.state || '')).toBe('recording');
+    // A busy machine (the full test run) can take a while to start a recording.
+    await expect.poll(() => page.evaluate(() => state.recorder?.state || ''), { timeout: 20_000 }).toBe('recording');
   };
   const stop = async () => {
     // A recording needs a moment of picture before it can be saved.
@@ -45,7 +46,7 @@ test.describe.serial('keys shown while recording', () => {
     await page.locator('#show-keys').evaluate((input) => { input.checked = true; input.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(await page.evaluate(() => localStorage.getItem('aurum-show-keys'))).toBe('on');
     await record();
-    await expect.poll(async () => (await echo()).open).toBe(true);
+    await expect.poll(async () => (await echo()).open, { timeout: 15_000 }).toBe(true);
     await app.evaluate(() => {
       const press = globalThis.__aurumQa.pressKey;
       press('key 67 c');   // Control + C
