@@ -36,6 +36,12 @@
   const grid = $('#grid');
   const menu = $('#menu');
   const root = document.documentElement;
+  // Split in two windows, this page is either the list of captures or only its buttons (the tools window).
+  const part = new URLSearchParams(location.search).get('part') === 'tools' ? 'tools' : 'list';
+  root.dataset.part = part;
+  if (part === 'tools') { document.title = 'כלי הצילום'; $('.title').textContent = 'כלי הצילום'; }
+  // The tools window holds no list of its own: the captures chosen in the list window, with their kind.
+  let shared = [];
   let items = [];
   let filter = '';
   const chosen = new Set();
@@ -56,7 +62,7 @@
     );
     select.value = folderFilter;
   }
-  const selectedItems = () => items.filter((item) => chosen.has(item.path));
+  const selectedItems = () => (part === 'tools' ? shared : items.filter((item) => chosen.has(item.path)));
 
   // Design, view and picture size are this window's own conveniences, kept on this computer.
   const stored = (key, fallback) => { try { return localStorage.getItem(key) || fallback; } catch { return fallback; } };
@@ -90,7 +96,8 @@
           : needs === 'images' ? !one.some((item) => item.kind === 'image')
             : one.length === 0;
     });
-    root.dataset.selected = String(chosen.size);
+    root.dataset.selected = String(one.length);
+    if (part === 'list' && root.dataset.split === 'on') api.shareSelection?.(one.map(({ path, kind }) => ({ path, kind })));
   }
 
   const KIND_LABELS = { image: 'תמונה', video: 'וידאו' };
@@ -166,6 +173,7 @@
   }
 
   async function load() {
+    if (part === 'tools') return;
     items = await api.list().catch(() => []);
     for (const path of [...chosen]) if (!items.some((item) => item.path === path)) chosen.delete(path);
     renderFolderFilter();
@@ -300,6 +308,8 @@
 
   async function run(action, targets = selectedItems()) {
     closeMenu();
+    // The tools window: the action runs in the list window, where the captures and the dialogs are.
+    if (part === 'tools') { if (targets.length) await api.runInList?.(action); return; }
     if (!targets.length) return;
     if (action === 'folder') return folderDialog(targets);
     if (action === 'guide') return guideDialog(targets);
@@ -623,8 +633,11 @@
       if (!menu.hidden) return closeMenu();
       // Hidden in an edge: Escape folds it back into its tab instead of closing it.
       if (dockState.enabled && dockState.expanded) return api.setDock?.({ expanded: false });
-      return api.close();
+      return part === 'tools' ? undefined : api.close();
     }
+    // The tools window has no captures to move between, rename or look at: only its buttons and their keys.
+    const toolKey = /^(Enter|Delete|F1|\?)$/.test(event.key) || (event.ctrlKey && /^(KeyC|F1)$/.test(event.code || event.key)) || /^(Digit|Numpad)[1-6]$/.test(event.code);
+    if (part === 'tools' && !toolKey) return;
     if (event.key === 'F1' && event.ctrlKey) { event.preventDefault(); return applyBar(root.dataset.bar === 'hidden' ? lastShownBar : 'hidden'); }
     if (event.key === 'F1' || event.key === '?') { event.preventDefault(); return keysDialog(); }
     if (event.key === 'Enter') return run('edit');
@@ -645,7 +658,35 @@
   });
   window.aurumWorkspace = { keys: () => KEYS.map(([key]) => key), bar: () => root.dataset.bar, setBar: applyBar };
 
+  // ---- Split in two windows ---------------------------------------------------------------------------------
+  function applySplit(split) {
+    root.dataset.split = split ? 'on' : 'off';
+    const button = $('#split');
+    button.setAttribute('aria-pressed', String(Boolean(split)));
+    button.title = split ? 'איחוד לחלון אחד: הכפתורים חוזרים ללוח' : 'פיצול לשני חלונות: הצילומים בחלון אחד והכפתורים בחלון נפרד';
+    button.setAttribute('aria-label', button.title);
+    if (split) syncSelection();
+  }
+  $('#split').addEventListener('click', async () => applySplit(await api.setSplit?.(root.dataset.split !== 'on') ?? root.dataset.split !== 'on'));
+  api.onSplit?.(applySplit);
+  api.onSelection?.((chosenList) => { shared = chosenList; syncSelection(); });
+  api.onRunItem?.((action) => run(action));
+  // The tools window is as tall as its buttons: they wrap to the width the user gives it, the height follows.
+  if (part === 'tools') {
+    const fit = () => {
+      const bar = [...document.querySelectorAll('.ribbon, .actions')].find((node) => getComputedStyle(node).display !== 'none');
+      if (bar) api.fitHeight?.(Math.ceil($('.titlebar').getBoundingClientRect().height + bar.getBoundingClientRect().height));
+    };
+    const watch = new ResizeObserver(fit);
+    document.querySelectorAll('.ribbon, .actions').forEach((node) => watch.observe(node));
+  }
+  // The design and the bar look chosen in one window show in the other at once.
+  window.addEventListener('storage', (event) => {
+    if (event.key === 'aurum-ws-theme' && event.newValue) applyLook({ theme: event.newValue });
+    if (event.key === 'aurum-ws-bar' && event.newValue) applyBar(event.newValue);
+  });
+
   api.onChanged(() => load());
-  api.getState().then((state) => { freeOnTop = Boolean(state.onTop); if (state.dock) applyDock(state.dock); else syncPin(); });
+  api.getState().then((state) => { freeOnTop = Boolean(state.onTop); applySplit(part === 'tools' || Boolean(state.split)); if (state.dock) applyDock(state.dock); else syncPin(); });
   load().then(() => { root.dataset.ready = 'true'; });
 })();

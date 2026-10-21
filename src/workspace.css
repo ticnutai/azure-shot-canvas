@@ -289,3 +289,25 @@ html[data-dock-edge="top"] #dock-tab span{top:4px;left:calc(50% - 5px)}
    kept, so scrolling and the arrow keys behave the same). */
 #grid .item{content-visibility:auto;contain-intrinsic-size:auto calc(var(--thumb) * .68 + 70px)}
 html[data-view="list"] #grid .item,html[data-view="table"] #grid .item{contain-intrinsic-size:auto 64px}
+
+/* ---- Split in two windows: the list here, its buttons in a small window of their own ---- */
+#split[aria-pressed="true"]{color:var(--select);background:var(--select-soft)}
+html[data-part="list"][data-split="on"] .ribbon,html[data-part="list"][data-split="on"] .actions{display:none!important}
+/* The tools window: a slim title bar and the buttons, nothing of the list. The bar is never hidden here
+   (hiding it is a choice for the list window), and the buttons wrap when the window is narrow. */
+html[data-part="tools"] .viewbar,html[data-part="tools"] #grid,html[data-part="tools"] #search,html[data-part="tools"] #count,
+html[data-part="tools"] #open-studio,html[data-part="tools"] #maximize,html[data-part="tools"] #close-bottom,html[data-part="tools"] .spacer{display:none!important}
+html[data-part="tools"] .titlebar{flex-basis:40px;gap:8px;padding:0 6px 0 10px}
+html[data-part="tools"] .titlebar .window-buttons{margin-inline-start:auto}
+html[data-part="tools"] .window-buttons button{width:32px;height:32px}
+html[data-part="tools"] .window-buttons svg{width:18px;height:18px}
+html[data-part="tools"] .logo{width:24px;height:24px;border-radius:6px}
+html[data-part="tools"] .logo i{width:12px;height:12px;border-width:3px}
+html[data-part="tools"] .title{font-size:13px;font-weight:600}
+html[data-part="tools"] .ribbon{flex:0 0 auto;border-bottom:0;flex-wrap:wrap;overflow:hidden;align-content:flex-start}
+html[data-part="tools"] .ribbon-group{max-width:100%}
+html[data-part="tools"] .ribbon-buttons{flex-wrap:wrap;justify-content:center}
+html[data-part="tools"][data-bar="hidden"] .ribbon{display:flex!important}
+html[data-part="tools"][data-bar="hidden"][data-theme="graphite"] .ribbon{display:none!important}
+html[data-part="tools"] .actions{flex-wrap:wrap;align-content:center;overflow:hidden}
+html[data-part="tools"][data-bar="hidden"][data-theme="graphite"] .actions{display:flex!important}

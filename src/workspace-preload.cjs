@@ -17,6 +17,14 @@ contextBridge.exposeInMainWorld('workspaceApi', {
   dragDock: (active) => ipcRenderer.invoke('workspace:dock-drag', active),
   setBusy: (busy) => ipcRenderer.send('workspace:busy', busy),
   onDock: (callback) => ipcRenderer.on('workspace:dock', (_event, state) => callback(state)),
+  // Split in two windows: the list shares its choice with the tools window, which hands its buttons back to the list.
+  setSplit: (split) => ipcRenderer.invoke('workspace:split', split),
+  onSplit: (callback) => ipcRenderer.on('workspace:split', (_event, split) => callback(split)),
+  shareSelection: (chosen) => ipcRenderer.send('workspace:selection', chosen),
+  onSelection: (callback) => ipcRenderer.on('workspace:selection', (_event, chosen) => callback(chosen)),
+  runInList: (action) => ipcRenderer.invoke('workspace:run-item', action),
+  fitHeight: (height) => ipcRenderer.send('workspace:fit', height),
+  onRunItem: (callback) => ipcRenderer.on('workspace:run-item', (_event, action) => callback(action)),
   createGuide: (options) => ipcRenderer.invoke('workspace:guide', options),
   trim: (filePath, start, end) => ipcRenderer.invoke('workspace:trim', filePath, start, end)
 });

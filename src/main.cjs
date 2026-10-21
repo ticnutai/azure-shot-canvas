@@ -17,7 +17,8 @@ const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatch
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
-const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, dockedPanelBounds, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { DockPanel } = require('./dock-panel.cjs');
 const { clipsWithoutSilence, cursorZooms, normalizeTimelineProject } = require('./video-timeline-utils.cjs');
 const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
@@ -95,7 +96,7 @@ async function setChosenIcon(choice) {
   if (chosenIcon) await fs.writeFile(appIconStatePath(), JSON.stringify(chosenIcon), 'utf8');
   else await fs.rm(appIconStatePath(), { force: true });
   tray?.setImage(trayIcon());
-  for (const win of [mainWindow, workspaceWindow]) if (win && !win.isDestroyed()) win.setIcon(windowIcon());
+  for (const win of [mainWindow, ...workspacePanels().map((panel) => panel.window)]) if (win && !win.isDestroyed()) win.setIcon(windowIcon());
   return { shape: chosenIcon?.shape || null, color: chosenIcon?.color || null };
 }
 // Post-capture card: which view the bar shows and the recent captures it lists (newest first).
@@ -1072,205 +1073,68 @@ async function listLibrary() {
 }
 
 // ---- Captures window: large thumbnails, round capture/record buttons; remembers where and how big it was. ----
-let workspaceWindow = null;
-function workspaceStatePath() { return path.join(app.getPath('userData'), 'workspace-window.json'); }
+// It can also be split in two: the list of captures in one window and its action buttons in a second, small one.
+// Each of the two moves, hides in a screen edge and is pinned on its own (both are a DockPanel).
+const quietWindows = () => process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1';
+const workspacePanel = new DockPanel({
+  statePath: () => path.join(app.getPath('userData'), 'workspace-window.json'),
+  page: path.join(__dirname, 'workspace.html'), preload: path.join(__dirname, 'workspace-preload.cjs'),
+  title: 'לוח הצילומים', icon: () => windowIcon(), size: { width: 736, height: 612 }, min: { width: 420, height: 380 },
+  place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 }),
+  defaultDock: { edge: 'right', offset: 0.5 },
+  // The buttons belong to the list: closing the list closes them too (the split is kept for next time).
+  onClosed: () => toolsPanel.close()
+});
+const toolsPanel = new DockPanel({
+  statePath: () => path.join(app.getPath('userData'), 'workspace-tools.json'),
+  page: path.join(__dirname, 'workspace.html'), query: { part: 'tools' }, preload: path.join(__dirname, 'workspace-preload.cjs'),
+  title: 'כלי הצילום', icon: () => windowIcon(), size: { width: 760, height: 190 }, min: { width: 280, height: 70 },
+  place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + 12 }),
+  // Its tab sits higher on the same edge, so the two tabs never cover each other.
+  defaultDock: { edge: 'right', offset: 0.22 }
+});
+const workspacePanels = () => [workspacePanel, toolsPanel];
+const panelFor = (event) => workspacePanels().find((panel) => panel.owns(event.sender)) || workspacePanel;
+
 async function openWorkspace() {
-  if (workspaceWindow && !workspaceWindow.isDestroyed()) {
-    if (workspaceWindow.isMinimized()) workspaceWindow.restore();
-    // Hidden in an edge: asked for again, it opens out of its edge.
-    if (workspaceDock.enabled && !workspaceDock.expanded) setWorkspaceExpanded(true);
-    if (process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') { workspaceWindow.show(); workspaceWindow.focus(); }
-    return { opened: true, existing: true };
-  }
-  const saved = await readJson(workspaceStatePath()) || {};
-  workspaceNormal = { bounds: saved.bounds || null, onTop: Boolean(saved.onTop) };
-  const savedDock = saved.dock || {};
-  workspaceDock = {
-    enabled: Boolean(savedDock.enabled), edge: ['left', 'right', 'top'].includes(savedDock.edge) ? savedDock.edge : 'right',
-    offset: Number.isFinite(Number(savedDock.offset)) ? Number(savedDock.offset) : 0.5, pinned: Boolean(savedDock.pinned),
-    expanded: false, size: savedDock.size && savedDock.size.width ? savedDock.size : null
-  };
-  const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-  const size = { width: Math.min(736, area.width), height: Math.min(612, area.height) };
-  // Saved place only while it is still on a connected screen; otherwise the bottom corner of the current one.
-  const savedOnScreen = saved.bounds && screen.getAllDisplays().some((display) => {
-    const { x, y, width, height } = display.workArea;
-    return saved.bounds.x + 80 > x && saved.bounds.y + 40 > y && saved.bounds.x + 80 < x + width && saved.bounds.y + 40 < y + height;
-  });
-  const bounds = savedOnScreen ? saved.bounds : { ...size, x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 };
-  workspaceWindow = new BrowserWindow({
-    ...bounds, minWidth: 420, minHeight: 380, frame: false, show: false, title: 'לוח הצילומים', backgroundColor: '#5c5c5c', icon: windowIcon(),
-    alwaysOnTop: Boolean(saved.onTop), webPreferences: { preload: path.join(__dirname, 'workspace-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
-  });
-  workspaceWindow.setMenuBarVisibility(false);
-  workspaceWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  workspaceWindow.webContents.on('will-navigate', (event) => event.preventDefault());
-  let saveTimer = null;
-  const remember = () => {
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      if (!workspaceWindow || workspaceWindow.isDestroyed() || workspaceWindow.isMaximized()) return;
-      const box = workspaceWindow.getBounds();
-      // In an edge only the open size is kept (resized by the user); a free window keeps its place and size.
-      if (workspaceDock.enabled) { if (workspaceDock.expanded && box.width >= WORKSPACE_MIN.width) workspaceDock.size = { width: box.width, height: box.height }; }
-      else workspaceNormal = { bounds: box, onTop: workspaceWindow.isAlwaysOnTop() };
-      saveWorkspaceState();
-    }, 400);
-  };
-  workspaceWindow.on('move', remember);
-  workspaceWindow.on('resize', remember);
-  workspaceWindow.on('closed', () => { workspaceWindow = null; watchWorkspacePointer(false); dragWorkspaceTab(false); });
-  await workspaceWindow.loadFile(path.join(__dirname, 'workspace.html'));
-  // Hidden in an edge last time: back in its edge, open for a moment so it is clear where it went.
-  if (workspaceDock.enabled) {
-    workspaceDock.size = workspaceDock.size || { width: bounds.width, height: bounds.height };
-    workspaceWindow.setAlwaysOnTop(true, 'floating');
-    setWorkspaceExpanded(true);
-  } else sendWorkspaceDock();
-  if (process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') workspaceWindow.show();
-  return { opened: true, existing: false };
+  const result = await workspacePanel.open();
+  if (workspacePanel.extra.split) await toolsPanel.open();
+  return result;
 }
 function notifyWorkspace() {
-  if (workspaceWindow && !workspaceWindow.isDestroyed()) workspaceWindow.webContents.send('workspace:changed');
+  workspacePanel.send('workspace:changed');
+}
+async function setWorkspaceSplit(split) {
+  if (!workspacePanel.isOpen()) return false;
+  workspacePanel.extra.split = Boolean(split);
+  workspacePanel.save();
+  workspacePanel.send('workspace:split', workspacePanel.extra.split);
+  if (workspacePanel.extra.split) await toolsPanel.open(); else toolsPanel.close();
+  return workspacePanel.extra.split;
+}
+// A button of the tools window that works on the chosen captures runs in the list window, where the captures and
+// the dialogs (folder, steps guide, video trim) are. A dialog needs the list open and in front.
+function runInWorkspace(action) {
+  if (!workspacePanel.isOpen()) return false;
+  if (['folder', 'guide', 'trim'].includes(action)) {
+    if (workspacePanel.dock.enabled && !workspacePanel.dock.expanded) workspacePanel.setExpanded(true);
+    if (!quietWindows()) { workspacePanel.window.show(); workspacePanel.window.focus(); }
+  }
+  workspacePanel.send('workspace:run-item', action);
+  return true;
 }
 
-// ---- The captures window hidden in a screen edge (like the top bar) --------------------------------------------
-// Folded: a small tab in the edge. Pointing at it opens the window against that edge; it folds again once the pointer
-// has been away for a moment (not while a dialog, a menu or a drop-down list is open). Pinned, it stays open. The tab
-// can be dragged anywhere along the left, right or top edge, of any screen.
-let workspaceDock = { enabled: false, edge: 'right', offset: 0.5, pinned: false, expanded: false, size: null };
-let workspaceNormal = { bounds: null, onTop: false };
-let workspaceBusy = false;
-let workspaceDockTimer = null;
-let workspaceDragTimer = null;
-const WORKSPACE_MIN = { width: 420, height: 380 };
-function workspaceArea(point = null) {
-  if (point) return screen.getDisplayNearestPoint(point).workArea;
-  const box = workspaceWindow.getBounds();
-  return screen.getDisplayNearestPoint({ x: box.x + box.width / 2, y: box.y + box.height / 2 }).workArea;
-}
-function saveWorkspaceState() {
-  if (!workspaceWindow || workspaceWindow.isDestroyed()) return;
-  const { enabled, edge, offset, pinned, size } = workspaceDock;
-  fs.writeFile(workspaceStatePath(), JSON.stringify({ bounds: workspaceNormal.bounds, onTop: workspaceNormal.onTop, dock: { enabled, edge, offset, pinned, size } }), 'utf8').catch(() => {});
-}
-function sendWorkspaceDock() {
-  if (!workspaceWindow || workspaceWindow.isDestroyed()) return;
-  const { enabled, expanded, edge, pinned } = workspaceDock;
-  workspaceWindow.webContents.send('workspace:dock', { enabled, expanded, edge, pinned });
-}
-function watchWorkspacePointer(active) {
-  clearInterval(workspaceDockTimer);
-  workspaceDockTimer = null;
-  if (!active) return;
-  let outsideSince = 0;
-  workspaceDockTimer = setInterval(() => {
-    if (!workspaceWindow || workspaceWindow.isDestroyed() || !workspaceDock.expanded || workspaceDock.pinned) return watchWorkspacePointer(false);
-    if (workspaceBusy) { outsideSince = 0; return; }
-    const point = screen.getCursorScreenPoint();
-    const box = workspaceWindow.getBounds();
-    const inside = point.x >= box.x - 6 && point.x <= box.x + box.width + 6 && point.y >= box.y - 6 && point.y <= box.y + box.height + 6;
-    if (inside) { outsideSince = 0; return; }
-    if (!outsideSince) { outsideSince = Date.now(); return; }
-    if (Date.now() - outsideSince > 700) setWorkspaceExpanded(false);
-  }, 250);
-  workspaceDockTimer.unref?.();
-}
-// The folded window is cut to the tab's own shape — a thin line along the edge and a small tab in its middle — so
-// nothing else of the (non-transparent) window shows. An empty list gives the whole window back.
-function tabShape(edge) {
-  if (edge === 'top') return [{ x: 0, y: 0, width: 120, height: 5 }, { x: 36, y: 0, width: 48, height: 18 }];
-  return [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }, { x: 0, y: 36, width: 18, height: 48 }];
-}
-function shapeWorkspace(folded) {
-  if (typeof workspaceWindow?.setShape !== 'function') return;
-  try { workspaceWindow.setShape(folded ? tabShape(workspaceDock.edge) : []); } catch {}
-}
-function setWorkspaceExpanded(expanded) {
-  if (!workspaceWindow || workspaceWindow.isDestroyed() || !workspaceDock.enabled) return;
-  workspaceDock.expanded = Boolean(expanded);
-  const area = workspaceArea();
-  if (workspaceDock.expanded) {
-    shapeWorkspace(false);
-    workspaceWindow.setResizable(true);
-    workspaceWindow.setMaximizable(true);
-    workspaceWindow.setMinimizable(true);
-    workspaceWindow.setMinimumSize(WORKSPACE_MIN.width, WORKSPACE_MIN.height);
-    workspaceWindow.setBounds(dockedPanelBounds(area, workspaceDock, workspaceDock.size, true));
-  } else {
-    // A resizable window is kept at least ~40 wide by Windows: the folded tab is not resizable.
-    workspaceWindow.setResizable(false);
-    workspaceWindow.setMaximizable(false);
-    workspaceWindow.setMinimizable(false);
-    workspaceWindow.setMinimumSize(1, 1);
-    workspaceWindow.setBounds(dockedPanelBounds(area, workspaceDock, workspaceDock.size, false));
-    shapeWorkspace(true);
-  }
-  sendWorkspaceDock();
-  watchWorkspacePointer(workspaceDock.expanded && !workspaceDock.pinned);
-}
-function setWorkspaceDock(patch = {}) {
-  if (!workspaceWindow || workspaceWindow.isDestroyed()) return workspaceDock;
-  if ('pinned' in patch) workspaceDock.pinned = Boolean(patch.pinned);
-  if ('enabled' in patch && Boolean(patch.enabled) !== workspaceDock.enabled) {
-    if (patch.enabled) {
-      // Into the edge: remember where the free window was, keep its size for the open state, stay above other windows.
-      if (!workspaceWindow.isMaximized()) workspaceNormal.bounds = workspaceWindow.getBounds();
-      if (workspaceWindow.isMaximized()) workspaceWindow.unmaximize();
-      workspaceDock.size = workspaceDock.size || { width: workspaceWindow.getBounds().width, height: workspaceWindow.getBounds().height };
-      workspaceDock.enabled = true;
-      workspaceWindow.setAlwaysOnTop(true, 'floating');
-      setWorkspaceExpanded(true);
-    } else {
-      workspaceDock.enabled = false;
-      workspaceDock.expanded = false;
-      watchWorkspacePointer(false);
-      shapeWorkspace(false);
-      workspaceWindow.setResizable(true);
-      workspaceWindow.setMaximizable(true);
-      workspaceWindow.setMinimizable(true);
-      workspaceWindow.setMinimumSize(WORKSPACE_MIN.width, WORKSPACE_MIN.height);
-      if (workspaceNormal.bounds) workspaceWindow.setBounds(workspaceNormal.bounds);
-      workspaceWindow.setAlwaysOnTop(Boolean(workspaceNormal.onTop));
-      sendWorkspaceDock();
-    }
-  } else if ('expanded' in patch) setWorkspaceExpanded(patch.expanded);
-  else if ('pinned' in patch) { sendWorkspaceDock(); watchWorkspacePointer(workspaceDock.expanded && !workspaceDock.pinned); }
-  saveWorkspaceState();
-  const { enabled, expanded, edge, pinned } = workspaceDock;
-  return { enabled, expanded, edge, pinned };
-}
-// Dragging the folded tab: it follows the pointer along the nearest edge (left, right or top) of any screen.
-function dragWorkspaceTab(active) {
-  clearInterval(workspaceDragTimer);
-  workspaceDragTimer = null;
-  if (!workspaceWindow || workspaceWindow.isDestroyed() || !workspaceDock.enabled) return;
-  if (!active) { saveWorkspaceState(); sendWorkspaceDock(); return; }
-  if (workspaceDock.expanded) setWorkspaceExpanded(false);
-  workspaceDragTimer = setInterval(() => {
-    if (!workspaceWindow || workspaceWindow.isDestroyed()) return dragWorkspaceTab(false);
-    const point = screen.getCursorScreenPoint();
-    const area = workspaceArea(point);
-    const edge = edgeForPointer(area, point);
-    const offset = offsetForPointer(area, edge, point);
-    if (edge === workspaceDock.edge && offset === workspaceDock.offset) return;
-    const edgeChanged = edge !== workspaceDock.edge;
-    workspaceDock.edge = edge;
-    workspaceDock.offset = offset;
-    workspaceWindow.setBounds(dockedPanelBounds(area, workspaceDock, workspaceDock.size, false));
-    if (edgeChanged) { shapeWorkspace(true); sendWorkspaceDock(); }
-  }, 16);
-}
 // Capture from the window: it steps aside (like other capture tools) and comes back with the new capture in it.
+// Split in two, both windows step aside.
 async function runFromWorkspace(action) {
   const regionAction = ['region', 'repeatRegion', 'ocrRegion', 'recordRegion', 'scrollCapture'].includes(action);
-  const visible = workspaceWindow && !workspaceWindow.isDestroyed() && workspaceWindow.isVisible();
-  if (regionAction && visible) {
-    workspaceWindow.hide();
+  const shown = workspacePanels().filter((panel) => panel.isOpen() && panel.window.isVisible());
+  if (regionAction && shown.length) {
+    shown.forEach((panel) => panel.window.hide());
     await new Promise((resolve) => setTimeout(resolve, 150));
     const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'], scrollCapture: ['pick', 'scroll'] }[action];
     await runRegionCapture(plan[0], { purpose: plan[1] }).catch(() => {});
-    if (action !== 'recordRegion' && workspaceWindow && !workspaceWindow.isDestroyed()) workspaceWindow.showInactive();
+    if (action !== 'recordRegion') shown.forEach((panel) => { if (panel.isOpen()) panel.window.showInactive(); });
     return true;
   }
   if (!startRegionAction(action)) dispatchShortcut(action, 'workspace');
@@ -1745,9 +1609,13 @@ function registerIpc() {
   });
   ipcMain.handle('workspace:folder', (_event, paths, folder) => setCaptureFolder(Array.isArray(paths) ? paths : [], folder));
   ipcMain.handle('workspace:copy', (_event, paths) => copyCapturesToClipboard(paths));
-  ipcMain.handle('workspace:dock', (_event, patch) => setWorkspaceDock(patch && typeof patch === 'object' ? patch : {}));
-  ipcMain.handle('workspace:dock-drag', (_event, active) => { dragWorkspaceTab(Boolean(active)); return true; });
-  ipcMain.on('workspace:busy', (event, busy) => { if (workspaceWindow && event.sender === workspaceWindow.webContents) workspaceBusy = Boolean(busy); });
+  ipcMain.handle('workspace:dock', (event, patch) => panelFor(event).setDock(patch && typeof patch === 'object' ? patch : {}));
+  ipcMain.handle('workspace:dock-drag', (event, active) => { panelFor(event).dragTab(Boolean(active)); return true; });
+  ipcMain.on('workspace:busy', (event, busy) => { const panel = workspacePanels().find((candidate) => candidate.owns(event.sender)); if (panel) panel.busy = Boolean(busy); });
+  ipcMain.handle('workspace:split', (_event, split) => setWorkspaceSplit(Boolean(split)));
+  ipcMain.on('workspace:selection', (event, chosen) => { if (workspacePanel.owns(event.sender)) toolsPanel.send('workspace:selection', Array.isArray(chosen) ? chosen : []); });
+  ipcMain.handle('workspace:run-item', (_event, action) => runInWorkspace(String(action)));
+  ipcMain.on('workspace:fit', (event, height) => { if (toolsPanel.owns(event.sender)) toolsPanel.fitHeight(height); });
   ipcMain.handle('workspace:rename', async (_event, filePath, name) => {
     const result = await renameLibraryFile(filePath, name);
     notifyWorkspace();
@@ -1755,23 +1623,14 @@ function registerIpc() {
   });
   ipcMain.handle('workspace:guide', (_event, options) => createStepsGuide(options || {}));
   ipcMain.handle('workspace:trim', (_event, filePath, start, end) => trimVideo(filePath, start, end));
-  ipcMain.handle('workspace:close', () => { workspaceWindow?.close(); return true; });
-  ipcMain.handle('workspace:maximize', () => {
-    if (!workspaceWindow) return false;
-    if (workspaceWindow.isMaximized()) workspaceWindow.unmaximize(); else workspaceWindow.maximize();
-    return workspaceWindow.isMaximized();
-  });
-  ipcMain.handle('workspace:on-top', async (_event, onTop) => {
-    workspaceNormal.onTop = Boolean(onTop);
-    // In an edge the window is always above the others; the choice applies again once it is a free window.
-    if (!workspaceDock.enabled) workspaceWindow?.setAlwaysOnTop(Boolean(onTop));
-    saveWorkspaceState();
-    return Boolean(onTop);
-  });
+  // Closing the tools window puts its buttons back into the list window (the split ends); closing the list closes both.
+  ipcMain.handle('workspace:close', async (event) => { if (toolsPanel.owns(event.sender)) await setWorkspaceSplit(false); else workspacePanel.close(); return true; });
+  ipcMain.handle('workspace:maximize', (event) => panelFor(event).toggleMaximize());
+  ipcMain.handle('workspace:on-top', (event, onTop) => panelFor(event).setOnTop(onTop));
   ipcMain.handle('workspace:open-studio', () => { showMainWindow(); mainWindow?.focus(); return true; });
   ipcMain.handle('app:get-icon', () => ({ shape: chosenIcon?.shape || null, color: chosenIcon?.color || null }));
   ipcMain.handle('app:set-icon', (_event, choice) => setChosenIcon(choice));
-  ipcMain.handle('workspace:state', () => ({ onTop: Boolean(workspaceNormal.onTop), dock: { enabled: workspaceDock.enabled, expanded: workspaceDock.expanded, edge: workspaceDock.edge, pinned: workspaceDock.pinned } }));
+  ipcMain.handle('workspace:state', (event) => { const panel = panelFor(event); return { onTop: Boolean(panel.normal.onTop), dock: panel.state(), split: Boolean(workspacePanel.extra.split) }; });
   ipcMain.on('workspace:start-drag', async (event, filePath) => {
     if (!isTrustedSender(event)) return;
     try {
