@@ -120,6 +120,9 @@
       const frame = document.createElement('div');
       frame.className = 'thumb';
       const image = document.createElement('img');
+      // Pictures far down the list load only when they come near the screen, decoded away from the window's work.
+      image.loading = 'lazy';
+      image.decoding = 'async';
       image.src = item.thumbnail || '';
       image.alt = '';
       image.draggable = true;

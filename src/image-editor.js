@@ -1,7 +1,23 @@
 (() => {
   const api = window.screenStudio;
   const shell = document.querySelector('#image-editor-shell');
-  if (!shell || !window.AurumImageEditorEngine) return;
+  if (!shell) return;
+  // The editing engine (about 300 KB) is not part of the studio's start: it loads the first time the editor opens,
+  // or quietly a few seconds after start when nothing else is happening, so the first opening is still instant.
+  let engineLoading = null;
+  const ensureEngine = () => {
+    if (window.AurumImageEditorEngine) return Promise.resolve();
+    engineLoading ||= new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'editor-engine.js';
+      script.onload = () => resolve();
+      script.onerror = () => { engineLoading = null; reject(new Error('מנוע העורך לא נטען')); };
+      document.head.append(script);
+    });
+    return engineLoading;
+  };
+  const idle = window.requestIdleCallback || ((callback) => setTimeout(callback, 200));
+  setTimeout(() => idle(() => ensureEngine().catch(() => {})), 8000);
   const $ = (selector) => shell.querySelector(selector);
   const $$ = (selector) => [...shell.querySelectorAll(selector)];
   let engine = null;
@@ -79,6 +95,7 @@
     document.querySelectorAll('.sidebar .nav-item').forEach((button) => button.classList.toggle('active', button.dataset.action === 'edit'));
     setMode(requestedMode);
     window.aurumEditorToolbar?.place();
+    await ensureEngine();
     createEngine();
     sourcePath = payload.path;
     $('#editor-file-name').textContent = payload.name;

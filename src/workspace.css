@@ -284,3 +284,8 @@ html[data-docked="folded"][data-dragging="true"] #dock-tab{cursor:grabbing;backg
 html[data-dock-edge="right"] #dock-tab span{left:4px;top:calc(50% - 5px)}
 html[data-dock-edge="left"] #dock-tab span{left:4px;top:calc(50% - 5px)}
 html[data-dock-edge="top"] #dock-tab span{top:4px;left:calc(50% - 5px)}
+
+/* Hundreds of captures stay fast: cards off screen are not laid out or painted until they come near (their place is
+   kept, so scrolling and the arrow keys behave the same). */
+#grid .item{content-visibility:auto;contain-intrinsic-size:auto calc(var(--thumb) * .68 + 70px)}
+html[data-view="list"] #grid .item,html[data-view="table"] #grid .item{contain-intrinsic-size:auto 64px}

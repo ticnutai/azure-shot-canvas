@@ -7,6 +7,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { clipRect, normalizeLastRegion, toImagePixels } = require('./region-utils.cjs');
+const { encodeInBackground } = require('./png-encode.cjs');
 const { cropRows, framesAlike, stitchFrames } = require('./scroll-stitch.cjs');
 
 // Title of the front-most window under the centre of a rectangle (screen points of one screen); '' when none.
@@ -186,12 +187,19 @@ class RegionCapture {
 
   // Without marks the cut comes straight from the frozen image; with marks the overlay already rendered it
   // (same pixels plus the marks) and only its PNG signature and size are checked here.
-  crop(frozen, rect, rendered = null) {
+  // The chosen area as a PNG. Compression runs in a background thread (a full screen took 75–120 ms of the
+  // program's own time); if that thread is ever unavailable, the picture is made here as before.
+  async crop(frozen, rect, rendered = null) {
     const size = frozen.image.getSize();
     const pixels = toImagePixels(rect, size.width / frozen.display.bounds.width, size);
     if (!pixels) return null;
     const isPng = rendered instanceof Uint8Array && rendered.length > 8 && rendered[0] === 0x89 && rendered[1] === 0x50 && rendered[2] === 0x4e && rendered[3] === 0x47;
-    const png = isPng ? Buffer.from(rendered) : frozen.image.crop(pixels).toPNG();
+    let png;
+    if (isPng) png = Buffer.from(rendered);
+    else {
+      try { png = await encodeInBackground(frozen.image.toBitmap(), size.width, size.height, pixels); }
+      catch { png = frozen.image.crop(pixels).toPNG(); }
+    }
     return { png, width: pixels.width, height: pixels.height, displayId: String(frozen.display.id), rect, display: frozen.display };
   }
 
@@ -208,7 +216,7 @@ class RegionCapture {
         const [frozen] = await this.freezeDisplays([display]);
         if (frozen) {
           const windows = await this.windowsByDisplay([display]);
-          return { ...this.crop(frozen, last.rect), title: titleAt(windows.get(String(display.id)), last.rect) };
+          return { ...(await this.crop(frozen, last.rect)), title: titleAt(windows.get(String(display.id)), last.rect) };
         }
       }
     }
@@ -287,7 +295,7 @@ class RegionCapture {
       if (purpose === 'record') return { record: true, displayId: choice.displayId, rect: choice.rect, bounds: { ...frozen.display.bounds } };
       // The area to scroll and photograph: scrolled and joined by autoScroll().
       if (purpose === 'scroll') return { scroll: true, displayId: choice.displayId, rect: choice.rect, title: titleAt(windows.get(choice.displayId), choice.rect) };
-      const cropped = this.crop(frozen, choice.rect, choice.options.png);
+      const cropped = await this.crop(frozen, choice.rect, choice.options.png);
       if (cropped && purpose === 'capture') await this.saveLastRegion(choice.displayId, cropped.rect);
       // The window the area was taken from (front-most under its centre) names the file.
       return cropped ? { ...cropped, after, marks: Number(choice.options.marks) || 0, title: titleAt(windows.get(choice.displayId), choice.rect) } : { cancelled: true };
@@ -304,7 +312,7 @@ class RegionCapture {
     const display = screen.getAllDisplays().find((item) => String(item.id) === String(displayId)) || screen.getPrimaryDisplay();
     if (!this.windowList?.shot || !this.windowList?.scroll) {
       const [frozen] = await this.freezeDisplays([display]);
-      return frozen ? { ...this.crop(frozen, rect), frames: 1 } : null;
+      return frozen ? { ...(await this.crop(frozen, rect)), frames: 1 } : null;
     }
     let physical;
     try { physical = screen.dipToScreenRect(null, display.bounds); }

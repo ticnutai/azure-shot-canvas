@@ -1964,7 +1964,7 @@ const icon = (name) => window.aurumIcons.markup(LIBRARY_ICON_NAMES[name] || name
 function thumbnailMarkup(item, compact = false) {
   const isImage = item.kind === 'image';
   if (!item.thumbnail) return item.kind === 'document' ? '▯' : `${isImage ? '▣' : '▷'}`;
-  return `<img src="${item.thumbnail}" alt="תמונה מקדימה של ${escapeHtml(item.name)}">${!isImage && compact ? '<span class="play-overlay">▷</span>' : ''}`;
+  return `<img loading="lazy" decoding="async" src="${item.thumbnail}" alt="תמונה מקדימה של ${escapeHtml(item.name)}">${!isImage && compact ? '<span class="play-overlay">▷</span>' : ''}`;
 }
 
 function closeLibraryMenus() {
