@@ -135,6 +135,7 @@
     }
     drawLabel(focus);
     drawLoupe();
+    syncDims();
     placeToolbar();
   }
 
@@ -196,6 +197,47 @@
   }
 
   const schedule = () => { if (!frame) frame = requestAnimationFrame(drawMarks); };
+
+  // ---- Exact size and place, typed in real pixels ----------------------------------------------------------
+  const dimInputs = [...toolbar.querySelectorAll('[data-dim]')];
+  // `all`: also the field being typed in (after Enter it shows the value actually used, e.g. held to the screen).
+  function syncDims(all = false) {
+    if (!selected) return;
+    const real = { x: selected.x, y: selected.y, width: selected.width, height: selected.height };
+    for (const input of dimInputs) if (all || document.activeElement !== input) input.value = String(Math.round(real[input.dataset.dim] * session.scale));
+  }
+  function applyDims() {
+    if (!selected) return;
+    const value = (name) => Number(dimInputs.find((input) => input.dataset.dim === name).value);
+    const real = { x: value('x'), y: value('y'), width: value('width'), height: value('height') };
+    if (!Object.values(real).every((number) => Number.isFinite(number))) return syncDims();
+    const scale = session.scale;
+    const width = Math.min(Math.max(4, real.width / scale), session.width);
+    const height = Math.min(Math.max(4, real.height / scale), session.height);
+    selected = {
+      x: Math.min(Math.max(0, real.x / scale), session.width - width),
+      y: Math.min(Math.max(0, real.y / scale), session.height - height),
+      width, height
+    };
+    root.dataset.regionDims = `${Math.round(selected.width * scale)}x${Math.round(selected.height * scale)}`;
+    syncDims(true);
+    schedule();
+  }
+  for (const input of dimInputs) {
+    input.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') { event.preventDefault(); applyDims(); input.select(); }
+      else if (event.key === 'Escape') { event.preventDefault(); input.blur(); syncDims(); }
+      else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        input.value = String(Math.max(0, Number(input.value || 0) + (event.key === 'ArrowUp' ? 1 : -1) * (event.shiftKey ? 10 : 1)));
+        applyDims();
+      }
+    });
+    input.addEventListener('change', applyDims);
+    input.addEventListener('pointerdown', (event) => event.stopPropagation());
+    input.addEventListener('focus', () => input.select());
+  }
 
   // ---- Ending the session -------------------------------------------------------------------------------
   async function finish(rect, after = 'save') {

@@ -31,3 +31,9 @@ body[data-hint="false"] #hint{display:none}
 #text-input[hidden]{display:none}
 #note{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);padding:8px 16px;border-radius:999px;background:#c99124;color:#07172e;font-size:12px;font-weight:700;box-shadow:0 10px 30px #0008;pointer-events:none}
 #note[hidden]{display:none}
+/* Exact size and place in real pixels: four small number fields. */
+#toolbar .dims{display:flex;align-items:center;gap:4px;padding:0 6px;border-inline-end:1px solid #2d4055}
+#toolbar .dims label{display:grid;gap:1px;justify-items:center}
+#toolbar .dims span{font-size:10px;color:#8ea5bf;line-height:1}
+#toolbar .dims input{width:52px;height:22px;padding:0 4px;border:1px solid #2e435c;border-radius:6px;background:#0b1420;color:#e8f0f8;font:inherit;font-size:12px;font-variant-numeric:tabular-nums;text-align:center;direction:ltr}
+#toolbar .dims input:focus{outline:none;border-color:#f5bd46}
