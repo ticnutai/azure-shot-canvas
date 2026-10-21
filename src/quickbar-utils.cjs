@@ -131,6 +131,21 @@ function offsetForPointer(workArea, edge, point) {
   return Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 1000;
 }
 
+// The captures window hidden in a screen edge, like the top bar: folded it is the same small tab; open it stands
+// against that edge at its own size (kept inside the screen), centred where the tab is.
+function dockedPanelBounds(workArea, dock, size, expanded) {
+  const edge = ['left', 'right', 'top'].includes(dock?.edge) ? dock.edge : 'right';
+  const offset = Number.isFinite(Number(dock?.offset)) ? Number(dock.offset) : 0.5;
+  if (!expanded) {
+    if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, TAB.length, offset), y: workArea.y, width: TAB.length, height: TAB.thickness };
+    return { x: edge === 'left' ? workArea.x : workArea.x + workArea.width - TAB.thickness, y: alongEdge(workArea.y, workArea.height, TAB.length, offset), width: TAB.thickness, height: TAB.length };
+  }
+  const width = Math.round(Math.min(Math.max(420, Number(size?.width) || 736), workArea.width));
+  const height = Math.round(Math.min(Math.max(380, Number(size?.height) || 612), workArea.height));
+  if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, width, offset), y: workArea.y, width, height };
+  return { x: edge === 'left' ? workArea.x : workArea.x + workArea.width - width, y: alongEdge(workArea.y, workArea.height, height, offset), width, height };
+}
+
 function shouldHideMainWindowOnClose(preferences, environment = {}) {
   return Boolean(preferences.enabled && environment.qa !== true && environment.headless !== true && environment.quitting !== true);
 }
@@ -151,4 +166,4 @@ function addRecentCapture(list, item, max = MAX_RECENT_CAPTURES) {
   return [item, ...list.filter((entry) => entry.path.toLowerCase() !== item.path.toLowerCase())].slice(0, max);
 }
 
-module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };
+module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, dockedPanelBounds, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };

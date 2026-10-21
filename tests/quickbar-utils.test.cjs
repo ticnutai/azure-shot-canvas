@@ -138,3 +138,15 @@ test('tab style and colour: only known values are kept, colours come from the ic
   assert.deepEqual([normalize({ tabStyle: 'pill', tabColor: 'green' }).tabStyle, normalize({ tabStyle: 'pill', tabColor: 'green' }).tabColor], ['pill', 'green']);
   assert.deepEqual([normalize({ tabStyle: 'star', tabColor: '#fff' }).tabStyle, normalize({ tabStyle: 'star', tabColor: '#fff' }).tabColor], ['tab', 'look']);
 });
+
+test('the captures window docked in an edge: a small tab folded, its own size against the edge when open', () => {
+  const { dockedPanelBounds } = require('../src/quickbar-utils.cjs');
+  const area = { x: 0, y: 40, width: 1920, height: 1000 };
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'right', offset: 0.5 }, null, false), { x: 1902, y: 480, width: 18, height: 120 });
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'left', offset: 0 }, null, false), { x: 0, y: 40, width: 18, height: 120 });
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'top', offset: 0.25 }, null, false), { x: 420, y: 40, width: 120, height: 18 });
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'right', offset: 0.5 }, { width: 800, height: 600 }, true), { x: 1120, y: 240, width: 800, height: 600 });
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'top', offset: 1 }, { width: 800, height: 600 }, true), { x: 1120, y: 40, width: 800, height: 600 });
+  // Never larger than the screen, never smaller than the window's minimum, and an unknown edge means the right one.
+  assert.deepEqual(dockedPanelBounds({ x: 0, y: 0, width: 600, height: 500 }, { edge: 'sideways' }, { width: 5000, height: 100 }, true), { x: 0, y: 60, width: 600, height: 380 });
+});

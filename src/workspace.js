@@ -21,6 +21,7 @@
       runAction: async () => {}, startDrag: () => {}, close: async () => {}, toggleMaximize: async () => {},
       setOnTop: async (value) => value, openStudio: async () => {}, getState: async () => ({ onTop: false }), onChanged: () => {},
       setFolder: async (paths, folder) => { list = list.map((item) => (paths.includes(item.path) ? { ...item, folder } : item)); },
+      copy: async (paths) => ({ files: paths.length }),
       rename: async (path, name) => {
         const item = list.find((entry) => entry.path === path);
         const full = `${name}${item?.name.slice(item.name.lastIndexOf('.')) || ''}`;
@@ -283,6 +284,17 @@
     });
   }
 
+  // A short message where the capture count usually is, then the count comes back.
+  let noteTimer = 0;
+  function flashNote(text) {
+    const count = $('#count');
+    clearTimeout(noteTimer);
+    count.textContent = text;
+    count.classList.add('note');
+    root.dataset.note = text;
+    noteTimer = setTimeout(() => { count.classList.remove('note'); delete root.dataset.note; render(); }, 3500);
+  }
+
   async function run(action, targets = selectedItems()) {
     closeMenu();
     if (!targets.length) return;
@@ -292,6 +304,14 @@
     if (action === 'edit') {
       const [first] = targets;
       if (first.kind === 'image') await api.action(first.path, 'edit');
+      return;
+    }
+    if (action === 'copy') {
+      // All the chosen captures in one copy (one at a time left only the last on the clipboard).
+      try {
+        await api.copy(targets.map((item) => item.path));
+        flashNote(targets.length === 1 ? 'הצילום הועתק — אפשר להדביק' : `הועתקו ${targets.length} צילומים — הדבקה בתיקייה, בצ׳אט או במסמך מדביקה את כולם`);
+      } catch (failure) { flashNote(`ההעתקה נכשלה: ${failure.message}`); }
       return;
     }
     for (const item of targets) await api.action(item.path, action).catch(() => {});
@@ -378,10 +398,79 @@
   $('#close-bottom').addEventListener('click', () => api.close());
   $('#maximize').addEventListener('click', () => api.toggleMaximize());
   $('#open-studio').addEventListener('click', () => api.openStudio());
+  // The pin: a free window — always above the others; hidden in an edge — stays open (does not fold away).
+  let dockState = { enabled: false, expanded: false, edge: 'right', pinned: false };
+  let freeOnTop = false;
+  function syncPin() {
+    const pin = $('#on-top');
+    const docked = dockState.enabled;
+    pin.setAttribute('aria-pressed', String(docked ? dockState.pinned : freeOnTop));
+    pin.title = docked ? (dockState.pinned ? 'נעוץ — נשאר פתוח (לחיצה משחררת)' : 'נעיצה — להשאיר פתוח') : 'תמיד מעל החלונות';
+    pin.setAttribute('aria-label', pin.title);
+  }
   $('#on-top').addEventListener('click', async (event) => {
     const pressed = event.currentTarget.getAttribute('aria-pressed') !== 'true';
-    event.currentTarget.setAttribute('aria-pressed', String(await api.setOnTop(pressed)));
+    if (dockState.enabled) applyDock(await api.setDock?.({ pinned: pressed }) || { ...dockState, pinned: pressed });
+    else { freeOnTop = Boolean(await api.setOnTop(pressed)); syncPin(); }
   });
+  function applyDock(state) {
+    dockState = { ...dockState, ...state };
+    root.dataset.docked = dockState.enabled ? (dockState.expanded ? 'open' : 'folded') : 'off';
+    root.dataset.dockEdge = dockState.edge;
+    $('#dock').setAttribute('aria-pressed', String(dockState.enabled));
+    $('#dock').title = dockState.enabled ? 'החזרה לחלון רגיל' : 'הסתרה בקצה המסך — נפתח כשמתקרבים עם העכבר';
+    syncPin();
+  }
+  api.onDock?.(applyDock);
+  $('#dock').addEventListener('click', async () => applyDock(await api.setDock?.({ enabled: !dockState.enabled }) || { enabled: !dockState.enabled, expanded: !dockState.enabled }));
+
+  // The folded tab: pointing opens (after a breath, so a drag can start), a click opens, pressing and moving drags.
+  const tab = $('#dock-tab');
+  let tabTimer = 0;
+  let pressedAt = null;
+  let dragging = false;
+  tab.addEventListener('mouseenter', () => { tabTimer = setTimeout(() => { if (!pressedAt) api.setDock?.({ expanded: true }); }, 140); });
+  tab.addEventListener('mouseleave', () => clearTimeout(tabTimer));
+  tab.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    clearTimeout(tabTimer);
+    pressedAt = { x: event.screenX, y: event.screenY };
+    tab.setPointerCapture(event.pointerId);
+  });
+  tab.addEventListener('pointermove', (event) => {
+    if (!pressedAt || dragging) return;
+    if (Math.hypot(event.screenX - pressedAt.x, event.screenY - pressedAt.y) < 5) return;
+    dragging = true;
+    root.dataset.dragging = 'true';
+    api.dragDock?.(true);
+  });
+  const release = () => {
+    if (!pressedAt) return;
+    const wasDragging = dragging;
+    pressedAt = null;
+    dragging = false;
+    delete root.dataset.dragging;
+    if (wasDragging) api.dragDock?.(false);
+    else api.setDock?.({ expanded: true });
+  };
+  tab.addEventListener('pointerup', release);
+  tab.addEventListener('pointercancel', release);
+
+  // While a dialog, a menu or a drop-down list is open, or a capture is being dragged out, the window must not fold.
+  let draggingOut = false;
+  let lastBusy = null;
+  function reportBusy() {
+    const busy = !backdrop.hidden || !menu.hidden || document.activeElement?.tagName === 'SELECT' || draggingOut;
+    if (busy === lastBusy) return;
+    lastBusy = busy;
+    root.dataset.busy = String(busy);
+    api.setBusy?.(busy);
+  }
+  new MutationObserver(reportBusy).observe(backdrop, { attributes: true, attributeFilter: ['hidden'] });
+  new MutationObserver(reportBusy).observe(menu, { attributes: true, attributeFilter: ['hidden'] });
+  document.addEventListener('focusin', reportBusy);
+  document.addEventListener('focusout', () => setTimeout(reportBusy));
+  grid.addEventListener('dragstart', () => { draggingOut = true; reportBusy(); setTimeout(() => { draggingOut = false; reportBusy(); }, 4000); }, true);
   $('#search').addEventListener('input', (event) => { filter = event.target.value.trim(); render(); });
   $('#folder-filter').addEventListener('change', (event) => { folderFilter = event.target.value; chosen.clear(); render(); });
   grid.addEventListener('click', (event) => { if (event.target === grid) { chosen.clear(); syncSelection(); } });
@@ -527,7 +616,12 @@
     if (event.target.id === 'search') { if (event.key === 'Escape') { event.target.value = ''; filter = ''; render(); grid.focus(); } return; }
     if (/^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName)) return;
     const one = selectedItems();
-    if (event.key === 'Escape') { if (!menu.hidden) return closeMenu(); return api.close(); }
+    if (event.key === 'Escape') {
+      if (!menu.hidden) return closeMenu();
+      // Hidden in an edge: Escape folds it back into its tab instead of closing it.
+      if (dockState.enabled && dockState.expanded) return api.setDock?.({ expanded: false });
+      return api.close();
+    }
     if (event.key === 'F1' && event.ctrlKey) { event.preventDefault(); return applyBar(root.dataset.bar === 'hidden' ? lastShownBar : 'hidden'); }
     if (event.key === 'F1' || event.key === '?') { event.preventDefault(); return keysDialog(); }
     if (event.key === 'Enter') return run('edit');
@@ -549,6 +643,6 @@
   window.aurumWorkspace = { keys: () => KEYS.map(([key]) => key), bar: () => root.dataset.bar, setBar: applyBar };
 
   api.onChanged(() => load());
-  api.getState().then((state) => { $('#on-top').setAttribute('aria-pressed', String(Boolean(state.onTop))); });
+  api.getState().then((state) => { freeOnTop = Boolean(state.onTop); if (state.dock) applyDock(state.dock); else syncPin(); });
   load().then(() => { root.dataset.ready = 'true'; });
 })();

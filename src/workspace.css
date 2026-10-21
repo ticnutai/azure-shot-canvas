@@ -268,3 +268,19 @@ html[data-bar="compact"] .ribbon-buttons button[data-key]::after{position:static
 #dialog table.keys td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 #dialog table.keys td:first-child{white-space:nowrap;width:1%}
 #dialog kbd{display:inline-block;padding:2px 7px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;background:var(--card);font:inherit;font-size:12px}
+/* A short confirmation (copied, moved…) shown where the capture count usually is. */
+.count.note{color:var(--select);font-weight:600;max-width:46ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---- Hidden in a screen edge ---- */
+#dock-tab{display:none}
+#dock[aria-pressed="true"]{color:var(--select);background:var(--select-soft)}
+/* Folded: the whole window is only the tab — the main process cuts the window to a thin line along the edge plus a
+   small tab in its middle (like the top bar's tab) — in the design's accent colour, with a white lens. */
+html[data-docked="folded"],html[data-docked="folded"] body{background:transparent!important;overflow:hidden}
+html[data-docked="folded"] body>*:not(#dock-tab){display:none!important}
+html[data-docked="folded"] #dock-tab{display:block;position:fixed;inset:0;border:0;padding:0;cursor:grab;background:linear-gradient(135deg,var(--select),color-mix(in srgb,var(--select) 70%,#000))}
+html[data-docked="folded"][data-dragging="true"] #dock-tab{cursor:grabbing;background:#ffd36a}
+#dock-tab span{position:absolute;width:10px;height:10px;border:2px solid #fff;border-radius:50%;box-sizing:border-box;pointer-events:none}
+html[data-dock-edge="right"] #dock-tab span{left:4px;top:calc(50% - 5px)}
+html[data-dock-edge="left"] #dock-tab span{left:4px;top:calc(50% - 5px)}
+html[data-dock-edge="top"] #dock-tab span{top:4px;left:calc(50% - 5px)}
