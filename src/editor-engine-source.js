@@ -16,6 +16,34 @@ function loadDomImage(dataUrl) {
   });
 }
 
+// A measurement: a thin line with small end marks and a label of its length in the picture's own pixels (with the
+// width and height it spans when it is slanted). The label stays upright whatever the line's direction.
+function measureGroup(x1, y1, x2, y2, options) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
+  const stroke = options.stroke;
+  const width = Math.max(1.5, Math.min(4, options.strokeWidth / 2));
+  const tick = Math.max(8, width * 5);
+  const normal = { x: -Math.sin(angle) * tick / 2, y: Math.cos(angle) * tick / 2 };
+  const parts = [
+    new Line([x1, y1, x2, y2], { stroke, strokeWidth: width }),
+    new Line([x1 - normal.x, y1 - normal.y, x1 + normal.x, y1 + normal.y], { stroke, strokeWidth: width }),
+    new Line([x2 - normal.x, y2 - normal.y, x2 + normal.x, y2 + normal.y], { stroke, strokeWidth: width })
+  ];
+  const slanted = Math.abs(dx) > 1 && Math.abs(dy) > 1;
+  const caption = `${Math.round(length)} פיקסלים${slanted ? `  (${Math.round(Math.abs(dx))} × ${Math.round(Math.abs(dy))})` : ''}`;
+  const fontSize = Math.max(14, Math.min(28, options.fontSize * 0.45));
+  const label = new IText(caption, {
+    left: (x1 + x2) / 2 + normal.x * 1.6, top: (y1 + y2) / 2 + normal.y * 1.6, originX: 'center', originY: 'center',
+    fontSize, fontFamily: 'Segoe UI', fontWeight: 600, fill: '#ffffff', backgroundColor: stroke, padding: 4, direction: 'rtl'
+  });
+  const group = new Group([...parts, label]);
+  group.toolType = 'measure';
+  return group;
+}
+
 function arrowGroup(x1, y1, x2, y2, options, doubleHead = false) {
   const dx = x2 - x1;
   const dy = y2 - y1;
@@ -87,6 +115,7 @@ class AurumImageEditorEngine {
     if (object.toolType === 'counter') return object.getObjects()[0]?.fill;
     if (object.toolType?.includes('arrow')) return object.getObjects()[0]?.stroke;
     if (object.toolType === 'magnify') return object.getObjects()[1]?.stroke;
+    if (object.toolType === 'measure') return object.getObjects()[0]?.stroke;
     return object.stroke;
   }
 
@@ -190,6 +219,11 @@ class AurumImageEditorEngine {
         heads.forEach((head) => head.set({ width: headSize, height: headSize }));
       }
       object.dirty = true;
+    } else if (kind === 'measure') {
+      // Recolouring paints the line, its end marks and the label's background together.
+      const parts = object.getObjects();
+      if (patch.stroke !== undefined) parts.forEach((part) => part.set(part instanceof IText ? 'backgroundColor' : 'stroke', patch.stroke));
+      object.dirty = true;
     } else if (kind === 'spotlight') {
       // Only opacity applies: recolouring or 'no fill' would make the dimming disappear.
     } else if (kind === 'magnify') {
@@ -254,7 +288,7 @@ class AurumImageEditorEngine {
     let object;
     if (['rect', 'redact', 'blur', 'pixelate', 'crop', 'magnify', 'spotlight'].includes(this.tool)) object = new Rect({ ...options, width: 1, height: 1, fill: this.tool === 'redact' ? '#000000' : this.tool === 'rect' ? this.style.fill : '#ffffff22', strokeDashArray: ['blur', 'pixelate', 'crop', 'magnify', 'spotlight'].includes(this.tool) ? [12, 8] : null });
     else if (this.tool === 'ellipse') object = new Ellipse({ ...options, rx: 1, ry: 1 });
-    else if (['line', 'arrow', 'double-arrow'].includes(this.tool)) object = new Line([point.x, point.y, point.x, point.y], this.baseOptions({ fill: undefined }));
+    else if (['line', 'arrow', 'double-arrow', 'measure'].includes(this.tool)) object = new Line([point.x, point.y, point.x, point.y], this.baseOptions({ fill: undefined }));
     if (!object) return;
     object.toolType = this.tool;
     this.drawing = { start: point, object };
@@ -307,6 +341,9 @@ class AurumImageEditorEngine {
     if (['arrow', 'double-arrow'].includes(object.toolType)) {
       this.canvas.remove(object);
       this.canvas.add(arrowGroup(start.x, start.y, end.x, end.y, this.style, object.toolType === 'double-arrow'));
+    } else if (object.toolType === 'measure') {
+      this.canvas.remove(object);
+      this.canvas.add(measureGroup(start.x, start.y, end.x, end.y, this.style));
     } else if (['blur', 'pixelate'].includes(object.toolType)) {
       this.canvas.remove(object);
       await this.addObscuredRegion(object, object.toolType);

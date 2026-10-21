@@ -48,6 +48,7 @@
     arrow: '<path d="M5 19L19 5"/><path d="M10.5 5H19v8.5"/>',
     doubleArrow: '<path d="M3.5 12h17"/><path d="M7.5 8l-4 4 4 4M16.5 8l4 4-4 4"/>',
     line: '<path d="M5 19L19 5"/>',
+    ruler: '<path d="M3.5 15.5L15.5 3.5l5 5-12 12z"/><path d="M7 12l1.6 1.6M9.5 9.5l2.2 2.2M12 7l1.6 1.6M14.5 4.5l2.2 2.2"/>',
     ellipse: '<ellipse cx="12" cy="12" rx="8.5" ry="7"/>',
     polygon: '<path d="M12 3l8 5.5-3 10H7l-3-10z"/>',
     counter: '<circle cx="12" cy="12" r="8.5"/><path d="M10.5 9l2-1.3v8.8"/>',
@@ -92,7 +93,7 @@
     '▴': 'chevronUp', '▾': 'chevronDown', '⌗': 'crop', '↗': 'external', '♩': 'mic', '⌁': 'cursor', '⇪': 'share',
     '⌑': 'folder', '⊼': 'pin', '⇅': 'sort', '◎': 'spotlight', '¶': 'textScan', '◫': 'captions', '◴': 'gauge', '⚡': 'chip',
     '▱': 'drive', '⧉': 'copy', '⌫': 'trash', '▷': 'play', '⛶': 'maximize', '✦': 'sparkle', '⌖': 'select', '➜': 'arrow',
-    '↔': 'doubleArrow', '╱': 'line', '⬭': 'ellipse', '⬡': 'polygon', '①': 'counter', '□': 'rect', '▧': 'blur',
+    '↔': 'doubleArrow', '╱': 'line', '⊷': 'ruler', '⬭': 'ellipse', '⬡': 'polygon', '①': 'counter', '□': 'rect', '▧': 'blur',
     '✱': 'smartRedact', '⚑': 'flag', '✂': 'scissors', '≋': 'waveform', '⇣': 'scrollDown', '⍰': 'help', '⊟': 'layout', '▩': 'pixelate', '▬': 'highlighter', '⤢': 'fitCover', '⊡': 'fitContain', '❝': 'callout', '⊞': 'safeArea', '✒': 'pen', '⊕': 'zoomIn', '⧈': 'imageAdd', '❐': 'duplicate', '⟲': 'history', '✪': 'badge', '＋': 'plus', '−': 'minus', '⊤': 'type', '✕': 'close'
   };
   const pattern = new RegExp(`(${Object.keys(GLYPHS).sort((a, b) => b.length - a.length).join('|')})[ \\u00a0]?`, 'u');

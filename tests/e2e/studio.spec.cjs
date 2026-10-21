@@ -698,7 +698,7 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#library-page')).toHaveClass(/active/);
     await page.locator('.sidebar .nav-item[data-action="edit"]').click();
     await expect(page.locator('#image-editor-shell')).toBeVisible();
-    await expect(page.locator('[data-editor-tool]')).toHaveCount(19);
+    await expect(page.locator('[data-editor-tool]')).toHaveCount(20);
     // Every tool as its own button for this walk through all of them (grouping is covered in editor-toolbar.spec).
     await page.evaluate(() => window.aurumEditorToolbar.set({ grouped: false }));
     await page.locator('button[data-editor-mode="professional"]').click();

@@ -112,7 +112,7 @@ test.describe.serial('image editor tool bar and full-screen layout', () => {
       return { ids, unique: new Set(ids).size, slots: bar.querySelectorAll(':scope > .tool-group, :scope > button').length, shown, total: document.querySelectorAll('[data-editor-tool]').length };
     });
     expect(census.unique).toBe(census.ids.length);
-    expect(census.total).toBe(19);
+    expect(census.total).toBe(20);
     expect(census.slots).toBe(8);
     expect(census.shown).toBe(8);
     await page.locator('.tool-group[data-group="shapes"] .group-more').click();
@@ -128,7 +128,7 @@ test.describe.serial('image editor tool bar and full-screen layout', () => {
     await setBar({ grouped: false });
     const separate = await page.evaluate(() => [...document.querySelectorAll('.editor-tools [data-editor-tool], .editor-tools [data-toolbar-item]')].filter((button) => button.offsetParent !== null).map((button) => button.dataset.editorTool || button.dataset.toolbarItem));
     expect(new Set(separate).size).toBe(separate.length);
-    expect(separate.length).toBeGreaterThanOrEqual(19);
+    expect(separate.length).toBeGreaterThanOrEqual(20);
   });
 
   test('5 · hidden tools and the order survive a reload; the selection tool can never be hidden', async () => {
@@ -193,6 +193,35 @@ test.describe.serial('image editor tool bar and full-screen layout', () => {
     await expect(page.locator('.editor-properties')).toBeVisible();
   });
 
+  test('9 · the measuring tool labels a line with its exact length in the picture\'s pixels, and takes the colour', async () => {
+    await page.evaluate(() => window.aurumEditorToolbar.set({ grouped: false }));
+    await page.locator('[data-editor-tool="measure"]').click();
+    const canvas = page.locator('#image-editor-shell .upper-canvas');
+    const box = await canvas.boundingBox();
+    const zoom = await page.evaluate(() => window.aurumEditor.stats().zoom);
+    // 800 picture pixels to the right, straight (Shift), from a quarter of the way in.
+    const from = { x: box.x + box.width * 0.25, y: box.y + box.height * 0.5 };
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.keyboard.down('Shift');
+    await page.mouse.move(from.x + 800 * zoom, from.y + 3, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.up('Shift');
+    const measure = (await page.evaluate(() => window.aurumEditor.objects())).find((object) => object.toolType === 'measure');
+    expect(measure).toBeTruthy();
+    const label = measure.objects.find((part) => part.text);
+    const length = Number(label.text.match(/\d+/)[0]);
+    expect(Math.abs(length - 800)).toBeLessThanOrEqual(2);
+    expect(label.text).toContain('פיקסלים');
+    await page.locator('[data-editor-tool="select"]').click();
+    await page.keyboard.press('Control+A');
+    await page.locator('#editor-stroke').evaluate((input) => { input.value = '#12b886'; input.dispatchEvent(new Event('input', { bubbles: true })); });
+    const recolored = (await page.evaluate(() => window.aurumEditor.objects())).find((object) => object.toolType === 'measure');
+    expect(recolored.objects.filter((part) => !part.text).every((part) => part.stroke === '#12b886')).toBe(true);
+    expect(recolored.objects.find((part) => part.text).backgroundColor).toBe('#12b886');
+    await page.evaluate(() => window.aurumEditorToolbar.reset());
+  });
+
   test('8 · the tool-view window: each choice has exactly one control, and it opens away from the bar', async () => {
     await page.locator('#editor-view-settings').click();
     const panel = page.locator('#editor-view-panel');
@@ -206,7 +235,7 @@ test.describe.serial('image editor tool bar and full-screen layout', () => {
     const all = [...controls.choices, ...controls.toggles];
     expect(new Set(all).size).toBe(all.length);
     expect(new Set(controls.rows).size).toBe(controls.rows.length);
-    expect(controls.rows.length).toBe(20);
+    expect(controls.rows.length).toBe(21);
     expect(controls.selectLocked).toBe(true);
     const box = await boxes(['#editor-view-panel', '.editor-tools']);
     expect(box['#editor-view-panel'].left).toBeGreaterThan(box['.editor-tools'].right);

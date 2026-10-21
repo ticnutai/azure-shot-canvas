@@ -8,7 +8,7 @@
   // Every tool appears here exactly once; a group is a set of tools that do nearly the same job.
   const GROUPS = [
     { id: 'select', label: 'בחירה', tools: ['select'] },
-    { id: 'lines', label: 'קווים וחיצים', tools: ['arrow', 'double-arrow', 'line'] },
+    { id: 'lines', label: 'קווים, חיצים ומדידה', tools: ['arrow', 'double-arrow', 'line', 'measure'] },
     { id: 'shapes', label: 'צורות', tools: ['rect', 'ellipse', 'polygon'] },
     { id: 'draw', label: 'ציור חופשי', tools: ['pen', 'highlighter'] },
     { id: 'text', label: 'טקסט ומספור', tools: ['text', 'callout', 'counter'] },
