@@ -131,6 +131,8 @@ public static class AurumSnipKey {
   [DllImport("user32.dll")] static extern int GetMessage(out MSG message, IntPtr hwnd, uint min, uint max);
   [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
   public static volatile bool Enabled;
+  // While a recording shows keys: every key press is reported (code and held modifiers); nothing is changed or held.
+  public static volatile bool ShowKeys;
   static HookProc keep;
   static IntPtr hook;
   static bool swallowRelease;
@@ -148,6 +150,14 @@ public static class AurumSnipKey {
   }
   static bool Down(int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; }
   static IntPtr Proc(int code, IntPtr wParam, IntPtr lParam) {
+    if (code >= 0 && ShowKeys) {
+      int pressed = wParam.ToInt32();
+      if ((pressed == 0x100 || pressed == 0x104) && (Marshal.ReadInt32(lParam, 8) & 0x10) == 0) {
+        string held = (Down(0x11) ? "c" : "") + (Down(0x12) ? "a" : "") + (Down(0x10) ? "s" : "") + ((Down(0x5B) || Down(0x5C)) ? "w" : "");
+        Console.Out.WriteLine("event key " + Marshal.ReadInt32(lParam) + " " + held);
+        Console.Out.Flush();
+      }
+    }
     if (code >= 0 && Enabled && Marshal.ReadInt32(lParam) == 0x53 && (Marshal.ReadInt32(lParam, 8) & 0x10) == 0) {
       int message = wParam.ToInt32();
       if ((message == 0x100 || message == 0x104) && (Down(0x5B) || Down(0x5C)) && Down(0x10)) {
@@ -177,6 +187,8 @@ while ($true) {
   if ($null -eq $line) { break }
   if ($line -eq 'snip on') { [AurumSnipKey]::Start(); [AurumSnipKey]::Enabled = $true; [Console]::Out.WriteLine('ok') }
   elseif ($line -eq 'snip off') { [AurumSnipKey]::Enabled = $false; [Console]::Out.WriteLine('ok') }
+  elseif ($line -eq 'keys on') { [AurumSnipKey]::Start(); [AurumSnipKey]::ShowKeys = $true; [Console]::Out.WriteLine('ok') }
+  elseif ($line -eq 'keys off') { [AurumSnipKey]::ShowKeys = $false; [Console]::Out.WriteLine('ok') }
   elseif ($line.StartsWith('scroll ')) { try { $p = $line.Split(' '); [Console]::Out.WriteLine([AurumWindows]::Scroll([int]$p[1], [int]$p[2], [int]$p[3])) } catch { [Console]::Out.WriteLine('error') } }
   elseif ($line.StartsWith('shot ')) { try { [Console]::Out.WriteLine([AurumWindows]::Shot($line.Substring(5))) } catch { [Console]::Out.WriteLine('error') } }
   else { try { [Console]::Out.WriteLine([AurumWindows]::List()) } catch { [Console]::Out.WriteLine('[]') } }
@@ -262,6 +274,11 @@ class WindowList {
   // The laptop capture key (Windows+Shift+S) opens the studio instead of the snipping tool; true when applied.
   async setSnipKey(enabled) {
     return (await this.request(enabled ? 'snip on' : 'snip off', 5000)) === 'ok';
+  }
+
+  // Key presses reported as events ('key <code> <held modifiers>') while a recording shows keys; true when applied.
+  async setKeyEcho(enabled) {
+    return (await this.request(enabled ? 'keys on' : 'keys off', 5000)) === 'ok';
   }
 
   // Turns the mouse wheel at a point (physical pixels) by whole notches (positive = down); true when done.

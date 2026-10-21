@@ -353,7 +353,8 @@ const AUTOMATIC_SWITCHES = {
   autoBeautify: { control: '#auto-beautify', key: 'aurum-auto-beautify' },
   autoRedact: { control: '#auto-redact', key: 'aurum-auto-redact' },
   autoSilence: { control: '#auto-silence', key: 'aurum-auto-silence' },
-  autoZoom: { control: '#auto-zoom', key: 'aurum-auto-zoom' }
+  autoZoom: { control: '#auto-zoom', key: 'aurum-auto-zoom' },
+  showKeys: { control: '#show-keys', key: 'aurum-show-keys' }
 };
 
 function applyAutomaticSwitches(patch = {}, persist = true) {
@@ -1853,7 +1854,9 @@ function recordingControlsDetails() {
     paused: state.recorder?.state === 'paused',
     displayId: source?.type === 'screen' ? source.displayId : null,
     // A window source is not framed (its place on screen is not known here).
-    region: source?.type === 'screen' ? region : null
+    region: source?.type === 'screen' ? region : null,
+    // Shortcuts shown at the bottom of the recorded screen (never plain typing).
+    showKeys: Boolean(state.showKeys)
   };
 }
 

@@ -10,6 +10,8 @@ const { pdfFromJpeg } = require('./pdf-utils.cjs');
 const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
 const { isOpenableLink, readCode } = require('./code-reader.cjs');
+const { keyLabel } = require('./key-echo.cjs');
+const { KeyOverlay } = require('./key-overlay.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, imageMimeType, projectPathFor } = require('./editor-utils.cjs');
 const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, registerWithFallbacks, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
@@ -134,7 +136,7 @@ let recordingControls = null;
 let lastNotice = null;
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, ...(process.env.SCREEN_STUDIO_QA === '1' ? { copyTextFromImage } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, ...(process.env.SCREEN_STUDIO_QA === '1' ? { copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event) } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -1843,6 +1845,7 @@ function registerIpc() {
   ipcMain.handle('quickbar:recording-state', async (_event, active, details = {}) => {
     quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active));
     await recordingControls?.update(Boolean(active), details && typeof details === 'object' ? details : {});
+    await setKeyEcho(Boolean(active) && Boolean(details?.showKeys), details || {});
     return true;
   });
   ipcMain.handle('shortcuts:get', () => ({ shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration }));
@@ -1925,7 +1928,28 @@ function dispatchShortcut(action, source = 'unknown') {
 }
 
 // The laptop capture key (Windows+Shift+S, caught by the desktop helper) opens the frozen screen like PrtSc.
-windowList.onEvent = (name) => { if (name === 'snip' && quickbarPreferences.laptopCaptureKey) dispatchShortcut('region', 'laptop-capture-key'); };
+windowList.onEvent = (name) => {
+  if (name === 'snip' && quickbarPreferences.laptopCaptureKey) dispatchShortcut('region', 'laptop-capture-key');
+  else if (name.startsWith('key ') && keyEchoActive) {
+    const [, code, held = ''] = name.split(' ');
+    const label = keyLabel(Number(code), held);
+    if (label) keyOverlay.show(label);
+  }
+};
+// Keys shown during a recording (setting in the video options): on when such a recording starts, off when it ends.
+let keyEchoActive = false;
+const keyOverlay = new KeyOverlay();
+async function setKeyEcho(on, details = {}) {
+  if (on === keyEchoActive) return;
+  keyEchoActive = on;
+  if (on) {
+    await keyOverlay.open(KeyOverlay.areaFor(details.displayId, details.region));
+    await windowList.setKeyEcho(true).catch(() => false);
+  } else {
+    await windowList.setKeyEcho(false).catch(() => false);
+    keyOverlay.close();
+  }
+}
 function applyLaptopCaptureKey() {
   if (process.env.SCREEN_STUDIO_QA === '1') return Promise.resolve(false);
   return windowList.setSnipKey(Boolean(quickbarPreferences.laptopCaptureKey)).catch(() => false);
