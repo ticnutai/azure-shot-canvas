@@ -137,7 +137,7 @@ let recordingControls = null;
 let lastNotice = null;
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event) } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -336,8 +336,8 @@ async function showCapturePreview(filePath) {
   await createQuickbarWindow({ forCapture: true });
   quickbarView = 'capture';
   positionQuickbar(true);
-  // Recordings need longer to notice than a screenshot: never hide their card in under 10 seconds.
-  const timeout = quickbarPreferences.captureTimeout && kind === 'video' ? Math.max(10, quickbarPreferences.captureTimeout) : quickbarPreferences.captureTimeout;
+  // The card stays as long as the user chose (any number of seconds; 0 = until closed), for pictures and recordings alike.
+  const timeout = quickbarPreferences.captureTimeout;
   quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: true, timeout });
   return { shown: true, recent: recentCaptures.length };
 }
@@ -1082,7 +1082,7 @@ const workspacePanel = new DockPanel({
   page: path.join(__dirname, 'workspace.html'), preload: path.join(__dirname, 'workspace-preload.cjs'),
   title: 'לוח הצילומים', icon: () => windowIcon(), size: { width: 736, height: 612 }, min: { width: 420, height: 380 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 }),
-  defaultDock: { edge: 'right', offset: 0.5 }, tabStyle: () => quickbarPreferences.tabStyle,
+  defaultDock: { edge: 'right', offset: 0.5 }, tabStyle: () => quickbarPreferences.tabStyle, hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null),
   // The buttons belong to the list: closing the list closes them too (the split is kept for next time).
   onClosed: () => toolsPanel.close()
 });
@@ -1092,7 +1092,8 @@ const toolsPanel = new DockPanel({
   title: 'כלי הצילום', icon: () => windowIcon(), size: { width: 760, height: 190 }, min: { width: 280, height: 70 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + 12 }),
   // Its tab sits higher on the same edge, so the two tabs never cover each other.
-  defaultDock: { edge: 'right', offset: 0.22 }, tabStyle: () => quickbarPreferences.tabStyle
+  defaultDock: { edge: 'right', offset: 0.22 }, tabStyle: () => quickbarPreferences.tabStyle,
+  hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null)
 });
 const workspacePanels = () => [workspacePanel, toolsPanel];
 const panelFor = (event) => workspacePanels().find((panel) => panel.owns(event.sender)) || workspacePanel;

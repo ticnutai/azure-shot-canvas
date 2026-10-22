@@ -1170,7 +1170,7 @@ test.describe('Electron production workflow', () => {
     await page.locator('[data-preference-tab="general"]').click();
     await setCheckbox(page, '#quickbar-enabled', false);
     await setCheckbox(page, '#capture-preview-enabled', true);
-    await page.locator('#capture-preview-timeout').selectOption('0');
+    await page.locator('#capture-preview-timeout').fill('0');
     await setCaptureDefaults(page, 'screenshot', 'full');
     await page.locator('#after-screenshot-action').selectOption('save').catch(() => {});
     const quickbarPage = async () => {
@@ -1229,7 +1229,7 @@ test.describe('Electron production workflow', () => {
     // Auto-hide after the chosen time.
     await page.locator('.nav-item[data-page="settings"]').click();
     await page.locator('[data-preference-tab="general"]').click();
-    await page.locator('#capture-preview-timeout').selectOption('4');
+    await page.locator('#capture-preview-timeout').fill('4');
     await setCaptureDefaults(page, 'screenshot', 'full');
     // The pointer must be away from the card: hovering it rightly keeps it open.
     await card.mouse.move(3000, 3000);
@@ -1248,7 +1248,7 @@ test.describe('Electron production workflow', () => {
     await page.locator('.nav-item[data-page="settings"]').click();
     await page.locator('[data-preference-tab="general"]').click();
     await setCheckbox(page, '#capture-preview-enabled', true);
-    await page.locator('#capture-preview-timeout').selectOption('6');
+    await page.locator('#capture-preview-timeout').fill('6');
     await page.locator('.nav-item[data-page="capture"]:not([data-action])').click();
 
     const metrics = [

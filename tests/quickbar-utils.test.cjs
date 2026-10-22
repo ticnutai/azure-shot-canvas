@@ -4,7 +4,7 @@ const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeF
 
 test('quickbar preferences reject unknown values and unpin when disabled', () => {
   const normalized = normalizeQuickbarPreferences({ enabled: true, edge: 'left', activation: 'hover', display: 'primary', pinned: true });
-  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, capturePreview: true, captureTimeout: 6, regionMarkup: false, captureDelay: 0, autoCopy: true, laptopCaptureKey: true, historyStyle: 'workspace', barLook: 'office', autoName: true, tabStyle: 'tab', tabColor: 'look' });
+  assert.deepEqual(normalized, { enabled: true, style: 'strip', edge: 'left', offset: 0.5, activation: 'hover', display: 'primary', pinned: true, hideDelay: null, capturePreview: true, captureTimeout: 6, regionMarkup: false, captureDelay: 0, autoCopy: true, laptopCaptureKey: true, historyStyle: 'workspace', barLook: 'office', autoName: true, tabStyle: 'tab', tabColor: 'look' });
   assert.deepEqual(normalizeQuickbarPreferences({ enabled: false, edge: 'bottom' }, normalized), { ...normalized, enabled: false, pinned: false });
   assert.deepEqual(normalizeQuickbarPreferences({}), DEFAULT_QUICKBAR_PREFERENCES);
 });
@@ -39,7 +39,19 @@ test('closing the main window keeps the quickbar alive only in normal desktop mo
 test('capture card preferences accept only known timeouts and can be switched off', () => {
   assert.equal(normalizeQuickbarPreferences({ captureTimeout: 10 }).captureTimeout, 10);
   assert.equal(normalizeQuickbarPreferences({ captureTimeout: 0 }).captureTimeout, 0);
-  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 7 }).captureTimeout, 6);
+  // Any number of seconds is allowed (half seconds kept, up to 120); a word or an empty box keeps the old value.
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 7 }).captureTimeout, 7);
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 1.5 }).captureTimeout, 1.5);
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 500 }).captureTimeout, 120);
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: 'abc' }).captureTimeout, 6);
+  assert.equal(normalizeQuickbarPreferences({ captureTimeout: '' }).captureTimeout, 6);
+  // The hide delay: free seconds from 0.2 to 60; empty or null goes back to automatic.
+  assert.equal(normalizeQuickbarPreferences({ hideDelay: 1 }).hideDelay, 1);
+  assert.equal(normalizeQuickbarPreferences({ hideDelay: 0.04 }).hideDelay, 0.2);
+  assert.equal(normalizeQuickbarPreferences({ hideDelay: 900 }).hideDelay, 60);
+  assert.equal(normalizeQuickbarPreferences({ hideDelay: null }, { hideDelay: 3 }).hideDelay, null);
+  assert.equal(normalizeQuickbarPreferences({ hideDelay: '' }, { hideDelay: 3 }).hideDelay, null);
+  assert.equal(normalizeQuickbarPreferences({ hideDelay: 'abc' }, { hideDelay: 3 }).hideDelay, 3);
   assert.equal(normalizeQuickbarPreferences({ capturePreview: false }).capturePreview, false);
 });
 

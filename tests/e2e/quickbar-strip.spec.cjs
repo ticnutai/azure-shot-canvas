@@ -169,6 +169,34 @@ test.describe.serial('slim capture strip', () => {
     await expect.poll(async () => (await barBounds()).bounds.width).toBe(120);
   });
 
+  test('the time before the bar folds is the user own choice: any number of seconds', async () => {
+    const settle = () => strip.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    await strip.evaluate(() => window.quickbarApi.setPreferences({ hideDelay: 2.5 }));
+    expect((await strip.evaluate(() => window.quickbarApi.getState().then((state) => state.preferences.hideDelay)))).toBe(2.5);
+    if (await strip.locator('body').getAttribute('data-expanded') !== 'true') await strip.locator('#edge-handle').dispatchEvent('pointerup');
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'true');
+    await expect.poll(async () => (await barBounds()).bounds.width).toBe(300);
+    // Pointer leaves: still open a little before the 2.5 seconds are over, folded after them.
+    await strip.locator('#strip').dispatchEvent('mouseenter');
+    await strip.locator('#strip').dispatchEvent('mouseleave');
+    const left = Date.now();
+    await strip.waitForTimeout(1500);
+    await settle();
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'true');
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'false', { timeout: 4000 });
+    expect(Date.now() - left).toBeGreaterThanOrEqual(2300);
+    // A short one: a second is enough.
+    await strip.evaluate(() => window.quickbarApi.setPreferences({ hideDelay: 1 }));
+    await strip.locator('#edge-handle').dispatchEvent('pointerup');
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'true');
+    await strip.locator('#strip').dispatchEvent('mouseenter');
+    await strip.locator('#strip').dispatchEvent('mouseleave');
+    await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'false', { timeout: 2500 });
+    // Empty = automatic again.
+    await strip.evaluate(() => window.quickbarApi.setPreferences({ hideDelay: null }));
+    expect((await strip.evaluate(() => window.quickbarApi.getState().then((state) => state.preferences.hideDelay)))).toBe(null);
+  });
+
   test('captures window: large thumbnails with names, choose, delete, and capture from its round button', async () => {
     await strip.evaluate(() => window.quickbarApi.setPreferences({ historyStyle: 'workspace' }));
     // Two captures to show.

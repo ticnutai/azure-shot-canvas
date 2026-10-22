@@ -1322,7 +1322,9 @@ function showQuickbarSettings(preferences) {
   $('#quickbar-pinned').checked = preferences.pinned;
   $$('#quickbar-style,#quickbar-edge,#quickbar-activation,#quickbar-display,#quickbar-pinned').forEach((control) => { control.disabled = !preferences.enabled; });
   $('#capture-preview-enabled').checked = preferences.capturePreview;
-  $('#capture-preview-timeout').value = String(preferences.captureTimeout);
+  // A number being typed right now is not overwritten.
+  if (document.activeElement !== $('#capture-preview-timeout')) $('#capture-preview-timeout').value = String(preferences.captureTimeout);
+  if (document.activeElement !== $('#quickbar-hide-delay')) $('#quickbar-hide-delay').value = preferences.hideDelay ? String(preferences.hideDelay) : '';
   $('#capture-preview-timeout').disabled = !preferences.capturePreview;
   $('#region-markup').checked = Boolean(preferences.regionMarkup);
   // One delay for every capture: the studio's setting and the bar's toggle are the same value.
@@ -2507,7 +2509,8 @@ async function initialize() {
   $('#bar-look').addEventListener('change', (event) => updateQuickbar({ barLook: event.target.value }));
   $('#auto-name').addEventListener('change', (event) => updateQuickbar({ autoName: event.target.checked }));
   $('#capture-preview-enabled').addEventListener('change', (event) => updateQuickbar({ capturePreview: event.target.checked }));
-  $('#capture-preview-timeout').addEventListener('change', (event) => updateQuickbar({ captureTimeout: Number(event.target.value) }));
+  $('#capture-preview-timeout').addEventListener('change', (event) => { if (event.target.value !== '') updateQuickbar({ captureTimeout: Number(event.target.value) }); });
+  $('#quickbar-hide-delay').addEventListener('change', (event) => updateQuickbar({ hideDelay: event.target.value === '' ? null : Number(event.target.value) }));
   $('#quickbar-enabled').addEventListener('change', (event) => updateQuickbar({ enabled: event.target.checked }));
   $('#quickbar-edge').addEventListener('change', (event) => updateQuickbar({ edge: event.target.value }));
   $('#quickbar-activation').addEventListener('change', (event) => updateQuickbar({ activation: event.target.value }));

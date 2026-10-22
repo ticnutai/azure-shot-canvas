@@ -206,7 +206,8 @@
       syncCardKeys();
       if (preferences.pinned || dragging) return;
       const view = root.dataset.view;
-      scheduleCollapse(view === 'capture' || view === 'history' ? 2000 : document.body.dataset.menuOpen === 'true' ? 900 : preferences.activation === 'hover' ? 260 : 1500);
+      // The delay chosen in the settings decides when it is set; otherwise the automatic values below.
+      scheduleCollapse(preferences.hideDelay ? preferences.hideDelay * 1000 : view === 'capture' || view === 'history' ? 2000 : document.body.dataset.menuOpen === 'true' ? 900 : preferences.activation === 'hover' ? 260 : 1500);
     });
   }
   // Region captures close the bar first, so it never sits on top of the frozen screen.

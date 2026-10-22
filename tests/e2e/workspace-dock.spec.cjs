@@ -7,6 +7,8 @@ const { closeStudio, launchStudio } = require('../helpers/electron-app.cjs');
 const powershell = (script) => new Promise((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-STA', '-Command', script], { windowsHide: true }, (error, stdout) => (error ? reject(error) : resolve(stdout))));
 
 // The captures window: several captures copied at once, and the window hidden in a screen edge like the top bar.
+// (The screen of a folded window is found from its own tab point: Windows keeps it ~41 wide, which on a computer
+// with a second screen reaches over to the neighbour.)
 //   1  several chosen captures are copied together: the clipboard holds all of them as files
 //   2  one capture is still copied as a picture
 //   3  into the edge: open against the right edge and above other windows; folded it is the small tab only
@@ -25,8 +27,10 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
   const win = () => app.evaluate(({ BrowserWindow, screen }) => {
     const target = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('workspace.html'));
     const box = target.getBounds();
-    return { box, area: screen.getDisplayMatching(box).workArea, onTop: target.isAlwaysOnTop(), min: target.getMinimumSize() };
+    return { box, area: screen.getDisplayNearestPoint({ x: box.x + 2, y: box.y + Math.round(box.height / 2) }).workArea, onTop: target.isAlwaysOnTop(), min: target.getMinimumSize() };
   });
+  // Where the folded tab really sits: the window may be pushed back by Windows, the tab then moves inside it.
+  const tabLeft = async () => (await win()).box.x + Math.min(...(await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape)).map((rect) => rect.x));
   const docked = () => workspace.evaluate(() => document.documentElement.dataset.docked);
 
   test.beforeAll(async () => {
@@ -71,10 +75,12 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     state = await win();
     // The tab starts 18 points from the right edge. Windows keeps the folded window ~40 wide at least; the part past
     // the edge is cut away (the window is shaped to the tab), so only the tab shows and takes the pointer.
-    expect(state.box.x).toBe(state.area.x + state.area.width - 18);
-    expect(state.box.width).toBeLessThanOrEqual(48);
+    expect(await tabLeft()).toBe(state.area.x + state.area.width - 18);
+    // Windows keeps a folded window at least ~41 device pixels wide (twice that in points on a double-density screen).
+    expect(state.box.width).toBeLessThanOrEqual(90);
     expect(state.box.height).toBeGreaterThanOrEqual(120);
-    expect(state.box.height).toBeLessThanOrEqual(130);
+    // (Twice that on a double-density screen next to a normal one: Windows scales the window; the shape cuts it to the tab.)
+    expect(state.box.height).toBeLessThanOrEqual(260);
     await expect(workspace.locator('#dock-tab')).toBeVisible();
     await expect(workspace.locator('#grid')).toBeHidden();
   });
@@ -113,6 +119,25 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await expect.poll(docked, { timeout: 5000 }).toBe('folded');
   });
 
+  test('5b · the seconds before it folds follow the user own choice (settings: any number)', async () => {
+    const area = (await win()).area;
+    // Open it (pointer on the tab), then set 4 seconds and leave: still open after 2.5 s, folded after 4.5 s.
+    await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: true }));
+    await expect.poll(docked).toBe('open');
+    await app.evaluate(() => globalThis.__aurumQa.setHideDelay(4));
+    await pointer({ x: area.x + 5, y: area.y + 5 });
+    await workspace.waitForTimeout(2500);
+    expect(await docked()).toBe('open');
+    await expect.poll(docked, { timeout: 5000 }).toBe('folded');
+    // One second: it folds soon after.
+    await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: true }));
+    await expect.poll(docked).toBe('open');
+    await app.evaluate(() => globalThis.__aurumQa.setHideDelay(1));
+    await pointer({ x: area.x + 5, y: area.y + 5 });
+    await expect.poll(docked, { timeout: 2500 }).toBe('folded');
+    await app.evaluate(() => globalThis.__aurumQa.setHideDelay(null));
+  });
+
   test('6 · the tab can be dragged to another edge, and the place is remembered', async () => {
     const area = (await win()).area;
     await pointer({ x: area.x + 3, y: area.y + Math.round(area.height * 0.7) });
@@ -120,7 +145,7 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('left');
     await workspace.evaluate(() => window.workspaceApi.dragDock(false));
     const state = await win();
-    expect(state.box.x).toBe(area.x);
+    expect(await tabLeft()).toBe(area.x);
     const saved = JSON.parse(await fs.readFile(path.join(outputDir, 'electron-user-data', 'workspace-window.json'), 'utf8'));
     expect(saved.dock).toMatchObject({ enabled: true, edge: 'left' });
     expect(saved.dock.offset).toBeGreaterThan(0.6);

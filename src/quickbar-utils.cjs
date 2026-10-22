@@ -10,7 +10,10 @@ const DEFAULT_QUICKBAR_PREFERENCES = Object.freeze({
   activation: 'hover',
   display: 'cursor',
   pinned: false,
-  // Post-capture card: shown above every app right after a capture, hides after captureTimeout seconds (0 = stays).
+  // Seconds the pointer may stay away before the bar (and the captures windows hidden in an edge) fold; null = automatic.
+  hideDelay: null,
+  // Post-capture card: shown above every app right after a capture, hides after captureTimeout seconds (0 = stays;
+  // any number up to 120, half seconds included).
   capturePreview: true,
   captureTimeout: 6,
   // Region capture: off = the picture is saved the moment the selection is released (Control on release still
@@ -36,7 +39,11 @@ const TAB_STYLES = ['tab', 'line', 'pill', 'dot', 'glass'];
 // The same colours as the program's icon (one list, in app-icons.js).
 const TAB_COLORS = ['look', ...require('./app-icons.js').COLORS.map((color) => color.id)];
 
-const CAPTURE_TIMEOUTS = [0, 4, 6, 10];
+const MAX_CAPTURE_TIMEOUT = 120;
+const MIN_HIDE_DELAY = 0.2;
+const MAX_HIDE_DELAY = 60;
+// A free number of seconds kept between min and max and rounded to a step; a word or an empty box gives null.
+const seconds = (value, min, max, step) => (value === null || value === '' || !Number.isFinite(Number(value)) ? null : Math.round(Math.min(max, Math.max(min, Number(value))) / step) * step);
 const CAPTURE_DELAYS = [0, 3, 5, 10];
 const MAX_RECENT_CAPTURES = 6;
 
@@ -50,7 +57,9 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
   if (['cursor', 'primary'].includes(candidate.display)) next.display = candidate.display;
   if ('pinned' in candidate) next.pinned = Boolean(candidate.pinned);
   if ('capturePreview' in candidate) next.capturePreview = Boolean(candidate.capturePreview);
-  if (CAPTURE_TIMEOUTS.includes(Number(candidate.captureTimeout))) next.captureTimeout = Number(candidate.captureTimeout);
+  if (seconds(candidate.captureTimeout, 0, MAX_CAPTURE_TIMEOUT, 0.5) !== null) next.captureTimeout = seconds(candidate.captureTimeout, 0, MAX_CAPTURE_TIMEOUT, 0.5);
+  if ('hideDelay' in candidate && (candidate.hideDelay === null || candidate.hideDelay === '')) next.hideDelay = null;
+  else if (seconds(candidate.hideDelay, MIN_HIDE_DELAY, MAX_HIDE_DELAY, 0.1) !== null) next.hideDelay = Math.round(seconds(candidate.hideDelay, MIN_HIDE_DELAY, MAX_HIDE_DELAY, 0.1) * 10) / 10;
   if ('regionMarkup' in candidate) next.regionMarkup = Boolean(candidate.regionMarkup);
   if ('autoCopy' in candidate) next.autoCopy = Boolean(candidate.autoCopy);
   if ('laptopCaptureKey' in candidate) next.laptopCaptureKey = Boolean(candidate.laptopCaptureKey);
@@ -166,4 +175,4 @@ function addRecentCapture(list, item, max = MAX_RECENT_CAPTURES) {
   return [item, ...list.filter((entry) => entry.path.toLowerCase() !== item.path.toLowerCase())].slice(0, max);
 }
 
-module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, CAPTURE_TIMEOUTS, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, dockedPanelBounds, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };
+module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, MAX_CAPTURE_TIMEOUT, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, dockedPanelBounds, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };

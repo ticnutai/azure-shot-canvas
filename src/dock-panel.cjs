@@ -16,14 +16,16 @@ async function readJson(filePath) {
 // The folded window is cut to the tab's own shape — a thin line along the edge and a small tab in its middle — so
 // nothing else of the (non-transparent) window shows. An empty list gives the whole window back. With the "line" tab
 // style (chosen for the top bar in the settings) every tab of the program is the thin line only.
-function tabShape(edge, style = 'tab') {
-  if (style === 'line') return edge === 'top' ? [{ x: 0, y: 0, width: 120, height: 5 }] : [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }];
-  if (edge === 'top') return [{ x: 0, y: 0, width: 120, height: 5 }, { x: 36, y: 0, width: 48, height: 18 }];
-  return [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }, { x: 0, y: 36, width: 18, height: 48 }];
+// `shift` moves the shape inside the window (how far Windows left the window from where it was asked to be).
+function tabShape(edge, style = 'tab', shift = { x: 0, y: 0 }) {
+  const move = (rects) => rects.map((rect) => ({ ...rect, x: rect.x + shift.x, y: rect.y + shift.y }));
+  if (style === 'line') return move(edge === 'top' ? [{ x: 0, y: 0, width: 120, height: 5 }] : [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }]);
+  if (edge === 'top') return move([{ x: 0, y: 0, width: 120, height: 5 }, { x: 36, y: 0, width: 48, height: 18 }]);
+  return move([{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }, { x: 0, y: 36, width: 18, height: 48 }]);
 }
 
 class DockPanel {
-  // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock · tabStyle() · onClosed()
+  // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock · tabStyle() · hideDelay() (milliseconds, or null) · onClosed()
   constructor(options) {
     this.options = options;
     this.window = null;
@@ -35,6 +37,7 @@ class DockPanel {
     this.pointerTimer = null;
     this.dragTimer = null;
     this.resizeTimer = null;
+    this.lastShape = [];
   }
 
   readDock(saved) {
@@ -157,16 +160,24 @@ class DockPanel {
       const inside = point.x >= box.x - 6 && point.x <= box.x + box.width + 6 && point.y >= box.y - 6 && point.y <= box.y + box.height + 6;
       if (inside) { outsideSince = 0; return; }
       if (!outsideSince) { outsideSince = Date.now(); return; }
-      if (Date.now() - outsideSince > 700) this.setExpanded(false);
-    }, 250);
+      if (Date.now() - outsideSince > (this.options.hideDelay?.() || 700)) this.setExpanded(false);
+    }, 120);
     this.pointerTimer.unref?.();
   }
-  shape(folded) {
+  shape(folded, wanted = null) {
     if (typeof this.window?.setShape !== 'function') return;
-    try { this.window.setShape(folded ? tabShape(this.dock.edge, this.options.tabStyle?.()) : []); } catch {}
+    let shift = { x: 0, y: 0 };
+    if (folded && wanted) {
+      const actual = this.window.getBounds();
+      shift = { x: Math.max(0, wanted.x - actual.x), y: Math.max(0, wanted.y - actual.y) };
+    }
+    const rects = folded ? tabShape(this.dock.edge, this.options.tabStyle?.(), shift) : [];
+    // Kept so a test can see where the tab really sits (the shape cannot be read back from the window).
+    this.lastShape = rects;
+    try { this.window.setShape(rects); } catch {}
   }
   // The tab style was changed in the settings: a folded tab takes the new shape at once.
-  refreshShape() { if (this.isOpen() && this.dock.enabled && !this.dock.expanded) this.shape(true); }
+  refreshShape() { if (this.isOpen() && this.dock.enabled && !this.dock.expanded) this.shape(true, dockedPanelBounds(this.area(), this.dock, this.dock.size, false, this.options.min)); }
   setExpanded(expanded) {
     if (!this.isOpen() || !this.dock.enabled) return;
     const { min } = this.options;
@@ -185,8 +196,9 @@ class DockPanel {
       this.window.setMaximizable(false);
       this.window.setMinimizable(false);
       this.window.setMinimumSize(1, 1);
-      this.window.setBounds(dockedPanelBounds(area, this.dock, this.dock.size, false, min));
-      this.shape(true);
+      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, min);
+      this.window.setBounds(wanted);
+      this.shape(true, wanted);
     }
     this.sendDock();
     this.watchPointer(this.dock.expanded && !this.dock.pinned);
@@ -263,8 +275,10 @@ class DockPanel {
       const edgeChanged = edge !== this.dock.edge;
       this.dock.edge = edge;
       this.dock.offset = offset;
-      this.window.setBounds(dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min));
-      if (edgeChanged) { this.shape(true); this.sendDock(); }
+      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min);
+      this.window.setBounds(wanted);
+      this.shape(true, wanted);
+      if (edgeChanged) this.sendDock();
     }, 16);
   }
 }
