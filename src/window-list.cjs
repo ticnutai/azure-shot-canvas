@@ -3,6 +3,9 @@
 // wrapper once and then answers each request in a few milliseconds. Anything going wrong simply means no window
 // detection — the picker still works by dragging.
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const SOURCE = String.raw`
 using System;
@@ -173,7 +176,35 @@ public static class AurumSnipKey {
     }
     return CallNextHookEx(hook, code, wParam, lParam);
   }
-}`;
+}
+// While a recording shows click rings: every press of the left or right mouse button is reported with the position.
+// A short poll of the button state on its own thread; it only reads, nothing is hooked, changed or held.
+public static class AurumClicks {
+  [StructLayout(LayoutKind.Sequential)] struct POINT { public int x; public int y; }
+  [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+  [DllImport("user32.dll")] static extern bool GetCursorPos(out POINT point);
+  public static volatile bool Enabled;
+  static System.Threading.Thread thread;
+  public static void Start() {
+    if (thread != null) return;
+    thread = new System.Threading.Thread(() => {
+      bool left = false, right = false;
+      while (true) {
+        if (!Enabled) { left = false; right = false; System.Threading.Thread.Sleep(60); continue; }
+        bool l = (GetAsyncKeyState(0x01) & 0x8000) != 0, r = (GetAsyncKeyState(0x02) & 0x8000) != 0;
+        if ((l && !left) || (r && !right)) {
+          POINT p;
+          if (GetCursorPos(out p)) { Console.Out.WriteLine("event click " + p.x + " " + p.y + " " + (l && !left ? "l" : "r")); Console.Out.Flush(); }
+        }
+        left = l; right = r;
+        System.Threading.Thread.Sleep(10);
+      }
+    });
+    thread.IsBackground = true;
+    thread.Start();
+  }
+}
+`;
 
 const SCRIPT = `$ErrorActionPreference='Stop'
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false
@@ -189,6 +220,8 @@ while ($true) {
   elseif ($line -eq 'snip off') { [AurumSnipKey]::Enabled = $false; [Console]::Out.WriteLine('ok') }
   elseif ($line -eq 'keys on') { [AurumSnipKey]::Start(); [AurumSnipKey]::ShowKeys = $true; [Console]::Out.WriteLine('ok') }
   elseif ($line -eq 'keys off') { [AurumSnipKey]::ShowKeys = $false; [Console]::Out.WriteLine('ok') }
+  elseif ($line -eq 'clicks on') { [AurumClicks]::Start(); [AurumClicks]::Enabled = $true; [Console]::Out.WriteLine('ok') }
+  elseif ($line -eq 'clicks off') { [AurumClicks]::Enabled = $false; [Console]::Out.WriteLine('ok') }
   elseif ($line.StartsWith('scroll ')) { try { $p = $line.Split(' '); [Console]::Out.WriteLine([AurumWindows]::Scroll([int]$p[1], [int]$p[2], [int]$p[3])) } catch { [Console]::Out.WriteLine('error') } }
   elseif ($line.StartsWith('shot ')) { try { [Console]::Out.WriteLine([AurumWindows]::Shot($line.Substring(5))) } catch { [Console]::Out.WriteLine('error') } }
   else { try { [Console]::Out.WriteLine([AurumWindows]::List()) } catch { [Console]::Out.WriteLine('[]') } }
@@ -210,8 +243,10 @@ class WindowList {
       let settled = false;
       const settle = (value) => { if (!settled) { settled = true; resolve(value); } };
       try {
-        const encoded = Buffer.from(SCRIPT, 'utf16le').toString('base64');
-        this.child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
+        // The script is run from a file: as one encoded command line it would pass the 32,767-character limit of Windows.
+        this.scriptPath = path.join(os.tmpdir(), `aurum-helper-${process.pid}.ps1`);
+        fs.writeFileSync(this.scriptPath, `﻿${SCRIPT}`, 'utf8');
+        this.child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', this.scriptPath], { windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
       } catch { this.ready = null; settle(false); return; }
       this.child.stdout.setEncoding('utf8');
       this.child.stdout.on('data', (chunk) => {
@@ -281,6 +316,11 @@ class WindowList {
     return (await this.request(enabled ? 'keys on' : 'keys off', 5000)) === 'ok';
   }
 
+  // Mouse presses reported as events ('click <x> <y> <l|r>', physical pixels) while a recording shows click rings; true when applied.
+  async setClickEcho(enabled) {
+    return (await this.request(enabled ? 'clicks on' : 'clicks off', 5000)) === 'ok';
+  }
+
   // Turns the mouse wheel at a point (physical pixels) by whole notches (positive = down); true when done.
   async scroll(x, y, notches = 3) {
     return (await this.request(`scroll ${Math.round(x)} ${Math.round(y)} ${Math.round(notches)}`, 3000)) === 'ok';
@@ -288,6 +328,7 @@ class WindowList {
 
   stop() {
     try { this.child?.kill(); } catch {}
+    try { if (this.scriptPath) fs.rmSync(this.scriptPath, { force: true }); } catch {}
     this.child = null;
     this.ready = null;
   }

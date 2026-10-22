@@ -19,6 +19,13 @@ const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs')
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
 const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
 const { DockPanel } = require('./dock-panel.cjs');
+const featuresDefs = require('./features-defs.js');
+const { parseClickEvent } = require('./click-ripple.js');
+const { IntervalCapture } = require('./interval-capture.cjs');
+const { TextIndexer } = require('./text-index.cjs');
+const { classifyClipboard, clampOpacity, pinPage, pinSize, zoomedBounds } = require('./pin-window.cjs');
+const { listModels, translateText } = require('./translate-local.cjs');
+const { FILES: BACKUP_FILES, buildBackup, readBackup } = require('./settings-backup.cjs');
 const { clipsWithoutSilence, cursorZooms, normalizeTimelineProject } = require('./video-timeline-utils.cjs');
 const { findSensitiveRegions, parseTesseractTsv, summarizeRegions } = require('./redact-utils.cjs');
 const { ACTIONS: WORKFLOW_ACTIONS } = require('./workflow-utils.cjs');
@@ -135,9 +142,10 @@ let updater = null;
 let recordingControls = null;
 // The last notice and recognised text, kept for automated checks (they read them in the main process).
 let lastNotice = null;
+let lastTranslation = '';
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -154,6 +162,128 @@ async function loadQuickbarPreferences() {
   quickbarPreferences = normalizeQuickbarPreferences(saved);
   return quickbarPreferences;
 }
+// ---- Optional extras: switches the user turns on in the settings (all off at first) -------------------------------
+// One table (features-defs.js) names every extra and its settings; the code of an extra asks featureOn / featureValue.
+let features = featuresDefs.defaults();
+const featureListeners = new Set();
+function featuresPath() { return path.join(app.getPath('userData'), 'features.json'); }
+async function loadFeatures() { features = featuresDefs.normalizeFeatures(await readJson(featuresPath()) || {}); return features; }
+const featureOn = (id) => Boolean(features.enabled[id]);
+const featureValue = (id, key) => features.values[id]?.[key];
+async function saveFeatures(patch = {}) {
+  const before = features;
+  features = featuresDefs.normalizeFeatures(patch, features);
+  await fs.writeFile(featuresPath(), JSON.stringify(features, null, 2), 'utf8');
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:features', features);
+  for (const listener of featureListeners) { try { listener(features, before); } catch {} }
+  return features;
+}
+
+// ---- Interval capture (an extra): a picture of the screen, or of the last area, every few seconds ------------------------
+async function intervalShot() {
+  if (featureValue('intervalCapture', 'source') === 'region') {
+    const last = await regionCapture?.readLastRegion(screen.getAllDisplays());
+    if (!last) throw new Error('אין עדיין אזור קודם — צלמו אזור פעם אחת');
+    const result = await runRegionCapture('last', { afterOverride: 'save', noClipboard: true });
+    if (result?.error) throw new Error(result.error);
+    return;
+  }
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const size = { width: Math.round(display.size.width * display.scaleFactor), height: Math.round(display.size.height * display.scaleFactor) };
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size, fetchWindowIcons: false });
+  const source = sources.find((item) => String(item.display_id) === String(display.id)) || sources[0];
+  if (!source || source.thumbnail.isEmpty()) throw new Error('לכידת המסך נכשלה');
+  const shot = source.thumbnail.getSize();
+  await deliverCapture({ png: source.thumbnail.toPNG(), width: shot.width, height: shot.height, after: 'save', afterAction: 'save' });
+}
+const intervalCapture = new IntervalCapture({
+  capture: () => intervalShot(),
+  onChange: () => buildTrayMenu(),
+  onStop: (reason, taken) => notify(reason === 'done' ? 'הצילום במרווחים הסתיים' : 'הצילום במרווחים נעצר', reason.startsWith('failed') ? reason.slice(8) : `${taken} צילומים נשמרו`)
+});
+function toggleIntervalCapture() {
+  if (intervalCapture.running) { intervalCapture.stop(); return { message: `הצילום במרווחים נעצר — ${intervalCapture.taken} צילומים נשמרו` }; }
+  if (!featureOn('intervalCapture')) return { message: 'הדליקו קודם את התוספת "צילום אוטומטי במרווחים"' };
+  intervalCapture.start({ seconds: featureValue('intervalCapture', 'seconds'), count: featureValue('intervalCapture', 'count') });
+  return { message: `הצילום במרווחים התחיל: כל ${featureValue('intervalCapture', 'seconds')} שניות`, running: true };
+}
+// Turning the extra off stops what it started; the tray follows every change.
+featureListeners.add((now) => {
+  if (!now.enabled.intervalCapture && intervalCapture.running) intervalCapture.stop('switched off');
+  buildTrayMenu();
+});
+
+// ---- Text search inside the captures (an extra): recognised text kept next to each picture, found by the search -------
+const INDEXED_IMAGE = /\.(png|jpe?g)$/i;
+const textIndexer = new TextIndexer({
+  pending: async () => {
+    const directory = await ensureOutputDirectory();
+    const entries = (await fs.readdir(directory, { withFileTypes: true })).filter((entry) => entry.isFile() && INDEXED_IMAGE.test(entry.name));
+    const dated = (await Promise.all(entries.map(async (entry) => { const full = path.join(directory, entry.name); const stat = await fs.stat(full).catch(() => null); return stat && { full, at: stat.mtimeMs }; }))).filter(Boolean).sort((a, b) => b.at - a.at);
+    const waiting = [];
+    for (const item of dated) if (!(await readJson(`${item.full}.meta.json`))?.ocrAt) waiting.push(item.full);
+    return waiting;
+  },
+  index: async (filePath) => {
+    const result = await runOcr(filePath, { tessdataDirectory: await ensureOcrLanguageData() });
+    await updateMetadata(filePath, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
+  },
+  // Never while recording or choosing an area: the picture work waits its turn.
+  busy: () => recordingSessions.size > 0 || Boolean(regionCapture?.isOpen),
+  onIndexed: () => notifyWorkspace()
+});
+featureListeners.add((now) => { if (now.enabled.textIndex) textIndexer.start(); else textIndexer.stop(); });
+
+// One entry point for the buttons that sit under the switches in the settings.
+async function featureAction(id) {
+  if (id === 'interval-toggle') return toggleIntervalCapture();
+  if (id === 'pin-clipboard') {
+    if (!featureOn('pinPlus')) return { message: 'הדליקו קודם את התוספת "הצמדה משופרת"' };
+    const result = await pinClipboard();
+    return { message: result.pinned ? 'מה שבלוח הוצמד מעל החלונות' : result.message };
+  }
+  if (id === 'translate-test') {
+    try {
+      const models = await listModels(featureValue('translate', 'address'));
+      return { message: models.length ? `המנוע המקומי פועל. מודלים מותקנים: ${models.slice(0, 5).join(', ')}` : 'המנוע המקומי פועל, אבל לא מותקן בו אף מודל שפה' };
+    } catch (error) { return { message: error.message }; }
+  }
+  throw new Error('פעולה לא מוכרת');
+}
+
+// ---- Backup of all settings in one file ---------------------------------------------------------------------------
+async function exportSettings(local, targetPath = null) {
+  const files = {};
+  for (const name of BACKUP_FILES) { const data = await readJson(path.join(app.getPath('userData'), name)); if (data) files[name] = data; }
+  const backup = buildBackup({ files, local: local && typeof local === 'object' ? local : {}, version: app.getVersion() });
+  let target = targetPath;
+  if (!target) {
+    const chosen = await dialog.showSaveDialog(mainWindow, { title: 'שמירת גיבוי ההגדרות', defaultPath: path.join(app.getPath('documents'), 'אורום-גיבוי-הגדרות.json'), filters: [{ name: 'קובץ גיבוי', extensions: ['json'] }] });
+    if (chosen.canceled || !chosen.filePath) return { canceled: true };
+    target = chosen.filePath;
+  }
+  await fs.writeFile(target, JSON.stringify(backup, null, 2), 'utf8');
+  return { path: target, files: Object.keys(backup.files).length, keys: Object.keys(backup.local).length };
+}
+async function importSettings(sourcePath = null) {
+  let source = sourcePath;
+  if (!source) {
+    const chosen = await dialog.showOpenDialog(mainWindow, { title: 'בחירת קובץ גיבוי', properties: ['openFile'], filters: [{ name: 'קובץ גיבוי', extensions: ['json'] }] });
+    if (chosen.canceled || !chosen.filePaths[0]) return { canceled: true };
+    source = chosen.filePaths[0];
+  }
+  const stat = await fs.stat(source);
+  if (stat.size > 8 * 1024 * 1024) throw new Error('הקובץ גדול מדי להיות קובץ גיבוי');
+  const backup = readBackup(await fs.readFile(source, 'utf8'));
+  for (const [name, data] of Object.entries(backup.files)) await fs.writeFile(path.join(app.getPath('userData'), name), JSON.stringify(data, null, 2), 'utf8');
+  await loadQuickbarPreferences();
+  await loadFeatures();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:features', features);
+  await applyQuickbarPreferences({});
+  for (const listener of featureListeners) { try { listener(features, null); } catch {} }
+  return { local: backup.local, files: Object.keys(backup.files).length, keys: Object.keys(backup.local).length };
+}
+
 async function saveQuickbarPreferences(patch = {}) {
   quickbarPreferences = normalizeQuickbarPreferences(patch, quickbarPreferences);
   await fs.writeFile(quickbarPreferencesPath(), JSON.stringify(quickbarPreferences, null, 2), 'utf8');
@@ -308,22 +438,46 @@ async function runLibraryAction(filePath, action, options = {}) {
   return { action, renderer: true, path: resolved };
 }
 
+// Pinned windows stay above everything. With the improved pin (an extra) the wheel changes the size, Control + wheel the
+// opacity and a double click puts both back; without it a pin is the plain window it always was.
+const pinWindows = new WeakMap();
+async function openPin({ kind, dataUrl = '', text = '', color = '', width = 0, height = 0 }) {
+  const plus = featureOn('pinPlus');
+  const size = pinSize(kind, { width, height, text });
+  const quiet = process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1';
+  const pinWindow = new BrowserWindow({
+    show: !quiet, width: size.width, height: size.height, frame: false, resizable: true, alwaysOnTop: true, backgroundColor: '#111111',
+    webPreferences: { contextIsolation: true, sandbox: true, ...(plus ? { preload: path.join(__dirname, 'pin-preload.cjs') } : {}) }
+  });
+  await pinWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(pinPage({ kind, dataUrl, text, color, plus }))}`);
+  pinWindow.setAlwaysOnTop(true, 'floating');
+  pinWindow.webContents.on('before-input-event', (_inputEvent, input) => { if (input.type === 'keyDown' && input.key === 'Escape') pinWindow.close(); });
+  if (plus) pinWindows.set(pinWindow.webContents, { bounds: pinWindow.getBounds() });
+  return { pinned: true, kind, bounds: pinWindow.getBounds() };
+}
 async function pinImageWindow(resolved) {
   if (!IMAGE_FILE.test(resolved)) throw new Error('אפשר להצמיד רק תמונה');
   const bytes = await fs.readFile(resolved);
-  const dataUrl = `data:${imageMimeType(resolved)};base64,${bytes.toString('base64')}`;
-  const image = nativeImage.createFromBuffer(bytes);
-  const size = image.getSize();
-  const scale = Math.min(1, 900 / Math.max(size.width, 1), 700 / Math.max(size.height, 1));
-  const pinWindow = new BrowserWindow({ show: process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1', width: Math.max(260, Math.round(size.width * scale)), height: Math.max(180, Math.round(size.height * scale)), frame: false, resizable: true, alwaysOnTop: true, backgroundColor: '#111111', webPreferences: { contextIsolation: true, sandbox: true } });
-  await pinWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111;border-radius:12px;-webkit-app-region:drag}img{width:100%;height:100%;object-fit:contain;display:block}button{position:fixed;top:8px;left:8px;width:28px;height:28px;border:0;border-radius:50%;background:#000a;color:#fff;font:16px Segoe UI;cursor:pointer;opacity:0;transition:opacity .15s;-webkit-app-region:no-drag}body:hover button{opacity:1}</style><img draggable="false" src="${dataUrl}"><button title="סגירה (Esc)" onclick="window.close()">×</button>`)}`);
-  pinWindow.setAlwaysOnTop(true, 'floating');
-  pinWindow.webContents.on('before-input-event', (_inputEvent, input) => { if (input.type === 'keyDown' && input.key === 'Escape') pinWindow.close(); });
-  return { pinned: true, bounds: pinWindow.getBounds() };
+  const size = nativeImage.createFromBuffer(bytes).getSize();
+  return openPin({ kind: 'image', dataUrl: `data:${imageMimeType(resolved)};base64,${bytes.toString('base64')}`, width: size.width, height: size.height });
+}
+// What is on the clipboard now: a picture, a colour or a text, pinned as it is.
+async function pinClipboard() {
+  const image = clipboard.readImage();
+  const picked = classifyClipboard({ hasImage: !image.isEmpty(), text: clipboard.readText() });
+  if (picked.kind === 'none') return { pinned: false, message: 'בלוח אין כרגע תמונה, טקסט או צבע להצמדה' };
+  if (picked.kind === 'image') { const size = image.getSize(); return openPin({ kind: 'image', dataUrl: image.toDataURL(), width: size.width, height: size.height }); }
+  return openPin(picked);
+}
+function pinTarget(event) {
+  if (!pinWindows.has(event.sender)) return null;
+  const window = BrowserWindow.fromWebContents(event.sender);
+  return window && !window.isDestroyed() ? { window, state: pinWindows.get(event.sender) } : null;
 }
 
 // Shows the post-capture card on the floating bar (created on demand even if the bar itself is switched off).
 async function showCapturePreview(filePath) {
+  textIndexer.kick();
   const resolved = await assertLibraryFile(filePath);
   const stat = await fs.stat(resolved);
   const extension = path.extname(resolved).slice(1).toLowerCase();
@@ -347,7 +501,22 @@ async function showCapturePreview(filePath) {
 // so it behaves exactly like every other screenshot — without bringing the studio window forward.
 // purpose 'capture' (toolbar: save / copy / editor / copy text), 'ocr' (text of an area to the clipboard),
 // 'record' (the area to record — the studio then records it).
-async function runRegionCapture(mode = 'pick', { purpose = 'capture' } = {}) {
+// Hands a captured picture to the studio window to be finished and saved (or saves it here when the window is gone).
+async function deliverCapture({ png, width, height, after = 'save', title = '', afterAction = null }) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:external-image', { bytes: png, width, height, after, afterAction, title: quickbarPreferences.autoName ? title : '' });
+  else {
+    const filePath = captureFilePath(await ensureOutputDirectory(), 'screenshot', 'png', new Date(), quickbarPreferences.autoName ? title : null);
+    await fs.writeFile(filePath, png);
+    await showCapturePreview(filePath);
+  }
+}
+// "Separate action for each shortcut" (an extra): what happens after saving this kind of capture; null = the general setting.
+function afterActionFor(kind) {
+  if (!featureOn('perKeyAfter')) return null;
+  const chosen = featureValue('perKeyAfter', kind);
+  return chosen && chosen !== 'default' ? chosen : null;
+}
+async function runRegionCapture(mode = 'pick', { purpose = 'capture', afterOverride = null, noClipboard = false } = {}) {
   if (!regionCapture) return { unavailable: true };
   if (regionCapture.isOpen) return { busy: true };
   try {
@@ -362,7 +531,9 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture' } = {}) {
       return { record: true };
     }
     // Automatic scrolling capture: the chosen area is scrolled and photographed, then joined into one picture.
+    let scrolled = false;
     if (result?.scroll) {
+      scrolled = true;
       const title = result.title;
       result = await regionCapture.autoScroll({ displayId: result.displayId, rect: result.rect });
       if (!result?.png) { notify('צילום הגלילה לא הצליח', 'נסו לבחור אזור שאפשר לגלול בתוכו'); return { error: 'scroll' }; }
@@ -371,13 +542,9 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture' } = {}) {
     if (!result?.png) return result;
     if (result.after === 'ocr') return copyTextFromImage(result.png);
     // Copy at once (the clipboard has the picture even while the studio is still saving it).
-    if (result.after === 'copy' || quickbarPreferences.autoCopy) clipboard.writeImage(nativeImage.createFromBuffer(result.png));
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:external-image', { bytes: result.png, width: result.width, height: result.height, after: result.after || 'save', title: quickbarPreferences.autoName ? result.title || '' : '' });
-    else {
-      const filePath = captureFilePath(await ensureOutputDirectory(), 'screenshot', 'png', new Date(), quickbarPreferences.autoName ? result.title : null);
-      await fs.writeFile(filePath, result.png);
-      await showCapturePreview(filePath);
-    }
+    if (!noClipboard && (result.after === 'copy' || quickbarPreferences.autoCopy)) clipboard.writeImage(nativeImage.createFromBuffer(result.png));
+    // The action after saving: chosen for this very capture, else the one of this kind of shortcut (an extra), else the general one.
+    await deliverCapture({ png: result.png, width: result.width, height: result.height, after: result.after || 'save', title: result.title || '', afterAction: afterOverride || afterActionFor(scrolled ? 'scroll' : 'region') });
     return { captured: true, width: result.width, height: result.height, after: result.after || 'save', marks: result.marks || 0 };
   } catch (error) {
     notify('צילום האזור נכשל', error.message);
@@ -404,8 +571,22 @@ async function copyTextFromImage(png) {
     await fs.writeFile(temporaryPath, png);
     const result = await runOcr(temporaryPath, { tessdataDirectory: await ensureOcrLanguageData() });
     const text = String(result.text || '').trim();
-    if (text) clipboard.writeText(text);
     lastOcrText = text;
+    // Translation (an extra): the clipboard gets the translation; when the engine is not running the text is copied as it is.
+    if (text && featureOn('translate')) {
+      try {
+        const translation = await translateText(text, { address: featureValue('translate', 'address'), model: featureValue('translate', 'model'), target: featureValue('translate', 'target') });
+        clipboard.writeText(translation.text);
+        lastTranslation = translation.text;
+        notify(`הטקסט תורגם ל${featureValue('translate', 'target')} והועתק ללוח`, translation.text.slice(0, 120));
+        return { ocr: true, characters: text.length, translated: true };
+      } catch (error) {
+        clipboard.writeText(text);
+        notify('התרגום לא בוצע — הטקסט המקורי הועתק', error.message);
+        return { ocr: true, characters: text.length, translated: false, translateError: error.message };
+      }
+    }
+    if (text) clipboard.writeText(text);
     notify(text ? 'הטקסט הועתק ללוח' : 'לא נמצא טקסט באזור', text ? text.slice(0, 120) : 'נסו לבחור אזור גדול יותר או ברור יותר');
     return { ocr: true, characters: text.length };
   } catch (error) {
@@ -1246,7 +1427,7 @@ async function recentLibrary(limit = 48) {
   }));
   const newest = items.filter(Boolean).sort((a, b) => b.modified - a.modified).slice(0, limit);
   // Folder tag and the file's address (videos play from it; Space shows a picture full size), for the captures window.
-  return Promise.all(newest.map(async (item) => ({ ...item, thumbnail: await thumbnailFor(item), folder: (await readJson(`${item.path}.meta.json`))?.folder || '', url: pathToFileURL(item.path).href })));
+  return Promise.all(newest.map(async (item) => { const metadata = await readJson(`${item.path}.meta.json`); return { ...item, thumbnail: await thumbnailFor(item), folder: metadata?.folder || '', text: featureOn('textIndex') ? String(metadata?.ocrText || '').slice(0, 3000) : '', url: pathToFileURL(item.path).href }; }));
 }
 
 // Only the app's own pages may call the main process: a foreign page that slipped into a window
@@ -1597,6 +1778,28 @@ function registerIpc() {
   ipcMain.handle('update:state', () => ({ ...(updater?.state || { status: 'unavailable' }), current: app.getVersion() }));
   ipcMain.handle('update:check', async () => ({ ...(await updater?.check() || { status: 'unavailable' }), current: app.getVersion() }));
   ipcMain.handle('update:install', () => Boolean(updater?.installNow()));
+  ipcMain.handle('features:get', () => features);
+  ipcMain.handle('features:action', (event, id) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return featureAction(String(id)); });
+  ipcMain.on('pin:resize', (event, factor) => {
+    const target = pinTarget(event);
+    if (!target) return;
+    const bounds = target.window.getBounds();
+    const area = screen.getDisplayNearestPoint({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }).workArea;
+    target.window.setBounds(zoomedBounds(bounds, Math.min(2, Math.max(0.5, Number(factor) || 1)), area));
+  });
+  ipcMain.on('pin:opacity', (event, delta) => {
+    const target = pinTarget(event);
+    if (target) target.window.setOpacity(clampOpacity(target.window.getOpacity() + (Number(delta) || 0)));
+  });
+  ipcMain.on('pin:reset', (event) => {
+    const target = pinTarget(event);
+    if (!target) return;
+    target.window.setOpacity(1);
+    target.window.setBounds(target.state.bounds);
+  });
+  ipcMain.handle('features:set', (event, patch) => (isTrustedSender(event) ? saveFeatures(patch && typeof patch === 'object' ? patch : {}) : features));
+  ipcMain.handle('settings:export', (event, local) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return exportSettings(local); });
+  ipcMain.handle('settings:import', (event) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return importSettings(); });
   ipcMain.handle('workspace:open', () => openWorkspace());
   ipcMain.handle('workspace:list', () => recentLibrary(200));
   ipcMain.handle('workspace:item-action', async (_event, filePath, action) => {
@@ -1708,6 +1911,7 @@ function registerIpc() {
     quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active));
     await recordingControls?.update(Boolean(active), details && typeof details === 'object' ? details : {});
     await setKeyEcho(Boolean(active) && Boolean(details?.showKeys), details || {});
+    await setClickEcho(Boolean(active) && featureOn('clickRipple'));
     return true;
   });
   ipcMain.handle('shortcuts:get', () => ({ shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration }));
@@ -1792,7 +1996,14 @@ function dispatchShortcut(action, source = 'unknown') {
 // The laptop capture key (Windows+Shift+S, caught by the desktop helper) opens the frozen screen like PrtSc.
 windowList.onEvent = (name) => {
   if (name === 'snip' && quickbarPreferences.laptopCaptureKey) dispatchShortcut('region', 'laptop-capture-key');
-  else if (name.startsWith('key ') && keyEchoActive) {
+  else if (name.startsWith('click ') && clickEchoActive) {
+    // The helper speaks in physical pixels; the studio window works in points of the screen the click was on.
+    const click = parseClickEvent(name);
+    if (!click) return;
+    const point = typeof screen.screenToDipPoint === 'function' ? screen.screenToDipPoint({ x: click.x, y: click.y }) : { x: click.x, y: click.y };
+    const display = screen.getDisplayNearestPoint(point);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('recording:click', { point, displayId: String(display.id), bounds: display.bounds, button: click.button });
+  } else if (name.startsWith('key ') && keyEchoActive) {
     const [, code, held = ''] = name.split(' ');
     const label = keyLabel(Number(code), held);
     if (label) keyOverlay.show(label);
@@ -1800,6 +2011,7 @@ windowList.onEvent = (name) => {
 };
 // Keys shown during a recording (setting in the video options): on when such a recording starts, off when it ends.
 let keyEchoActive = false;
+let clickEchoActive = false;
 const keyOverlay = new KeyOverlay();
 async function setKeyEcho(on, details = {}) {
   if (on === keyEchoActive) return;
@@ -1812,6 +2024,13 @@ async function setKeyEcho(on, details = {}) {
     keyOverlay.close();
   }
 }
+// Click rings (an extra): the helper reports mouse presses only while a recording runs with the extra switched on.
+async function setClickEcho(on) {
+  if (on === clickEchoActive) return;
+  clickEchoActive = on;
+  await windowList.setClickEcho(on).catch(() => false);
+}
+featureListeners.add((now) => { if (!now.enabled.clickRipple && clickEchoActive) setClickEcho(false); });
 function applyLaptopCaptureKey() {
   if (process.env.SCREEN_STUDIO_QA === '1') return Promise.resolve(false);
   return windowList.setSnipKey(Boolean(quickbarPreferences.laptopCaptureKey)).catch(() => false);
@@ -1860,6 +2079,8 @@ function buildTrayMenu() {
     { label: 'לוח הצילומים', click: () => openWorkspace() },
     { label: 'פתיחת הספרייה', click: () => showMainWindow('library') },
     { label: 'פתיחת תיקיית השמירה', click: () => ensureOutputDirectory().then((directory) => shell.openPath(directory)) },
+    ...(featureOn('pinPlus') ? [{ label: 'הצמדת מה שבלוח', click: () => pinClipboard().catch(() => {}) }] : []),
+    ...(featureOn('intervalCapture') ? [{ label: intervalCapture.running ? `עצירת צילום במרווחים (${intervalCapture.taken})` : 'התחלת צילום במרווחים', click: () => toggleIntervalCapture() }] : []),
     { type: 'separator' },
     { label: 'יציאה', click: () => app.quit() }
   ]));
@@ -1878,6 +2099,8 @@ app.whenReady().then(async () => {
   await ensureOutputDirectory();
   await recoverInterruptedRecordings();
   await loadQuickbarPreferences();
+  await loadFeatures();
+  if (featureOn('textIndex')) textIndexer.start(20_000);
   await loadChosenIcon();
   await applyFirstRunDefaults();
   registerIpc();

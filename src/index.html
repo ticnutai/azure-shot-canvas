@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="video-timeline.css">
   <link rel="stylesheet" href="library-views.css">
   <link rel="stylesheet" href="capture-preferences.css">
+  <link rel="stylesheet" href="features.css">
   <link rel="stylesheet" href="recent-library.css">
   <link rel="stylesheet" href="shortcut-settings.css">
   <link rel="stylesheet" href="tool-center.css">
@@ -205,6 +206,7 @@
               <button class="page-tab" data-preference-tab="shortcuts">קיצורי דרך</button>
               <button class="page-tab" data-preference-tab="appearance">עיצוב וערכות נושא</button>
               <button class="page-tab" data-preference-tab="workflows">אוטומציות</button>
+              <button class="page-tab" data-preference-tab="features">תוספות</button>
               <button class="page-tab" data-preference-tab="development">פיתוח ו־QA</button>
             </div>
             <div class="preference-section active" data-preference-section="general">
@@ -302,6 +304,15 @@
               <div id="workflow-list" class="workflow-list"></div>
               <div class="workflow-log"><div><b>הפעלה אחרונה</b><button class="copy-button" id="copy-workflow-log">⧉ העתק</button></div><pre id="workflow-log">עדיין לא הופעלה אוטומציה.</pre></div>
             </div>
+            <div class="preference-section" data-preference-section="features">
+              <h2>תוספות לבחירה</h2>
+              <p class="features-note">כל תוספת כבויה עד שתדליקו אותה, ואפשר לכבות אותה בכל רגע. מה שכבוי לא רץ ולא צורך כלום.</p>
+              <div id="features-list" class="features-list"></div>
+              <article class="feature-card backup-card">
+                <div class="switch-row"><span><b>גיבוי והחזרת הגדרות</b><small>כל ההגדרות בקובץ אחד: לעבור למחשב אחר או לחזור אליהן אחרי התקנה מחדש. הצילומים וההקלטות לא נכללים</small></span></div>
+                <div class="feature-fields"><button type="button" class="ghost" id="settings-export">שמירת גיבוי לקובץ</button><button type="button" class="ghost" id="settings-import">החזרת הגדרות מקובץ</button></div>
+              </article>
+            </div>
             <div class="preference-section" data-preference-section="development">
               <div class="qa-heading"><div><h2>מרכז QA מדעי</h2><p>בדיקות אוטומטיות ברקע, מדדי ביצועים והשוואת רגרסיה לריצה הקודמת</p></div><div class="qa-actions"><button class="ghost" id="refresh-qa">↻ רענון</button><button class="gold-button" id="run-qa">▷ הפעל QA מלא</button></div></div>
               <div class="qa-summary" id="qa-summary">
@@ -370,6 +381,8 @@
   <div class="scroll-capture-bar hidden" id="scroll-capture-bar"><strong>⇣ צילום גלילה</strong><span id="scroll-capture-status">עבור למקור וגלול לאט כלפי מטה</span><button id="finish-scroll-capture">סיום ושמירה</button></div>
   <div class="toast hidden" id="toast"></div>
   <video id="camera-video" autoplay muted playsinline></video><canvas id="recording-canvas"></canvas>
+  <script src="features-defs.js"></script>
+  <script src="click-ripple.js"></script>
   <script src="browser-api.js"></script>
   <script src="dev-client.js"></script>
   <script src="scroll-capture-engine.js"></script>
@@ -384,5 +397,6 @@
   <script src="icons.js"></script>
   <script src="appearance.js"></script>
   <script src="renderer.js"></script>
+  <script src="features-ui.js"></script>
 </body>
 </html>

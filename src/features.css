@@ -1,0 +1,12 @@
+/* Settings tab "extras": a card per extra, its settings under the switch, greyed while the switch is off. */
+.features-note{margin:4px 0 14px;color:var(--muted);font-size:12px}
+.features-list{display:grid;gap:10px}
+.feature-card{border:1px solid var(--line);border-radius:14px;background:var(--panel-2);padding:4px 16px 12px}
+.feature-card.on{border-color:var(--gold)}
+.feature-card .switch-row{border-bottom:0}
+.feature-fields{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:end;padding-top:2px}
+.feature-field{display:grid;gap:4px;font-size:11px;color:var(--muted)}
+.feature-field select,.feature-field input{min-width:150px;height:34px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);padding:0 10px;font:inherit;font-size:12px}
+.feature-field select:disabled,.feature-field input:disabled{opacity:.45}
+.feature-card .ghost{height:34px}
+.backup-card{margin-top:14px}

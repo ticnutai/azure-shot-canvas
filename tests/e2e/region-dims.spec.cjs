@@ -31,6 +31,8 @@ test.describe.serial('region capture: exact size by numbers', () => {
     const since = Date.now();
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().endsWith('index.html')).webContents.sendInputEvent({ type: 'keyDown', keyCode: 'PrintScreen', modifiers: [] }));
     overlay = await region.opened(since);
+    // Sizes are worked out with the density of the screen the picker really opened on (with a second screen, not always the main one).
+    scale = await overlay.evaluate(() => window.devicePixelRatio);
     // The magnifier follows the pointer while the area is being chosen.
     await overlay.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { clientX: 60, clientY: 70, bubbles: true })));
     await expect(overlay.locator('#loupe')).toBeVisible();

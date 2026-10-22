@@ -55,6 +55,10 @@ const state = {
   captureDelay: 0,
   shortcuts: {},
   afterScreenshotAction: 'save',
+  // Optional extras (switches in the settings) and the action chosen for the capture that is being taken now.
+  features: null,
+  afterOverride: null,
+  clicks: [],
   chapterMarkers: [],
   region: { x: 0, y: 0, width: 1, height: 1 }
 };
@@ -1124,6 +1128,38 @@ function stopInputStreams() {
   setPreviewState('', 'מחזיר את התצוגה המקדימה…');
 }
 
+// Where a screen point (the cursor, or a click) falls on the recording picture; null when it is outside the recorded area
+// or the recorded source is not a screen.
+function canvasPointFor(info) {
+  if (!info?.bounds?.width || !info?.bounds?.height || state.selectedSource?.type !== 'screen') return null;
+  const crop = state.region;
+  const nx = (info.point.x - info.bounds.x) / info.bounds.width;
+  const ny = (info.point.y - info.bounds.y) / info.bounds.height;
+  if (nx < crop.x || nx > crop.x + crop.width || ny < crop.y || ny > crop.y + crop.height) return null;
+  return { x: ((nx - crop.x) / crop.width) * recordingCanvas.width, y: ((ny - crop.y) / crop.height) * recordingCanvas.height };
+}
+
+// Click rings (an extra): a widening ring where each mouse press happened, for a short moment.
+function drawClickRipples() {
+  const ripple = window.aurumClickRipple;
+  const now = performance.now();
+  state.clicks = state.clicks.filter((click) => now - click.at < ripple.LIFE_MS);
+  for (const click of state.clicks) {
+    const spot = canvasPointFor(click);
+    const frame = spot && ripple.rippleFrame(now - click.at, recordingCanvas.width, state.features?.values?.clickRipple?.color);
+    if (!frame) continue;
+    recordingContext.save();
+    recordingContext.beginPath();
+    recordingContext.arc(spot.x, spot.y, frame.radius, 0, Math.PI * 2);
+    recordingContext.fillStyle = frame.fill;
+    recordingContext.fill();
+    recordingContext.strokeStyle = frame.stroke;
+    recordingContext.lineWidth = frame.lineWidth;
+    recordingContext.stroke();
+    recordingContext.restore();
+  }
+}
+
 function drawFrame() {
   const sourceWidth = displayVideo.videoWidth;
   const sourceHeight = displayVideo.videoHeight;
@@ -1140,13 +1176,10 @@ function drawFrame() {
     recordingCanvas.height = outputHeight - (outputHeight % 2);
   }
   recordingContext.drawImage(displayVideo, sx, sy, sw, sh, 0, 0, recordingCanvas.width, recordingCanvas.height);
-  if ($('#cursor-highlight')?.checked && state.cursorInfo && state.selectedSource?.type === 'screen') {
-    const { point, bounds } = state.cursorInfo;
-    const nx = (point.x - bounds.x) / bounds.width;
-    const ny = (point.y - bounds.y) / bounds.height;
-    if (nx >= crop.x && nx <= crop.x + crop.width && ny >= crop.y && ny <= crop.y + crop.height) {
-      const x = ((nx - crop.x) / crop.width) * recordingCanvas.width;
-      const y = ((ny - crop.y) / crop.height) * recordingCanvas.height;
+  if ($('#cursor-highlight')?.checked) {
+    const spot = canvasPointFor(state.cursorInfo);
+    if (spot) {
+      const { x, y } = spot;
       const radius = Math.max(14, recordingCanvas.width * 0.012);
       recordingContext.save();
       recordingContext.beginPath();
@@ -1159,6 +1192,7 @@ function drawFrame() {
       recordingContext.restore();
     }
   }
+  if (state.features?.enabled?.clickRipple) drawClickRipples();
   if (state.cameraStream && cameraVideo.videoWidth) {
     const targetWidth = Math.round(recordingCanvas.width * state.cameraSize / 100);
     const targetHeight = Math.round(targetWidth * cameraVideo.videoHeight / cameraVideo.videoWidth);
@@ -1336,19 +1370,21 @@ function showQuickbarSettings(preferences) {
   $('#auto-name').checked = preferences.autoName !== false;
 }
 
-async function handleSavedScreenshot(result) {
+async function handleSavedScreenshot(result, afterAction = null) {
+  // The action of this capture: chosen for its kind of shortcut (an extra), else the general setting.
+  const action = afterAction || state.afterScreenshotAction;
   document.documentElement.dataset.lastSavedPath = result.path;
   document.documentElement.dataset.lastSavedAt = String(Date.now());
   // One notice per capture: the floating card when it is shown, otherwise the in-app toast.
-  showCaptureCard(result.path, ['quick', 'professional'].includes(state.afterScreenshotAction)).then((card) => { if (!card?.shown) showToast(`התמונה נשמרה: ${result.path}`); });
+  showCaptureCard(result.path, ['quick', 'professional'].includes(action)).then((card) => { if (!card?.shown) showToast(`התמונה נשמרה: ${result.path}`); });
   setStatus('התמונה נשמרה');
   await loadLibrary().catch(() => {});
   restoreLivePreview();
   const completed = new Set();
-  if (['quick', 'professional'].includes(state.afterScreenshotAction) && window.aurumEditor) { await window.aurumEditor.open(result.path, state.afterScreenshotAction); completed.add('open-editor'); }
-  if (state.afterScreenshotAction === 'ocr') { const ocr = await api.runOcr(result.path); completed.add('ocr'); showToast(`OCR הושלם: ${ocr.text.length} תווים נוספו לחיפוש`); await loadLibrary(); }
-  if (state.afterScreenshotAction === 'pin') { await api.pinImage(result.path); showToast('הצילום הוצמד מעל החלונות'); }
-  if (state.afterScreenshotAction === 'share') { const share = await api.shareLocal(result.path); completed.add('share'); showToast(`קישור מקומי פרטי הועתק, בתוקף עד ${new Date(share.expiresAt).toLocaleTimeString('he-IL')}`); }
+  if (['quick', 'professional'].includes(action) && window.aurumEditor) { await window.aurumEditor.open(result.path, action); completed.add('open-editor'); }
+  if (action === 'ocr') { const ocr = await api.runOcr(result.path); completed.add('ocr'); showToast(`OCR הושלם: ${ocr.text.length} תווים נוספו לחיפוש`); await loadLibrary(); }
+  if (action === 'pin') { await api.pinImage(result.path); showToast('הצילום הוצמד מעל החלונות'); }
+  if (action === 'share') { const share = await api.shareLocal(result.path); completed.add('share'); showToast(`קישור מקומי פרטי הועתק, בתוקף עד ${new Date(share.expiresAt).toLocaleTimeString('he-IL')}`); }
   await runWorkflows('screenshot', result.path, completed);
 }
 
@@ -1581,7 +1617,7 @@ async function saveScreenshot() {
 }
 
 // A region cut on the frozen screen by the main process: same finishing and saving as any other screenshot.
-async function saveExternalImage({ bytes, after = 'save', title = '' }) {
+async function saveExternalImage({ bytes, after = 'save', title = '', afterAction = null }) {
   const bitmap = await createImageBitmap(new Blob([bytes], { type: 'image/png' }));
   const canvas = document.createElement('canvas');
   canvas.width = bitmap.width;
@@ -1589,13 +1625,14 @@ async function saveExternalImage({ bytes, after = 'save', title = '' }) {
   canvas.getContext('2d').drawImage(bitmap, 0, 0);
   bitmap.close();
   document.documentElement.dataset.lastRegionCapture = `${canvas.width}x${canvas.height}`;
-  const result = await finishAndSaveScreenshot(canvas, { title });
+  const result = await finishAndSaveScreenshot(canvas, { title, afterAction });
   // 'Editor' on the quick marks toolbar: the saved picture opens in the full editor.
   if (after === 'edit' && result?.path) await openInEditor(result.path);
 }
 
 // Optional redaction and styling, encoding to the chosen format, saving, then the card and automations.
-async function finishAndSaveScreenshot(canvas, { title = '' } = {}) {
+// afterAction: the action of this capture; left out, it is the one armed by the shortcut (see armAfterAction), if any.
+async function finishAndSaveScreenshot(canvas, { title = '', afterAction } = {}) {
   const finish = window.aurumImageFinish;
   if (state.autoRedact && api.detectSensitiveRegions) {
     setStatus('מאתר מידע רגיש…', 'busy');
@@ -1609,12 +1646,12 @@ async function finishAndSaveScreenshot(canvas, { title = '' } = {}) {
   if (state.autoBeautify) canvas = await finish.beautifyCanvas(canvas.toDataURL('image/png'), state.autoBeautifyStyle);
   const image = await finish.encode(canvas, state.imageFormat);
   const result = await api.saveScreenshot(image.bytes, { format: state.imageFormat, width: image.width, height: image.height, title });
-  runAfterScreenshot(result);
+  runAfterScreenshot(result, afterAction);
   return result;
 }
 
-function runAfterScreenshot(result) {
-  handleSavedScreenshot(result).catch((error) => showToast(`הצילום נשמר, אבל פעולת ההמשך נכשלה: ${error.message}`, 8000));
+function runAfterScreenshot(result, afterAction) {
+  handleSavedScreenshot(result, afterAction === undefined ? takeAfterOverride() : afterAction).catch((error) => showToast(`הצילום נשמר, אבל פעולת ההמשך נכשלה: ${error.message}`, 8000));
 }
 
 async function createMixedAudioTrack() {
@@ -1714,6 +1751,7 @@ async function startRecording() {
   state.recordingBytes = 0;
   state.recordingChunks = 0;
   state.cursorSamples = [];
+  state.clicks = [];
   state.recorder.addEventListener('dataavailable', (event) => {
     if (!event.data.size) return;
     state.recordingAppendQueue = state.recordingAppendQueue.then(async () => {
@@ -1876,14 +1914,26 @@ async function recordChosenRegion(region) {
   return beginCapture('record', 'region', { x, y, width, height });
 }
 
+// "Separate action for each shortcut" (an extra): a shortcut arms the action of its kind; the capture takes it when it is
+// saved (a scroll capture ends later, so it stays armed for a few minutes). Nothing armed = the general setting.
+function armAfterAction(kind) {
+  const chosen = state.features?.enabled?.perKeyAfter ? state.features.values.perKeyAfter?.[kind] : null;
+  state.afterOverride = chosen && chosen !== 'default' ? { value: chosen, until: Date.now() + 180_000 } : null;
+}
+function takeAfterOverride() {
+  const armed = state.afterOverride;
+  state.afterOverride = null;
+  return armed && Date.now() < armed.until ? armed.value : null;
+}
+
 async function executeShortcutAction(action, meta = {}) {
   if (action === 'recordRegion') return recordChosenRegion(meta.region);
-  if (action === 'scrollCapture') return beginCapture('screenshot', 'scroll');
+  if (action === 'scrollCapture') { armAfterAction('scroll'); return beginCapture('screenshot', 'scroll'); }
   if (action === 'record') return state.recorder ? stopRecording() : beginCapture('record', 'full');
   if (action === 'recordStart') return state.recorder ? showToast('כבר קיימת הקלטה פעילה') : beginCapture('record', 'full');
   if (action === 'recordStop') return state.recorder ? stopRecording() : showToast('אין הקלטה פעילה לעצירה');
   if (action === 'pause') return togglePause();
-  if (action === 'screenshot') return beginCapture('screenshot', 'full');
+  if (action === 'screenshot') { armAfterAction('screenshot'); return beginCapture('screenshot', 'full'); }
   if (action === 'region') return beginCapture('screenshot', 'region');
   if (action === 'repeatRegion') return beginCapture('screenshot', 'last-region');
   if (action === 'screenshotEdit') {
@@ -2693,6 +2743,10 @@ async function initialize() {
   api.onNavigate((page) => showPage(page));
   api.onOpenEditor?.((filePath) => openInEditor(filePath).catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   api.onLibraryChanged?.(() => loadLibrary().catch(() => {}));
+  api.getFeatures?.().then((value) => { state.features = value; }).catch(() => {});
+  api.onFeatures?.((value) => { state.features = value; });
+  // A mouse press during a recording (only reported while the click-rings extra is on).
+  api.onRecordingClick?.((click) => { if (state.recorder) state.clicks.push({ ...click, at: performance.now() }); });
   api.onExternalImage?.((payload) => saveExternalImage(payload).catch((error) => showToast(`שמירת הצילום נכשלה: ${error.message}`, 8000)));
   api.onToast?.((text) => showToast(text, 8000));
   // The window minimized or hidden: stop the live screen stream (it costs processor and graphics all the time);

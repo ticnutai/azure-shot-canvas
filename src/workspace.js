@@ -49,7 +49,9 @@
 
   // Folder filter: '*' everything, '' captures without a folder, otherwise one folder.
   let folderFilter = '*';
-  const visible = () => items.filter((item) => (folderFilter === '*' || (item.folder || '') === folderFilter) && (!filter || item.name.toLowerCase().includes(filter.toLowerCase())));
+  // The search finds the name, and — with the text search extra on — the words written inside the picture (item.text).
+  const matches = (item) => { const word = filter.toLowerCase(); return item.name.toLowerCase().includes(word) || (item.text || '').toLowerCase().includes(word); };
+  const visible = () => items.filter((item) => (folderFilter === '*' || (item.folder || '') === folderFilter) && (!filter || matches(item)));
   const folderNames = () => [...new Set(items.map((item) => item.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
   function renderFolderFilter() {
     const select = $('#folder-filter');

@@ -49,7 +49,8 @@ test.describe.serial('region capture on the frozen screen', () => {
     await expect.poll(() => overlayPages().length, { timeout: 15_000 }).toBeGreaterThan(0);
     for (const candidate of overlayPages()) {
       const ready = await candidate.waitForFunction((after) => Number(document.documentElement.dataset.regionReady || 0) > after, since, { timeout: 15_000 }).then(() => true).catch(() => false);
-      if (ready) return candidate;
+      // Sizes are worked out with the density of the screen this overlay is on (with a second screen, not always the main one).
+      if (ready) { scale = await candidate.evaluate(() => window.devicePixelRatio); return candidate; }
     }
     throw new Error('overlay never received a frozen screen');
   };
