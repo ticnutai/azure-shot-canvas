@@ -401,17 +401,50 @@ function applyAutomaticSwitches(patch = {}, persist = true) {
   state.imageFormat ||= 'png';
   if ($('#image-format')) $('#image-format').value = state.imageFormat;
   if (persist && patch.imageFormat) localStorage.setItem('aurum-image-format', state.imageFormat);
+  // The quality of JPG, WEBP and PDF pictures (PNG keeps every pixel, so the slider rests while PNG is chosen).
+  if (Number(patch.imageQuality) >= 40 && Number(patch.imageQuality) <= 100) state.imageQuality = Math.round(Number(patch.imageQuality));
+  state.imageQuality ||= 92;
+  if ($('#image-quality')) { $('#image-quality').value = String(state.imageQuality); $('#image-quality').disabled = state.imageFormat === 'png'; }
+  if ($('#image-quality-output')) $('#image-quality-output').textContent = `${state.imageQuality}%`;
+  if (persist && patch.imageQuality) localStorage.setItem('aurum-image-quality', String(state.imageQuality));
   if (window.aurumImageFinish?.backgrounds.includes(patch.autoBeautifyStyle)) state.autoBeautifyStyle = patch.autoBeautifyStyle;
   state.autoBeautifyStyle ||= 'ocean';
   if (persist && patch.autoBeautifyStyle) localStorage.setItem('aurum-auto-beautify-style', state.autoBeautifyStyle);
   if ($('#auto-beautify-style')) { $('#auto-beautify-style').value = state.autoBeautifyStyle; $('#auto-beautify-style').disabled = !state.autoBeautify; }
 }
 
+// Video quality comes from the four controls of the settings window and nothing else, and they are remembered.
+const VIDEO_QUALITY_KEYS = { '#resolution-select': 'aurum-video-resolution', '#fps-select': 'aurum-video-fps', '#bitrate-range': 'aurum-video-bitrate', '#format-select': 'aurum-video-format' };
+function syncVideoQuality(persist = true) {
+  const resolution = $('#resolution-select');
+  const fps = Number($('#fps-select')?.value) || 30;
+  const bitrate = Number($('#bitrate-range')?.value) || 18;
+  state.targetHeight = Number(resolution?.value) || 2160;
+  qualityPresets.motion.fps = fps;
+  qualityPresets.motion.bitrate = bitrate * 1_000_000;
+  state.quality = 'motion';
+  if ($('#bitrate-output')) $('#bitrate-output').textContent = `${bitrate} Mbps`;
+  if ($('#quality-status') && resolution) $('#quality-status').textContent = `${resolution.selectedOptions[0].text.split(' ')[0]} · ${fps}fps`;
+  if ($('#convert-mp4')) $('#convert-mp4').checked = ($('#format-select')?.value || 'mp4') === 'mp4';
+  if (persist) { try { for (const [control, key] of Object.entries(VIDEO_QUALITY_KEYS)) localStorage.setItem(key, $(control).value); } catch {} }
+}
+function restoreVideoQuality() {
+  for (const [control, key] of Object.entries(VIDEO_QUALITY_KEYS)) {
+    const element = $(control);
+    let saved = null;
+    try { saved = localStorage.getItem(key); } catch {}
+    if (!element || saved === null) continue;
+    if (element.tagName === 'SELECT' ? [...element.options].some((option) => option.value === saved) : Number(saved) >= Number(element.min) && Number(saved) <= Number(element.max)) element.value = saved;
+  }
+  syncVideoQuality(false);
+}
+
 function restoreUserPreferences() {
   let collapsed = {};
   try { collapsed = JSON.parse(localStorage.getItem('aurum-collapsed') || '{}') || {}; } catch {}
   for (const section of Object.keys(COLLAPSIBLE_SECTIONS)) setSectionCollapsed(section, Boolean(collapsed[section]), false);
-  applyAutomaticSwitches({ ...Object.fromEntries(Object.entries(AUTOMATIC_SWITCHES).map(([name, { key }]) => [name, localStorage.getItem(key) === 'on'])), autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean', imageFormat: localStorage.getItem('aurum-image-format') || 'png' }, false);
+  applyAutomaticSwitches({ ...Object.fromEntries(Object.entries(AUTOMATIC_SWITCHES).map(([name, { key }]) => [name, localStorage.getItem(key) === 'on'])), autoBeautifyStyle: localStorage.getItem('aurum-auto-beautify-style') || 'ocean', imageFormat: localStorage.getItem('aurum-image-format') || 'png', imageQuality: localStorage.getItem('aurum-image-quality') || 92 }, false);
+  restoreVideoQuality();
   // Off unless the user turned it on: the live screen stream holds about 120 MB the whole time it runs.
   setLivePreviewEnabled(localStorage.getItem('aurum-live-preview') === 'on', false);
   setCaptureExclusion(localStorage.getItem('aurum-exclude-studio-window') !== 'off', false);
@@ -1675,7 +1708,7 @@ async function finishAndSaveScreenshot(canvas, { title = '', afterAction } = {})
     } else document.documentElement.dataset.lastAutoRedactions = '0';
   }
   if (state.autoBeautify) canvas = await finish.beautifyCanvas(canvas.toDataURL('image/png'), state.autoBeautifyStyle);
-  const image = await finish.encode(canvas, state.imageFormat);
+  const image = await finish.encode(canvas, state.imageFormat, state.imageQuality / 100);
   const result = await api.saveScreenshot(image.bytes, { format: state.imageFormat, width: image.width, height: image.height, title });
   runAfterScreenshot(result, afterAction);
   return result;
@@ -2653,6 +2686,7 @@ async function initialize() {
   for (const [name, { control }] of Object.entries(AUTOMATIC_SWITCHES)) $(control)?.addEventListener('change', (event) => applyAutomaticSwitches({ [name]: event.target.checked }));
   $('#auto-beautify-style')?.addEventListener('change', (event) => applyAutomaticSwitches({ autoBeautifyStyle: event.target.value }));
   $('#image-format')?.addEventListener('change', (event) => applyAutomaticSwitches({ imageFormat: event.target.value }));
+  $('#image-quality')?.addEventListener('input', (event) => applyAutomaticSwitches({ imageQuality: event.target.value }));
   $('#live-preview-enabled')?.addEventListener('change', (event) => setLivePreviewEnabled(event.target.checked));
   $('#exclude-studio-window')?.addEventListener('change', (event) => setCaptureExclusion(event.target.checked));
   $('#camera-position').addEventListener('change', (event) => applyVisualCapturePreferences({ cameraPosition: event.target.value }));
@@ -2797,24 +2831,12 @@ async function initialize() {
     $('#camera').checked = !$('#camera').checked;
     $('#camera').dispatchEvent(new Event('change'));
   });
-  $('#resolution-select').addEventListener('change', (event) => {
-    state.targetHeight = Number(event.target.value);
-    $('#quality-status').textContent = `${event.target.options[event.target.selectedIndex].text.split(' ')[0]} · ${$('#fps-select').value}fps`;
-  });
-  $('#fps-select').addEventListener('change', (event) => {
-    const fps = Number(event.target.value);
-    qualityPresets.motion.fps = fps;
-    state.quality = 'motion';
-    $('#quality-status').textContent = `${$('#resolution-select').selectedOptions[0].text.split(' ')[0]} · ${fps}fps`;
-  });
-  $('#bitrate-range').addEventListener('input', (event) => {
-    qualityPresets.motion.bitrate = Number(event.target.value) * 1_000_000;
-    state.quality = 'motion';
-    $('#bitrate-output').textContent = `${event.target.value} Mbps`;
-  });
+  $('#resolution-select').addEventListener('change', () => syncVideoQuality());
+  $('#fps-select').addEventListener('change', () => syncVideoQuality());
+  $('#bitrate-range').addEventListener('input', () => syncVideoQuality());
   $('#mic-volume').addEventListener('input', (event) => { $('#mic-volume-output').textContent = `${event.target.value}%`; });
   $('#system-volume').addEventListener('input', (event) => { $('#system-volume-output').textContent = `${event.target.value}%`; });
-  $('#format-select').addEventListener('change', (event) => { $('#convert-mp4').checked = event.target.value === 'mp4'; });
+  $('#format-select').addEventListener('change', () => syncVideoQuality());
   $('#theme-button').addEventListener('click', () => $('#theme-menu').classList.toggle('hidden'));
   $$('[data-theme-choice]').forEach((button) => button.addEventListener('click', () => {
     applyThemeChoice(button.dataset.themeChoice, true);

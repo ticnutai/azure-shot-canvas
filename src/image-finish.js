@@ -52,8 +52,10 @@
 
   // Encodes the finished canvas in the chosen format. PDF pages embed a JPEG (the main process wraps it).
   const ENCODINGS = { png: ['image/png'], jpg: ['image/jpeg', 0.92], webp: ['image/webp', 0.92], pdf: ['image/jpeg', 0.92] };
-  async function encode(canvas, format = 'png') {
-    const [type, quality] = ENCODINGS[format] || ENCODINGS.png;
+  // quality: 0.4–1 for JPG, WEBP and PDF (the user's choice); PNG is always lossless.
+  async function encode(canvas, format = 'png', chosenQuality = null) {
+    const [type, standard] = ENCODINGS[format] || ENCODINGS.png;
+    const quality = standard === undefined ? undefined : Math.min(1, Math.max(0.4, Number(chosenQuality) || standard));
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, quality));
     return { bytes: await blob.arrayBuffer(), width: canvas.width, height: canvas.height };
   }
