@@ -86,6 +86,8 @@
     engine.setViewportSize(...fitSpace());
   };
 
+  // The picture being loaded into the editor (null when none is).
+  let loading = null;
   async function openEditor(filePath, requestedMode = 'quick') {
     const payload = await api.loadEditorImage(filePath);
     shell.classList.remove('hidden');
@@ -96,10 +98,16 @@
     setMode(requestedMode);
     window.aurumEditorToolbar?.place();
     await ensureEngine();
+    if (shell.classList.contains('hidden')) return;
     createEngine();
+    const opened = engine;
     sourcePath = payload.path;
     $('#editor-file-name').textContent = payload.name;
-    await engine.load(payload.dataUrl, payload.project);
+    // Closed while the picture was still loading: the canvas is let go only when the loading is over (closeEditor
+    // waits for it), and nothing more is done here.
+    loading = opened.load(payload.dataUrl, payload.project);
+    await loading.finally(() => { loading = null; });
+    if (engine !== opened) return;
     selectTool('select');
     setDirty(false);
     updateStats();
@@ -135,7 +143,10 @@
       const action = button.dataset.action || button.dataset.page;
       button.classList.toggle('active', button.dataset.page === activePage && action === activeNavigation);
     });
-    engine?.dispose(); engine = null; sourcePath = null;
+    // A picture still loading draws onto the canvas: it is released once that is over, not under it.
+    const closing = engine;
+    engine = null; sourcePath = null;
+    if (loading) loading.catch(() => {}).finally(() => closing?.dispose()); else closing?.dispose();
   }
 
   window.aurumEditor = { open: openEditor, close: closeEditor, isOpen: () => !shell.classList.contains('hidden'), stats: () => engine?.stats(), objects: () => engine?.annotationsJson() || [], exportDataUrl: () => engine?.exportDataUrl() };
