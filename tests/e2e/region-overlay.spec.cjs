@@ -184,7 +184,8 @@ test.describe.serial('region capture on the frozen screen', () => {
     await runBarAction('ocrRegion');
     const overlay = await openedOverlay(since);
     await drag(overlay, { x: 0, y: 0 }, { x: 600, y: 200 });
-    await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.lastNotice?.title || ''), { timeout: 60_000 }).toMatch(/הטקסט הועתק ללוח|לא נמצא טקסט באזור/);
+    // A read of the notice that is lost while the main process is busy reading the text is simply asked again.
+    await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.lastNotice?.title || '').catch(() => ''), { timeout: 60_000 }).toMatch(/הטקסט הועתק ללוח|לא נמצא טקסט באזור/);
     expect(await pngsSince(before)).toEqual([]);
   });
 

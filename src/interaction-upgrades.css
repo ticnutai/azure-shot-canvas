@@ -11,6 +11,6 @@
 /* The number next to a slider keeps one width ("97%" and "104%" alike): when it changed width while dragging, the
    slider beside it grew or shrank and its thumb jumped away from the pointer. */
 output#library-size-output, output#ui-zoom-output, .range-field output, output#image-quality-output, output#preview-zoom-output, output#camera-size-output, output#video-volume-output, output#editor-width-output, output#editor-opacity-output, output#editor-font-output { display: inline-block; min-width: 5ch; text-align: center; font-variant-numeric: tabular-nums; }
-/* The room of the page's scrollbar is always kept: when it appeared or went away (pictures made bigger or smaller),
+/* On the library page the room of the page's scrollbar is always kept (only there: the full-screen editor must meet the window edges): when it appeared or went away (pictures made bigger or smaller),
    the whole page shifted sideways and a slider being dragged jumped under the pointer. */
-html { scrollbar-gutter: stable; }
+html[data-active-page="library"] { scrollbar-gutter: stable; }

@@ -226,14 +226,16 @@ test.describe.serial('optional extras', () => {
   });
 
   test('7 · text search inside the captures: recognised once in the background and found by the search', async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await fs.writeFile(path.join(outputDir, 'צילום_2026-10-22_10-00-00-000.png'), Buffer.from(await textPicture('Zebra Crossing')));
     await fs.writeFile(path.join(outputDir, 'צילום_2026-10-22_10-00-01-000.png'), Buffer.from(await textPicture('Blue Apple')));
     // Off: the captures window gets no recognised text and nothing is read.
     await expect.poll(async () => (await app.evaluate(() => globalThis.__aurumQa.textIndexState())).active).toBe(false);
     await setFeatures({ enabled: { textIndex: true } });
     await expect.poll(async () => (await app.evaluate(() => globalThis.__aurumQa.textIndexState())).active).toBe(true);
-    await expect.poll(async () => (await app.evaluate(() => globalThis.__aurumQa.textIndexState())).done + (await app.evaluate(() => globalThis.__aurumQa.textIndexState())).skipped, { timeout: 90_000 }).toBeGreaterThanOrEqual(2);
+    // Waits for the very picture checked below (other pictures of earlier steps are in the folder too).
+    const readMeta = (name) => fs.readFile(path.join(outputDir, name + '.meta.json'), 'utf8').then(JSON.parse, () => ({}));
+    await expect.poll(async () => Boolean((await readMeta('צילום_2026-10-22_10-00-00-000.png')).ocrAt && (await readMeta('צילום_2026-10-22_10-00-01-000.png')).ocrAt), { timeout: 110_000 }).toBe(true);
     const metadata = JSON.parse(await fs.readFile(path.join(outputDir, 'צילום_2026-10-22_10-00-00-000.png.meta.json'), 'utf8').catch(() => '{}'));
     expect(metadata.ocrAt).toBeTruthy();
     {
