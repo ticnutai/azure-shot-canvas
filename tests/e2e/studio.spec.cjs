@@ -237,7 +237,7 @@ test.describe('Electron production workflow', () => {
       await page.locator(`[data-library-view="${view}"]`).click();
       await expect(page.locator('#library-list')).toHaveClass(new RegExp(`view-${view}`));
     }
-    await page.locator('#library-size').fill('3');
+    await page.locator('#library-size').fill('400');
     await expect(page.locator('#library-list')).toHaveClass(/size-large/);
     await page.locator('[data-page="settings"]').click();
     await expect(page.locator('#settings-page')).toHaveClass(/active/);

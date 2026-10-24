@@ -193,7 +193,10 @@
     if (!window.screenStudio?.setUiZoom) zoomSection?.classList.add('hidden');
     else {
       applyZoom(store.get('aurum-ui-zoom') || 100, false);
-      document.querySelector('#ui-zoom')?.addEventListener('input', (event) => applyZoom(event.target.value));
+      // While dragging only the number changes (resizing the whole window under the pointer made the slider jump);
+      // the new size is applied when the slider is let go.
+      document.querySelector('#ui-zoom')?.addEventListener('input', (event) => { const output = document.querySelector('#ui-zoom-output'); if (output) output.textContent = `${event.target.value}%`; });
+      document.querySelector('#ui-zoom')?.addEventListener('change', (event) => applyZoom(event.target.value));
       document.querySelector('#ui-zoom-reset')?.addEventListener('click', () => applyZoom(100));
     }
     render();

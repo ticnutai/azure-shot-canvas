@@ -304,9 +304,9 @@ function applyCaptureLayout(layout = 'clean', persist = true) {
   if (persist) localStorage.setItem('aurum-capture-layout', state.captureLayout);
 }
 
-// A size of the library's pictures chosen with Control + wheel (the width of a card in points); null = one of the three
-// sizes of the slider.
-const LIBRARY_ZOOM = { min: 140, max: 560, step: 24, medium: 245 };
+// The size of the library's pictures (the width of a card in points), from the size slider or Control + wheel; null =
+// the size named small / medium / large (kept for older settings).
+const LIBRARY_ZOOM = { min: 140, max: 560, step: 24, medium: 245, named: { small: 175, medium: 245, large: 330 } };
 function applyLibraryZoom(width, persist = true) {
   const container = $('#library-list');
   state.libraryZoom = width ? Math.round(Math.min(LIBRARY_ZOOM.max, Math.max(LIBRARY_ZOOM.min, width))) : null;
@@ -319,7 +319,14 @@ function applyLibraryZoom(width, persist = true) {
       container.style.removeProperty('--list-thumb-w');
     }
   }
-  if (state.libraryZoom && $('#library-size-output')) $('#library-size-output').textContent = `${Math.round(state.libraryZoom / LIBRARY_ZOOM.medium * 100)}%`;
+  // The nearest named size follows (it decides a few details of the list and table views and is remembered).
+  if (state.libraryZoom) {
+    const named = state.libraryZoom < 210 ? 'small' : state.libraryZoom < 290 ? 'medium' : 'large';
+    if (named !== state.librarySize) applyLibraryPreferences(state.libraryView, named, persist);
+  }
+  const shown = state.libraryZoom || LIBRARY_ZOOM.named[state.librarySize] || LIBRARY_ZOOM.medium;
+  if ($('#library-size')) $('#library-size').value = String(shown);
+  if ($('#library-size-output')) $('#library-size-output').textContent = `${Math.round(shown / LIBRARY_ZOOM.medium * 100)}%`;
   try { if (persist) { if (state.libraryZoom) localStorage.setItem('aurum-library-zoom', String(state.libraryZoom)); else localStorage.removeItem('aurum-library-zoom'); } } catch {}
 }
 // Zoom with the pointer as the centre: the card under it is kept at the same place on the screen.
@@ -344,9 +351,6 @@ function applyLibraryPreferences(view = state.libraryView, size = state.libraryS
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   });
-  const sizes = { small: ['1', 'קטן'], medium: ['2', 'בינוני'], large: ['3', 'גדול'] };
-  if ($('#library-size')) $('#library-size').value = sizes[state.librarySize][0];
-  if ($('#library-size-output')) $('#library-size-output').textContent = sizes[state.librarySize][1];
   document.documentElement.dataset.libraryView = state.libraryView;
   document.documentElement.dataset.librarySize = state.librarySize;
   if (persist) {
@@ -2935,11 +2939,8 @@ async function initialize() {
     const view = event.deltaY < 0 ? 'cards' : 'compact';
     if (view !== state.recentView) zoomKeepingPointer(event, () => applyRecentPreferences(state.recentFilter, state.recentSort, view));
   }, { passive: false });
-  $('#library-size').addEventListener('input', (event) => {
-    applyLibraryZoom(null);
-    applyLibraryPreferences(state.libraryView, ({ 1: 'small', 2: 'medium', 3: 'large' })[event.target.value]);
-    renderLibrary();
-  });
+  // The slider changes only the size (no rebuild of the library on every step, which made it stutter).
+  $('#library-size').addEventListener('input', (event) => applyLibraryZoom(Number(event.target.value)));
   $('#default-capture-kind').addEventListener('change', (event) => applyCapturePreferences(event.target.value, state.captureScope));
   $('#default-capture-scope').addEventListener('change', (event) => applyCapturePreferences(state.captureKind, event.target.value));
   $('#after-screenshot-action').addEventListener('change', (event) => applyAfterScreenshotAction(event.target.value));

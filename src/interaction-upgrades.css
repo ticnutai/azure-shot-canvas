@@ -7,3 +7,10 @@
 @media(max-width:1100px){.editor-topbar{gap:7px;padding:0 8px}.editor-history{justify-self:center;gap:4px}.editor-history input[type="range"]{width:70px}.editor-history .editor-icon{min-width:31px;width:31px}.editor-save-actions .ghost{padding:7px}.editor-title small{display:none}}
 .app-version-badge{position:fixed;left:10px;bottom:8px;z-index:120;direction:ltr;padding:3px 7px;border:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-radius:8px;background:color-mix(in srgb,var(--panel) 88%,transparent);color:var(--muted);font-size:8px;font-weight:600;line-height:1.2;letter-spacing:.03em;opacity:.78;pointer-events:none;backdrop-filter:blur(8px)}
 .scroll-capture-bar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:125;display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--gold);border-radius:17px;background:color-mix(in srgb,var(--panel) 94%,transparent);box-shadow:0 18px 55px var(--shadow);backdrop-filter:blur(14px)}.scroll-capture-bar strong{color:var(--gold);font-size:11px}.scroll-capture-bar span{color:var(--muted);font-size:9px;min-width:220px}.scroll-capture-bar button{border:0;border-radius:11px;background:var(--gold);color:var(--accent-text);padding:8px 13px;font-weight:750;cursor:pointer}
+
+/* The number next to a slider keeps one width ("97%" and "104%" alike): when it changed width while dragging, the
+   slider beside it grew or shrank and its thumb jumped away from the pointer. */
+output#library-size-output, output#ui-zoom-output, .range-field output, output#image-quality-output, output#preview-zoom-output, output#camera-size-output, output#video-volume-output, output#editor-width-output, output#editor-opacity-output, output#editor-font-output { display: inline-block; min-width: 5ch; text-align: center; font-variant-numeric: tabular-nums; }
+/* The room of the page's scrollbar is always kept: when it appeared or went away (pictures made bigger or smaller),
+   the whole page shifted sideways and a slider being dragged jumped under the pointer. */
+html { scrollbar-gutter: stable; }

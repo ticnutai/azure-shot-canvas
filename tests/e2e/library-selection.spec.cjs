@@ -122,9 +122,11 @@ test.describe.serial('choosing several files, and a fast library', () => {
     for (let i = 0; i < 8; i += 1) await page.mouse.wheel(0, 100);
     await page.keyboard.up('Control');
     await expect.poll(width).toBeLessThan(start);
-    // The slider takes over again.
-    await page.locator('#library-size').fill('2');
-    expect(await page.evaluate(() => localStorage.getItem('aurum-library-zoom'))).toBeNull();
+    // The slider sets the same size, smoothly (any width, not three stops), and shows it.
+    await page.locator('#library-size').fill('300');
+    expect(await page.evaluate(() => localStorage.getItem('aurum-library-zoom'))).toBe('300');
+    await expect(page.locator('#library-size-output')).toHaveText('122%');
+    await page.locator('#library-size').fill('245');
   });
 
   test('2 · copy puts all the chosen files on the clipboard; the recycle bin takes them all in one go', async () => {
