@@ -1195,7 +1195,9 @@ test.describe('Electron production workflow', () => {
     const shownAt = Number(await card.locator('html').getAttribute('data-card-shown-at'));
     const cardMs = shownAt - savedAt;
     console.log('CARD_MS', cardMs);
-    await expect(card.locator('#capture-thumb')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
+    // The thumbnail is the address of its cached file (not the whole picture written out), and it really shows.
+    await expect(card.locator('#capture-thumb')).toHaveAttribute('src', /^aurum-thumb:\/\/t\/[0-9a-f]{40}\.jpg$/);
+    await expect.poll(() => card.locator('#capture-thumb').evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
 
     await app.evaluate(({ clipboard }) => clipboard.clear());
     await card.locator('[data-capture-action="copy"]').click();

@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('quickbarApi', {
   history: () => ipcRenderer.invoke('quickbar:history'),
   openCapture: (filePath) => ipcRenderer.invoke('quickbar:open-capture', filePath),
   drag: (active) => ipcRenderer.invoke('quickbar:drag', active),
+  trashMany: (paths) => ipcRenderer.invoke('captures:trash', paths),
   openWorkspace: () => ipcRenderer.invoke('workspace:open')
 });

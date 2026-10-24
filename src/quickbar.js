@@ -11,7 +11,7 @@
       setExpanded: async (expanded) => ({ expanded: true || expanded }),
       setPreferences: async (patch) => { preferences = { ...preferences, ...patch }; return preferences; },
       runAction: quiet, setView: quiet, setMenu: quiet, history: async () => [], openCapture: quiet, captureAction: quiet,
-      cardHover: async () => [], startDrag: () => {}, drag: async () => preferences, openWorkspace: quiet,
+      cardHover: async () => [], startDrag: () => {}, drag: async () => preferences, openWorkspace: quiet, trashMany: async () => ({ trashed: 0 }),
       onRecordingState: () => {}, onPreferences: () => {}, onCaptures: () => {}, onCardKey: () => {}
     };
   }
@@ -321,6 +321,13 @@
     bar.hidden = chosen.size === 0;
     document.querySelector('#history-selected-count').textContent = `${chosen.size} נבחרו`;
     document.querySelectorAll('.history-item').forEach((tile) => tile.setAttribute('aria-selected', String(chosen.has(tile.dataset.path))));
+    const shown = historyItems.filter(matchesFilter).map((item) => item.path);
+    const all = window.aurumSelection.allChosen(chosen, shown);
+    const selectAll = document.querySelector('#history-select-all');
+    selectAll.setAttribute('aria-pressed', String(all));
+    selectAll.textContent = all ? '☑' : '☐';
+    selectAll.title = window.aurumSelection.toggleLabel(chosen, shown);
+    selectAll.disabled = !shown.length;
   }
   function renderHistory() {
     const grid = document.querySelector('#history-grid');
@@ -378,8 +385,14 @@
     renderHistory();
   }));
   document.querySelector('#history-select-clear').addEventListener('click', () => { chosen.clear(); renderSelection(); });
+  document.querySelector('#history-select-all').addEventListener('click', () => {
+    const next = window.aurumSelection.toggleAll(chosen, historyItems.filter(matchesFilter).map((item) => item.path));
+    chosen.clear();
+    next.forEach((path) => chosen.add(path));
+    renderSelection();
+  });
   document.querySelector('#history-trash').addEventListener('click', async () => {
-    for (const filePath of [...chosen]) await api.captureAction(filePath, 'trash').catch(() => {});
+    await api.trashMany([...chosen]).catch(() => {});
     chosen.clear();
     historyItems = await api.history().catch(() => []);
     renderHistory();

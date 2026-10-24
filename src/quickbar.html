@@ -48,7 +48,7 @@
     <div id="recent-strip" class="recent-strip" aria-label="צילומים אחרונים"></div>
   </section>
   <section id="history" aria-label="הצילומים האחרונים">
-    <header><b>הצילומים האחרונים</b><span id="history-count"></span><button id="history-library" title="פתיחת הספרייה המלאה">▥</button><button id="history-back" title="חזרה">×</button></header>
+    <header><b>הצילומים האחרונים</b><span id="history-count"></span><button id="history-select-all" class="history-select-all" aria-pressed="false" title="בחירת הכל">☐</button><button id="history-library" title="פתיחת הספרייה המלאה">▥</button><button id="history-back" title="חזרה">×</button></header>
     <div class="history-filters">
       <input id="history-search" type="search" placeholder="חיפוש לפי שם…" aria-label="חיפוש בצילומים" dir="rtl">
       <div class="history-chips" role="group" aria-label="סוג">
@@ -60,8 +60,9 @@
     </div>
     <div id="history-grid" role="list"></div>
     <div id="history-selection" hidden><span id="history-selected-count"></span><button id="history-select-clear">ביטול בחירה</button><button id="history-trash" class="danger">העברה לסל המיחזור</button></div>
-    <p class="history-tip">לחיצה פותחת את הכרטיס · קונטרול+לחיצה בוחרת כמה · לחיצה כפולה לעריכה · גרירה לתוכנה אחרת</p>
+    <p class="history-tip">לחיצה פותחת את הכרטיס · קונטרול+לחיצה בוחרת כמה · ☐ בוחר הכל · לחיצה כפולה לעריכה · גרירה לתוכנה אחרת</p>
   </section>
   <script src="app-icons.js"></script>
+  <script src="selection-utils.js"></script>
   <script src="quickbar.js"></script>
 </body></html>

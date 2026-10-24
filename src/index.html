@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; img-src 'self' data: blob:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; img-src 'self' data: blob: aurum-thumb:">
   <title>אורום סטודיו — סטודיו הקלטת מסך ווידאו</title>
   <script src="boot-appearance.js"></script>
   <link rel="stylesheet" href="styles.css">
@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="library-views.css">
   <link rel="stylesheet" href="capture-preferences.css">
   <link rel="stylesheet" href="features.css">
+  <link rel="stylesheet" href="selection.css">
   <link rel="stylesheet" href="recent-library.css">
   <link rel="stylesheet" href="shortcut-settings.css">
   <link rel="stylesheet" href="tool-center.css">
@@ -165,9 +166,11 @@
                     <button type="button" data-recent-view="compact" title="רשת קומפקטית" aria-label="רשת קומפקטית"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
                     <button type="button" data-recent-view="list" title="רשימה" aria-label="רשימה"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg></button>
                   </div>
+                  <button type="button" class="select-all" id="recent-select-all" aria-pressed="false" title="בחירת הכל"><i aria-hidden="true"></i><span>בחירת הכל</span></button>
                   <button class="text-button recent-all" type="button" data-page-link="library">כל הספרייה</button>
                 </div>
               </div>
+              <div class="selection-bar" id="recent-selection" hidden><b id="recent-selected-count"></b><button type="button" class="ghost" id="recent-copy">העתקה</button><button type="button" class="ghost danger" id="recent-trash">העברה לסל המיחזור</button><button type="button" class="ghost" id="recent-select-clear">ביטול בחירה</button></div>
               <div id="recent-library" class="clip-grid recent-view-cards"><div class="loading">טוען את הספרייה…</div></div>
             </section>
 
@@ -176,6 +179,7 @@
           <section id="library-page" class="page panel page-panel">
             <div class="section-heading"><div><h2>הספרייה שלי</h2><p>כל התמונות והסרטונים שנשמרו במחשב</p></div><div class="library-heading-actions"><button class="gold-button" id="edit-latest-image">✎ עריכת צילום אחרון</button><button class="ghost" id="open-output">פתיחת תיקייה</button></div></div>
             <div class="library-toolbar">
+              <button type="button" class="select-all" id="library-select-all" aria-pressed="false" title="בחירת הכל"><i aria-hidden="true"></i><span>בחירת הכל</span></button>
               <label class="library-search">⌕ <input id="library-search" placeholder="חיפוש בשם, טקסט בתמונה, תמלול, לקוח או תגית…"></label>
               <label>מיון<select id="library-sort"><option value="date-desc">החדשים תחילה</option><option value="date-asc">הישנים תחילה</option><option value="name-asc">שם א׳–ת׳</option><option value="name-desc">שם ת׳–א׳</option><option value="type">סוג הקובץ</option></select></label>
               <label>קיבוץ<select id="library-group"><option value="time">לפי זמן</option><option value="type">לפי סוג</option><option value="none">ללא קיבוץ</option></select></label>
@@ -184,8 +188,9 @@
                 <button data-library-view="list" title="תצוגת רשימה" aria-label="תצוגת רשימה"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="5" rx="1"/><path d="M11 6.5h10M11 17.5h10"/><rect x="3" y="15" width="5" height="5" rx="1"/></svg></button>
                 <button data-library-view="table" title="תצוגת טבלה" aria-label="תצוגת טבלה"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg></button>
               </div>
-              <label class="library-size-control"><span>גודל</span><input id="library-size" type="range" min="1" max="3" step="1" value="2"><output id="library-size-output">בינוני</output></label>
+              <label class="library-size-control" title="גודל התמונות (גם קונטרול + גלגלת על התמונות)"><span>גודל</span><input id="library-size" type="range" min="1" max="3" step="1" value="2"><output id="library-size-output">בינוני</output></label>
             </div>
+            <div class="selection-bar" id="library-selection" hidden><b id="library-selected-count"></b><button type="button" class="ghost" id="library-copy">העתקה</button><button type="button" class="ghost danger" id="library-trash">העברה לסל המיחזור</button><button type="button" class="ghost" id="library-select-clear">ביטול בחירה</button></div>
             <div id="library-list" class="library-list view-grid size-medium"></div>
           </section>
           <section id="tools-page" class="page panel page-panel tools-page">
@@ -383,6 +388,7 @@
   <video id="camera-video" autoplay muted playsinline></video><canvas id="recording-canvas"></canvas>
   <script src="features-defs.js"></script>
   <script src="click-ripple.js"></script>
+  <script src="selection-utils.js"></script>
   <script src="browser-api.js"></script>
   <script src="dev-client.js"></script>
   <script src="scroll-capture-engine.js"></script>

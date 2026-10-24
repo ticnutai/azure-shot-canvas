@@ -64,6 +64,7 @@
 
   <div class="viewbar">
     <b class="section-title">הצילומים האחרונים</b>
+    <button id="select-all" class="select-all" type="button" aria-pressed="false" title="בחירת הכל (קונטרול + A)"><i aria-hidden="true"></i><span>בחירת הכל</span></button>
     <label class="folder-filter" title="הצגת התיקייה בלבד"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><select id="folder-filter" aria-label="תיקייה"><option value="*">כל התיקיות</option></select></label>
     <label class="size-control" title="גודל התמונות (גם קונטרול + גלגלת)">
       <svg viewBox="0 0 24 24"><rect x="5" y="7" width="8" height="8" rx="1"/></svg>
@@ -112,5 +113,6 @@
   <button id="dock-tab" type="button" aria-label="פתיחת לוח הצילומים" title="נגיעה פותחת · גרירה מזיזה לכל מקום בקצה המסך"><span></span></button>
   <!-- Handles on every side and corner: drag to make the window bigger or smaller from that side. -->
   <div class="grips" aria-hidden="true"><i data-grip="n"></i><i data-grip="s"></i><i data-grip="e"></i><i data-grip="w"></i><i data-grip="ne"></i><i data-grip="nw"></i><i data-grip="se"></i><i data-grip="sw"></i></div>
+  <script src="selection-utils.js"></script>
   <script src="workspace.js"></script>
 </body></html>

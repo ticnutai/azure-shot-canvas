@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('screenStudio', {
   transcribeMedia: (filePath) => ipcRenderer.invoke('library:transcribe', filePath),
   getWaveform: (filePath) => ipcRenderer.invoke('library:waveform', filePath),
   pinImage: (filePath) => ipcRenderer.invoke('library:pin', filePath),
+  copyFiles: (paths) => ipcRenderer.invoke('captures:copy', paths),
+  trashFiles: (paths) => ipcRenderer.invoke('captures:trash', paths),
   getLocalEngines: () => ipcRenderer.invoke('tools:engines'),
   editVideo: (filePath, options) => ipcRenderer.invoke('video:edit', filePath, options),
   loadVideoTimeline: (filePath) => ipcRenderer.invoke('video:timeline-load', filePath),

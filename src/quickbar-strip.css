@@ -150,3 +150,8 @@ body[data-tab-style="glass"][data-look="graphite"]:not([data-tab-color="own"]) #
 body[data-tab-style="glass"][data-edge="top"] #edge-handle span{left:calc(50% - 3.5px);top:5.5px}
 body[data-tab-style="glass"][data-edge="left"] #edge-handle span{top:calc(50% - 3.5px);left:5.5px}
 body[data-tab-style="glass"][data-edge="right"] #edge-handle span{top:calc(50% - 3.5px);right:5.5px}
+
+/* "Choose all" in the history header (pressed again: clear). */
+.history-select-all{width:26px;height:26px;border:1px solid #2e435c;border-radius:8px;background:#172536;color:#dce8f5;font:15px "Segoe UI",sans-serif;cursor:pointer;padding:0}
+.history-select-all[aria-pressed="true"]{color:#ffd36a;border-color:#c99124}
+.history-select-all:disabled{opacity:.45;cursor:default}

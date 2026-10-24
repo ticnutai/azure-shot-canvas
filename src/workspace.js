@@ -18,6 +18,7 @@
       preview: true,
       list: async () => list,
       action: async (path, action) => { if (action === 'trash') list = list.filter((item) => item.path !== path); },
+      trashMany: async (paths) => { list = list.filter((item) => !paths.includes(item.path)); return { trashed: paths.length }; },
       runAction: async () => {}, startDrag: () => {}, close: async () => {}, toggleMaximize: async () => {},
       setOnTop: async (value) => value, openStudio: async () => {}, getState: async () => ({ onTop: false }), onChanged: () => {},
       setFolder: async (paths, folder) => { list = list.map((item) => (paths.includes(item.path) ? { ...item, folder } : item)); },
@@ -99,6 +100,12 @@
             : one.length === 0;
     });
     root.dataset.selected = String(one.length);
+    // The "choose all" button: pressed while everything shown is chosen; pressing it then clears the choice.
+    const shownPaths = visible().map((item) => item.path);
+    const selectAll = $('#select-all');
+    selectAll.setAttribute('aria-pressed', String(window.aurumSelection.allChosen(chosen, shownPaths)));
+    selectAll.disabled = !shownPaths.length;
+    selectAll.querySelector('span').textContent = window.aurumSelection.toggleLabel(chosen, shownPaths);
     if (part === 'list' && root.dataset.split === 'on') api.shareSelection?.(one.map(({ path, kind }) => ({ path, kind })));
   }
 
@@ -329,8 +336,12 @@
       } catch (failure) { flashNote(`ההעתקה נכשלה: ${failure.message}`); }
       return;
     }
+    if (action === 'trash') {
+      await (api.trashMany ? api.trashMany(targets.map((item) => item.path)) : Promise.all(targets.map((item) => api.action(item.path, 'trash')))).catch(() => {});
+      chosen.clear();
+      return load();
+    }
     for (const item of targets) await api.action(item.path, action).catch(() => {});
-    if (action === 'trash') { chosen.clear(); await load(); }
   }
 
   // ---- Menus ----------------------------------------------------------------------------------------------
@@ -505,6 +516,14 @@
   $('#search').addEventListener('input', (event) => { filter = event.target.value.trim(); render(); });
   $('#folder-filter').addEventListener('change', (event) => { folderFilter = event.target.value; chosen.clear(); render(); });
   grid.addEventListener('click', (event) => { if (event.target === grid) { chosen.clear(); syncSelection(); } });
+  function toggleAllShown() {
+    const next = window.aurumSelection.toggleAll(chosen, visible().map((item) => item.path));
+    chosen.clear();
+    next.forEach((path) => chosen.add(path));
+    anchor = null;
+    syncSelection();
+  }
+  $('#select-all').addEventListener('click', toggleAllShown);
   // ---- Top action bar: full, compact (one row), icons only, or hidden ---------------------------------------
   const BAR_LOOKS = [['full', 'מלא'], ['compact', 'מצומצם — שורה אחת'], ['icons', 'סמלים בלבד'], ['hidden', 'מוסתר']];
   let lastShownBar = 'compact';
@@ -526,7 +545,7 @@
     ['F2', 'שינוי שם'],
     ['Delete', 'העברה לסל המיחזור'],
     ['קונטרול + C', 'העתקה'],
-    ['קונטרול + A', 'בחירת הכל'],
+    ['קונטרול + A', 'בחירת הכל (שוב: ניקוי הבחירה)'],
     ['קונטרול + F', 'חיפוש'],
     ['1 עד 6', 'צילום אזור · האזור הקודם · מסך מלא · עמוד גלילה · טקסט מאזור · הקלטת אזור'],
     ['קונטרול + 1 עד 4', 'תצוגה: גדולה · רשת · רשימה · טבלה'],
@@ -664,7 +683,7 @@
     if (event.key === ' ') { event.preventDefault(); if (one.length) previewDialog(one[0]); return; }
     if (/^(Arrow(Left|Right|Up|Down)|Home|End)$/.test(event.key) && !event.ctrlKey) { event.preventDefault(); return moveTo(event.key, event.shiftKey); }
     if (event.ctrlKey && event.code === 'KeyC') return run('copy');
-    if (event.ctrlKey && event.code === 'KeyA') { event.preventDefault(); visible().forEach((item) => chosen.add(item.path)); return syncSelection(); }
+    if (event.ctrlKey && event.code === 'KeyA') { event.preventDefault(); return toggleAllShown(); }
     if (event.ctrlKey && event.code === 'KeyF') { event.preventDefault(); $('#search').focus(); $('#search').select(); return; }
     if (event.ctrlKey && /^Digit[1-4]$/.test(event.code)) { event.preventDefault(); applyLook({ view: VIEWS[Number(event.code.slice(5)) - 1] }); return render(); }
     if (event.ctrlKey && (event.code === 'Equal' || event.code === 'NumpadAdd')) { event.preventDefault(); return applyLook({ size: Number($('#thumb-size').value) + 20 }); }

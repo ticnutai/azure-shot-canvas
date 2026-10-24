@@ -327,3 +327,13 @@ html[data-part="tools"][data-bar="hidden"][data-theme="graphite"] .actions{displ
 /* A small corner mark so the handles can be found. */
 .grips [data-grip="sw"]::after{content:"";position:absolute;left:3px;bottom:3px;width:7px;height:7px;border-left:2px solid var(--muted);border-bottom:2px solid var(--muted);opacity:.55}
 html[data-docked="folded"] .grips{display:none}
+
+/* ---- "Choose all" (pressed again: clear) ---- */
+.select-all{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+.select-all:hover:not(:disabled){border-color:var(--accent)}
+.select-all:disabled{opacity:.45;cursor:default}
+.select-all i{width:14px;height:14px;border:2px solid currentColor;border-radius:4px;display:grid;place-items:center}
+.select-all[aria-pressed="true"]{color:var(--select);border-color:var(--select)}
+.select-all[aria-pressed="true"] i{background:var(--select);border-color:var(--select)}
+.select-all[aria-pressed="true"] i::after{content:"";width:7px;height:3.5px;border:solid #fff;border-width:0 0 2px 2px;transform:translateY(-1px) rotate(-45deg)}
+html[data-theme^="lines"] .select-all{border-radius:3px}

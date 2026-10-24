@@ -37,6 +37,7 @@
     openOutput: async () => '', chooseOutput: async () => 'הורדות הדפדפן', getOutput: async () => 'הורדות הדפדפן', getAutostart: async () => false, setAutostart: async () => false,
     getFeatures: async () => window.aurumFeaturesDefs.defaults(), setFeatures: async (patch) => window.aurumFeaturesDefs.normalizeFeatures(patch), onFeatures: () => {},
     onRecordingClick: () => {},
+    copyFiles: async () => { throw new Error('העתקת כמה קבצים זמינה בתוכנה עצמה'); }, trashFiles: async () => { throw new Error('מחיקה זמינה בתוכנה עצמה'); },
     featureAction: async () => ({ message: 'התוספות זמינות בתוכנה עצמה' }),
     exportSettings: async () => { throw new Error('גיבוי הגדרות זמין בתוכנה עצמה'); }, importSettings: async () => { throw new Error('שחזור הגדרות זמין בתוכנה עצמה'); },
     getQuickbarPreferences: async () => ({ enabled: false, style: 'strip', edge: 'top', activation: 'click', display: 'cursor', pinned: false }), setQuickbarPreferences: async (patch) => patch, setQuickbarRecordingState: async () => true,

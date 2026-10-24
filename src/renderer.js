@@ -304,6 +304,36 @@ function applyCaptureLayout(layout = 'clean', persist = true) {
   if (persist) localStorage.setItem('aurum-capture-layout', state.captureLayout);
 }
 
+// A size of the library's pictures chosen with Control + wheel (the width of a card in points); null = one of the three
+// sizes of the slider.
+const LIBRARY_ZOOM = { min: 140, max: 560, step: 24, medium: 245 };
+function applyLibraryZoom(width, persist = true) {
+  const container = $('#library-list');
+  state.libraryZoom = width ? Math.round(Math.min(LIBRARY_ZOOM.max, Math.max(LIBRARY_ZOOM.min, width))) : null;
+  if (container) {
+    if (state.libraryZoom) {
+      container.style.setProperty('--grid-min', `${state.libraryZoom}px`);
+      container.style.setProperty('--list-thumb-w', `${Math.round(state.libraryZoom * 0.57)}px`);
+    } else {
+      container.style.removeProperty('--grid-min');
+      container.style.removeProperty('--list-thumb-w');
+    }
+  }
+  if (state.libraryZoom && $('#library-size-output')) $('#library-size-output').textContent = `${Math.round(state.libraryZoom / LIBRARY_ZOOM.medium * 100)}%`;
+  try { if (persist) { if (state.libraryZoom) localStorage.setItem('aurum-library-zoom', String(state.libraryZoom)); else localStorage.removeItem('aurum-library-zoom'); } } catch {}
+}
+// Zoom with the pointer as the centre: the card under it is kept at the same place on the screen.
+function zoomKeepingPointer(event, change) {
+  const anchor = event.target.closest?.('.library-item, .clip-card');
+  const before = anchor?.getBoundingClientRect().top;
+  change();
+  if (anchor && anchor.isConnected) {
+    const moved = anchor.getBoundingClientRect().top - before;
+    const scroller = [anchor.closest('.library-list'), document.scrollingElement].find((element) => element && element.scrollHeight > element.clientHeight);
+    if (scroller && moved) scroller.scrollTop += moved;
+  }
+}
+
 function applyLibraryPreferences(view = state.libraryView, size = state.librarySize, persist = true) {
   state.libraryView = ['grid', 'list', 'table'].includes(view) ? view : 'grid';
   state.librarySize = ['small', 'medium', 'large'].includes(size) ? size : 'medium';
@@ -390,6 +420,7 @@ function restoreUserPreferences() {
   applyAfterScreenshotAction(localStorage.getItem('aurum-after-screenshot-action') || 'save', false);
   applyCaptureDelay(localStorage.getItem('aurum-capture-delay') || '0', false);
   applyLibraryPreferences(localStorage.getItem('aurum-library-view') || 'grid', localStorage.getItem('aurum-library-size') || 'medium', false);
+  applyLibraryZoom(Number(localStorage.getItem('aurum-library-zoom')) || null, false);
   applyRecentPreferences(localStorage.getItem('aurum-recent-filter') || 'all', localStorage.getItem('aurum-recent-sort') || 'date-desc', localStorage.getItem('aurum-recent-view') || 'cards', false);
   applyVisualCapturePreferences({
     previewFit: localStorage.getItem('aurum-preview-fit') || 'contain',
@@ -1967,11 +1998,157 @@ async function executeShortcutAction(action, meta = {}) {
   if (action === 'editLatest') return openLatestScreenshotEditor('professional');
 }
 
+// A list that did not change is not drawn again (going to the library page, or a save elsewhere, reloaded and rebuilt
+// every row each time — the clicks felt slow because of it).
+let librarySignature = '';
 async function loadLibrary() {
   const items = await api.listLibrary();
   state.libraryItems = items;
+  const signature = items.map((item) => [item.path, item.modified, item.size, item.thumbnail, item.edited, JSON.stringify(item.metadata || {})].join('|')).join('\n');
+  if (signature === librarySignature && $('#library-list')?.childElementCount) return;
+  librarySignature = signature;
+  pruneSelections();
   renderRecentLibrary(items);
   renderLibrary();
+}
+
+// ---- Choosing several files: the library page and the recent media (the same rules as the captures window) ----
+function selectionPlace(shown) {
+  const place = { chosen: new Set(), anchor: null };
+  return {
+    place, shown,
+    click(key, event, fromBox = false) { Object.assign(place, window.aurumSelection.clickItem(place, shown(), key, { adding: fromBox || event.ctrlKey || event.metaKey, range: event.shiftKey })); syncSelections(); },
+    toggleAll() { place.chosen = window.aurumSelection.toggleAll(place.chosen, shown()); place.anchor = null; syncSelections(); },
+    clear() { place.chosen = new Set(); place.anchor = null; syncSelections(); }
+  };
+}
+const librarySelection = selectionPlace(() => [...$$('#library-list .library-item')].map((row) => row.dataset.path));
+const recentSelection = selectionPlace(() => [...$$('#recent-library .clip-card')].map((card) => card.dataset.path));
+const SELECTION_PLACES = [['library', librarySelection, '#library-list .library-item'], ['recent', recentSelection, '#recent-library .clip-card']];
+// Files that are gone (deleted, renamed) leave the choice.
+function pruneSelections() {
+  const present = new Set(state.libraryItems.map((item) => item.path));
+  for (const [, selection] of SELECTION_PLACES) for (const key of [...selection.place.chosen]) if (!present.has(key)) selection.place.chosen.delete(key);
+}
+// The boxes, the "choose all" button and the bar of actions follow the choice.
+function syncSelections() {
+  for (const [name, selection, rows] of SELECTION_PLACES) {
+    const { chosen } = selection.place;
+    const shown = selection.shown();
+    $$(rows).forEach((row) => {
+      const on = chosen.has(row.dataset.path);
+      row.classList.toggle('is-chosen', on);
+      row.querySelector('.pick')?.setAttribute('aria-checked', String(on));
+    });
+    const all = window.aurumSelection.allChosen(chosen, shown);
+    const button = $(`#${name}-select-all`);
+    if (button) {
+      button.setAttribute('aria-pressed', String(all));
+      button.disabled = !shown.length;
+      button.title = window.aurumSelection.toggleLabel(chosen, shown);
+      button.querySelector('span').textContent = button.title;
+    }
+    const bar = $(`#${name}-selection`);
+    if (bar) bar.hidden = chosen.size === 0;
+    const count = $(`#${name}-selected-count`);
+    if (count) count.textContent = window.aurumSelection.countLabel(chosen.size);
+    const holder = $(name === 'library' ? '#library-list' : '#recent-library');
+    if (holder) holder.dataset.choosing = String(chosen.size > 0);
+  }
+}
+// The small box on a row or card, and Control / Shift + click anywhere on it (not on its own buttons).
+function makeChoosable(element, item, selection) {
+  element.dataset.path = item.path;
+  const box = document.createElement('button');
+  box.type = 'button';
+  box.className = 'pick';
+  box.setAttribute('role', 'checkbox');
+  box.setAttribute('aria-checked', String(selection.place.chosen.has(item.path)));
+  box.setAttribute('aria-label', `בחירת ${item.name}`);
+  box.title = 'בחירה (לחיצה בכל מקום בכרטיס; שיפט + לחיצה לטווח)';
+  box.addEventListener('click', (event) => { event.stopPropagation(); selection.click(item.path, event, true); });
+  element.prepend(box);
+  // The picture opens the capture in the studio (with Control or Shift held it chooses, like the rest of the card).
+  const picture = element.querySelector('.file-icon, .clip-thumb');
+  if (picture) {
+    picture.title = item.kind === 'document' ? 'פתיחה' : 'פתיחה לעריכה';
+    picture.addEventListener('click', (event) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+      event.stopPropagation();
+      openInStudio(item);
+    });
+  }
+  // Anywhere else on the card chooses it (adds or removes; Shift takes the range) — except its buttons, menus and
+  // fields, which do their own job, and its name, which opens for renaming.
+  element.addEventListener('click', (event) => {
+    if (event.target.closest('button:not(.pick), input, select, textarea, a, label, .more-wrap, .rename-editor, .metadata-editor, .file-name')) return;
+    event.preventDefault();
+    selection.click(item.path, event, true);
+  });
+  const name = element.querySelector('.file-name');
+  if (name) {
+    name.title = `${item.name} — לחיצה לשינוי השם`;
+    name.addEventListener('click', (event) => { event.stopPropagation(); renameInPlace(name, item); });
+  }
+}
+
+// Opens a capture in the studio itself: a picture in the image editor, a video in the video editor; anything else in
+// the program Windows has for it.
+function openInStudio(item) {
+  if (item.kind === 'image' && window.aurumEditor) return window.aurumEditor.open(item.path, 'professional');
+  if (item.kind === 'video') return openVideoEditor(item);
+  return api.openFile(item.path);
+}
+
+// The name becomes a box with the same name (without its extension): Enter or leaving the box saves, Escape puts it back.
+function renameInPlace(name, item) {
+  if (name.querySelector('input')) return;
+  const extension = item.name.includes('.') ? item.name.slice(item.name.lastIndexOf('.')) : '';
+  const original = item.name.slice(0, item.name.length - extension.length);
+  const shown = name.innerHTML;
+  const input = Object.assign(document.createElement('input'), { className: 'name-in-place', value: original, maxLength: 120 });
+  input.setAttribute('aria-label', 'שם חדש לקובץ');
+  name.replaceChildren(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const wanted = input.value.trim();
+    if (!save || !wanted || wanted === original) { name.innerHTML = shown; return; }
+    try {
+      const result = await api.renameFile(item.path, wanted);
+      showToast(`השם שונה ל־${result.name}`);
+      await loadLibrary();
+    } catch (error) {
+      name.innerHTML = shown;
+      showToast(`שינוי השם נכשל: ${error.message}`, 7000);
+    }
+  };
+  input.addEventListener('keydown', (event) => {
+    event.stopPropagation();
+    if (event.key === 'Enter') { event.preventDefault(); finish(true); }
+    else if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+  });
+  input.addEventListener('click', (event) => event.stopPropagation());
+  input.addEventListener('dblclick', (event) => event.stopPropagation());
+  input.addEventListener('blur', () => finish(true));
+}
+async function runOnChosen(selection, action) {
+  const paths = [...selection.place.chosen];
+  if (!paths.length) return;
+  try {
+    if (action === 'copy') {
+      await api.copyFiles(paths);
+      showToast(paths.length === 1 ? 'הקובץ הועתק — אפשר להדביק' : `הועתקו ${paths.length} קבצים — הדבקה בתיקייה, בצ׳אט או במסמך מדביקה את כולם`);
+    } else if (action === 'trash') {
+      const result = await api.trashFiles(paths);
+      selection.clear();
+      showToast(`${result.trashed} קבצים הועברו לסל המיחזור`);
+      await loadLibrary();
+    }
+  } catch (error) { showToast(`הפעולה נכשלה: ${error.message}`, 7000); }
 }
 
 function sortedLibraryItems() {
@@ -2035,6 +2212,7 @@ function renderLibrary() {
   const items = sortedLibraryItems();
   if (!items.length) {
     container.innerHTML = `<div class="loading">${state.libraryItems.length ? 'לא נמצאו קבצים בשם הזה.' : 'עדיין אין קבצים. הצילום הראשון שלך יופיע כאן.'}</div>`;
+    syncSelections();
     return;
   }
   container.innerHTML = '';
@@ -2046,6 +2224,7 @@ function renderLibrary() {
     for (const item of groupItems) {
       const row = document.createElement('div');
       row.className = 'library-item';
+      row.dataset.path = item.path;
       const baseName = item.name.replace(/\.[^.]+$/, '');
       const isImage = item.kind === 'image';
       const menuItem = (name, className, label) => `<button type="button" role="menuitem" class="${className}">${icon(name)}<span>${label}</span></button>`;
@@ -2057,47 +2236,69 @@ function renderLibrary() {
       row.classList.toggle('favorite', Boolean(metadata.favorite));
       row.dataset.kind = item.kind;
       const modified = new Date(item.modified).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-      row.innerHTML = `<span class="file-icon" title="פתיחה בלחיצה כפולה">${item.thumbnail ? thumbnailMarkup(item) : `<span class="thumb-placeholder">${icon(kindIcon)}</span>`}${!isImage && item.kind !== 'document' ? '<span class="thumb-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>' : ''}<span class="format-chip">${escapeHtml(item.extension.replace('.', '').toUpperCase())}</span></span><div class="file-details"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}${item.edited ? ' <em class="edited-badge">נערך</em>' : ''}</strong><small>${modified} · ${formatBytes(item.size)}</small><div class="library-meta">${metaBadges}</div><div class="rename-editor hidden"><input maxlength="120" value="${escapeHtml(baseName)}" aria-label="שם קובץ חדש"><button class="gold-button save-name">שמירה</button><button class="ghost cancel-name">ביטול</button></div></div><div class="library-actions">${editButton}<button class="icon-action share" title="שיתוף פרטי" aria-label="שיתוף פרטי">${icon('share')}</button><button class="icon-action show" title="הצגה בתיקייה" aria-label="הצגה בתיקייה">${icon('folder')}</button><span class="more-wrap"><button class="icon-action more" title="פעולות נוספות" aria-label="פעולות נוספות" aria-haspopup="menu" aria-expanded="false">${icon('more')}</button><span class="more-menu hidden" role="menu">${menuItem('open', 'open', 'פתיחה')}${kindMenu}${menuItem('tag', 'metadata', 'פרטים ותגיות')}${menuItem('rename', 'rename', 'שינוי שם')}</span></span></div><div class="metadata-editor hidden"><input class="meta-client" maxlength="80" placeholder="לקוח / פרויקט" value="${escapeHtml(metadata.client || '')}"><input class="meta-tags" maxlength="160" placeholder="תגיות מופרדות בפסיק" value="${escapeHtml((metadata.tags || []).join(', '))}"><label><input class="meta-favorite" type="checkbox" ${metadata.favorite ? 'checked' : ''}> מועדף</label><button class="gold-button save-metadata">שמירה</button></div>`;
+      row.innerHTML = `<span class="file-icon" title="פתיחה בלחיצה כפולה">${item.thumbnail ? thumbnailMarkup(item) : `<span class="thumb-placeholder">${icon(kindIcon)}</span>`}${!isImage && item.kind !== 'document' ? '<span class="thumb-play" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></span>' : ''}<span class="format-chip">${escapeHtml(item.extension.replace('.', '').toUpperCase())}</span></span><div class="file-details"><strong class="file-name">${escapeHtml(item.name)}${item.edited ? ' <em class="edited-badge">נערך</em>' : ''}</strong><small>${modified} · ${formatBytes(item.size)}</small><div class="library-meta">${metaBadges}</div></div><div class="library-actions">${editButton}<button class="icon-action share" title="שיתוף פרטי" aria-label="שיתוף פרטי">${icon('share')}</button><button class="icon-action show" title="הצגה בתיקייה" aria-label="הצגה בתיקייה">${icon('folder')}</button><span class="more-wrap"><button class="icon-action more" title="פעולות נוספות" aria-label="פעולות נוספות" aria-haspopup="menu" aria-expanded="false">${icon('more')}</button><span class="more-menu hidden" role="menu"></span></span></div>`;
+      makeChoosable(row, item, librarySelection);
       row.querySelector('.edit-image')?.addEventListener('click', () => window.aurumEditor?.open(item.path, 'professional'));
       row.querySelector('.edit-video')?.addEventListener('click', () => openVideoEditor(item));
-      row.querySelector('.ocr')?.addEventListener('click', async () => { try { showToast('מזהה טקסט מקומית…'); const result = await api.runOcr(item.path); showToast(`זיהוי הטקסט הושלם: ${result.text.length} תווים`); await loadLibrary(); } catch (error) { showToast(`זיהוי הטקסט נכשל: ${error.message}`); } });
-      row.querySelector('.pin')?.addEventListener('click', async () => { try { await api.pinImage(item.path); showToast('הצילום הוצמד מעל החלונות'); } catch (error) { showToast(`הצמדה נכשלה: ${error.message}`); } });
-      row.querySelector('.analyze')?.addEventListener('click', async () => { try { const result = await api.analyzeMedia(item.path); showToast(`ציון איכות ${result.score}/100 · ${result.fps} FPS · סנכרון ${result.avSyncOffsetMs ?? '—'}ms`, 9000); await loadLibrary(); } catch (error) { showToast(`ניתוח נכשל: ${error.message}`); } });
-      row.querySelector('.transcribe')?.addEventListener('click', async () => { try { showToast('מתמלל במנוע המקומי הקיים…', 9000); const result = await api.transcribeMedia(item.path); showToast(`התמלול הושלם: ${result.wordCount} מילים וקובץ SRT נוצר`, 9000); await loadLibrary(); } catch (error) { showToast(`התמלול נכשל: ${error.message}`, 9000); } });
-      row.querySelector('.open').addEventListener('click', () => api.openFile(item.path));
-      row.querySelector('.file-icon').addEventListener('dblclick', () => api.openFile(item.path));
+      row.querySelector('.show').addEventListener('click', () => api.showFile(item.path));
+      row.querySelector('.share').addEventListener('click', async () => { const share = await api.shareLocal(item.path); showToast(`שיתוף פרטי מקומי הועתק · תפוגה ${new Date(share.expiresAt).toLocaleTimeString('he-IL')}`); });
       const menu = row.querySelector('.more-menu');
       const moreButton = row.querySelector('.more');
+      // The menu's buttons, built and wired the first time it opens.
+      const buildMenu = () => {
+        if (menu.childElementCount) return;
+        menu.innerHTML = `${menuItem('open', 'open', 'פתיחה')}${kindMenu}${menuItem('tag', 'metadata', 'פרטים ותגיות')}${menuItem('rename', 'rename', 'שינוי שם')}`;
+        menu.querySelector('.open').addEventListener('click', () => api.openFile(item.path));
+        menu.querySelector('.ocr')?.addEventListener('click', async () => { try { showToast('מזהה טקסט מקומית…'); const result = await api.runOcr(item.path); showToast(`זיהוי הטקסט הושלם: ${result.text.length} תווים`); await loadLibrary(); } catch (error) { showToast(`זיהוי הטקסט נכשל: ${error.message}`); } });
+        menu.querySelector('.pin')?.addEventListener('click', async () => { try { await api.pinImage(item.path); showToast('הצילום הוצמד מעל החלונות'); } catch (error) { showToast(`הצמדה נכשלה: ${error.message}`); } });
+        menu.querySelector('.analyze')?.addEventListener('click', async () => { try { const result = await api.analyzeMedia(item.path); showToast(`ציון איכות ${result.score}/100 · ${result.fps} FPS · סנכרון ${result.avSyncOffsetMs ?? '—'}ms`, 9000); await loadLibrary(); } catch (error) { showToast(`ניתוח נכשל: ${error.message}`); } });
+        menu.querySelector('.transcribe')?.addEventListener('click', async () => { try { showToast('מתמלל במנוע המקומי הקיים…', 9000); const result = await api.transcribeMedia(item.path); showToast(`התמלול הושלם: ${result.wordCount} מילים וקובץ SRT נוצר`, 9000); await loadLibrary(); } catch (error) { showToast(`התמלול נכשל: ${error.message}`, 9000); } });
+        menu.querySelector('.metadata').addEventListener('click', () => metadataEditor().classList.toggle('hidden'));
+        menu.querySelector('.rename').addEventListener('click', () => {
+          const editor = renameEditor();
+          editor.classList.remove('hidden');
+          editor.querySelector('input').focus();
+        });
+        menu.addEventListener('click', () => closeLibraryMenus());
+      };
+      // The two small editors, built when first asked for.
+      const renameEditor = () => {
+        let editor = row.querySelector('.rename-editor');
+        if (editor) return editor;
+        row.querySelector('.file-details').insertAdjacentHTML('beforeend', `<div class="rename-editor hidden"><input maxlength="120" value="${escapeHtml(baseName)}" aria-label="שם קובץ חדש"><button class="gold-button save-name">שמירה</button><button class="ghost cancel-name">ביטול</button></div>`);
+        editor = row.querySelector('.rename-editor');
+        editor.querySelector('.cancel-name').addEventListener('click', () => editor.classList.add('hidden'));
+        editor.querySelector('.save-name').addEventListener('click', async () => {
+          try {
+            const result = await api.renameFile(item.path, editor.querySelector('input').value);
+            showToast(`השם שונה ל־${result.name}`);
+            await loadLibrary();
+          } catch (error) { showToast(`שינוי השם נכשל: ${error.message}`); }
+        });
+        return editor;
+      };
+      const metadataEditor = () => {
+        let editor = row.querySelector('.metadata-editor');
+        if (editor) return editor;
+        row.insertAdjacentHTML('beforeend', `<div class="metadata-editor hidden"><input class="meta-client" maxlength="80" placeholder="לקוח / פרויקט" value="${escapeHtml(metadata.client || '')}"><input class="meta-tags" maxlength="160" placeholder="תגיות מופרדות בפסיק" value="${escapeHtml((metadata.tags || []).join(', '))}"><label><input class="meta-favorite" type="checkbox" ${metadata.favorite ? 'checked' : ''}> מועדף</label><button class="gold-button save-metadata">שמירה</button></div>`);
+        editor = row.querySelector('.metadata-editor');
+        editor.querySelector('.save-metadata').addEventListener('click', async () => {
+          await api.saveLibraryMetadata(item.path, { client: editor.querySelector('.meta-client').value, tags: editor.querySelector('.meta-tags').value, favorite: editor.querySelector('.meta-favorite').checked });
+          await loadLibrary();
+        });
+        return editor;
+      };
       moreButton.addEventListener('click', (event) => {
         event.stopPropagation();
+        buildMenu();
         const opening = menu.classList.contains('hidden');
         closeLibraryMenus();
         if (opening) { menu.classList.remove('hidden'); moreButton.setAttribute('aria-expanded', 'true'); row.classList.add('menu-open'); }
       });
-      menu.addEventListener('click', () => closeLibraryMenus());
-      row.querySelector('.show').addEventListener('click', () => api.showFile(item.path));
-      row.querySelector('.share').addEventListener('click', async () => { const share = await api.shareLocal(item.path); showToast(`שיתוף פרטי מקומי הועתק · תפוגה ${new Date(share.expiresAt).toLocaleTimeString('he-IL')}`); });
-      row.querySelector('.metadata').addEventListener('click', () => row.querySelector('.metadata-editor').classList.toggle('hidden'));
-      row.querySelector('.save-metadata').addEventListener('click', async () => {
-        await api.saveLibraryMetadata(item.path, { client: row.querySelector('.meta-client').value, tags: row.querySelector('.meta-tags').value, favorite: row.querySelector('.meta-favorite').checked });
-        await loadLibrary();
-      });
-      row.querySelector('.rename').addEventListener('click', () => {
-        row.querySelector('.rename-editor').classList.remove('hidden');
-        row.querySelector('.rename-editor input').focus();
-      });
-      row.querySelector('.cancel-name').addEventListener('click', () => row.querySelector('.rename-editor').classList.add('hidden'));
-      row.querySelector('.save-name').addEventListener('click', async () => {
-        const input = row.querySelector('.rename-editor input');
-        try {
-          const result = await api.renameFile(item.path, input.value);
-          showToast(`השם שונה ל־${result.name}`);
-          await loadLibrary();
-        } catch (error) { showToast(`שינוי השם נכשל: ${error.message}`); }
-      });
       container.append(row);
     }
   }
+  syncSelections();
 }
 
 function timelineDuration() { return Math.max(0.1, editingVideoProject?.duration || 0.1); }
@@ -2207,6 +2408,7 @@ function renderRecentLibrary(items = state.libraryItems) {
   recent.className = `clip-grid recent-view-${state.recentView}`;
   if (!visibleItems.length) {
     recent.innerHTML = `<div class="loading">${items.length ? `אין כרגע ${filterLabels[state.recentFilter]}` : 'הצילום הראשון שלך יופיע כאן'}</div>`;
+    syncSelections();
     return;
   }
   recent.innerHTML = '';
@@ -2218,11 +2420,12 @@ function renderRecentLibrary(items = state.libraryItems) {
     const isImage = item.kind === 'image';
     card.tabIndex = 0;
     card.setAttribute('aria-label', `${isImage ? 'צילום' : 'וידאו'}: ${item.name}`);
-    card.innerHTML = `<div class="clip-thumb">${thumbnailMarkup(item, true)}<small>${isImage ? 'צילום' : 'וידאו'}</small></div><div class="clip-details"><b title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</b><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)}</small></div>`;
-    card.addEventListener('dblclick', () => api.openFile(item.path));
-    card.addEventListener('keydown', (event) => { if (event.key === 'Enter') api.openFile(item.path); });
+    card.innerHTML = `<div class="clip-thumb">${thumbnailMarkup(item, true)}<small>${isImage ? 'צילום' : 'וידאו'}</small></div><div class="clip-details"><b class="file-name">${escapeHtml(item.name)}</b><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)}</small></div>`;
+    card.addEventListener('keydown', (event) => { if (event.key === 'Enter') openInStudio(item); });
+    makeChoosable(card, item, recentSelection);
     recent.append(card);
   }
+  syncSelections();
 }
 
 async function openLatestScreenshotEditor(mode = 'professional') {
@@ -2698,7 +2901,20 @@ async function initialize() {
     applyLibraryPreferences(button.dataset.libraryView, state.librarySize);
     renderLibrary();
   }));
+  $('#library-list').addEventListener('wheel', (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const current = state.libraryZoom || Number.parseFloat(getComputedStyle($('#library-list')).getPropertyValue('--grid-min')) || LIBRARY_ZOOM.medium;
+    zoomKeepingPointer(event, () => applyLibraryZoom(current + (event.deltaY < 0 ? LIBRARY_ZOOM.step : -LIBRARY_ZOOM.step)));
+  }, { passive: false });
+  $('#recent-library').addEventListener('wheel', (event) => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const view = event.deltaY < 0 ? 'cards' : 'compact';
+    if (view !== state.recentView) zoomKeepingPointer(event, () => applyRecentPreferences(state.recentFilter, state.recentSort, view));
+  }, { passive: false });
   $('#library-size').addEventListener('input', (event) => {
+    applyLibraryZoom(null);
     applyLibraryPreferences(state.libraryView, ({ 1: 'small', 2: 'medium', 3: 'large' })[event.target.value]);
     renderLibrary();
   });
@@ -2743,6 +2959,24 @@ async function initialize() {
   api.onNavigate((page) => showPage(page));
   api.onOpenEditor?.((filePath) => openInEditor(filePath).catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   api.onLibraryChanged?.(() => loadLibrary().catch(() => {}));
+  for (const [name, selection] of SELECTION_PLACES) {
+    $(`#${name}-select-all`)?.addEventListener('click', () => selection.toggleAll());
+    $(`#${name}-select-clear`)?.addEventListener('click', () => selection.clear());
+    $(`#${name}-copy`)?.addEventListener('click', () => runOnChosen(selection, 'copy'));
+    $(`#${name}-trash`)?.addEventListener('click', () => runOnChosen(selection, 'trash'));
+  }
+  // Keys on the chosen files: Control + C copies them all (paste brings all of them); in the library also Control + A
+  // (everything shown; again: clear) and Escape (let the choice go). The page decides which choice the keys act on.
+  document.addEventListener('keydown', (event) => {
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(event.target.tagName) || event.target.isContentEditable) return;
+    const page = document.documentElement.dataset.activePage;
+    const selection = page === 'library' ? librarySelection : page === 'capture' ? recentSelection : null;
+    if (!selection) return;
+    const control = event.ctrlKey || event.metaKey;
+    if (control && event.code === 'KeyC' && selection.place.chosen.size && !String(window.getSelection?.() || '').trim()) { event.preventDefault(); runOnChosen(selection, 'copy'); }
+    else if (page === 'library' && control && event.code === 'KeyA') { event.preventDefault(); librarySelection.toggleAll(); }
+    else if (event.key === 'Escape' && selection.place.chosen.size) selection.clear();
+  });
   api.getFeatures?.().then((value) => { state.features = value; }).catch(() => {});
   api.onFeatures?.((value) => { state.features = value; });
   // A mouse press during a recording (only reported while the click-rings extra is on).

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, Notification, screen, session, shell, Tray } = require('electron');
+const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, Notification, protocol, screen, session, shell, Tray } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -653,15 +653,28 @@ async function runCaptureCardAction(filePath, action) {
     showMainWindow();
     mainWindow?.focus();
     mainWindow?.webContents.send('app:open-editor', resolved);
-  } else if (action === 'trash') {
+  } else if (action === 'trash') await trashCaptures([resolved]);
+  else await runLibraryAction(resolved, action);
+  return { action, path: resolved };
+}
+
+// Moves captures (with their edit project and labels) to the recycle bin, then tells every window once.
+async function trashCaptures(paths) {
+  const trashed = [];
+  for (const filePath of Array.isArray(paths) ? paths.slice(0, 1000) : []) {
+    const resolved = await assertLibraryFile(filePath).catch(() => null);
+    if (!resolved) continue;
     await shell.trashItem(resolved);
     for (const sidecar of [projectPathFor(resolved), `${resolved}.meta.json`]) await shell.trashItem(sidecar).catch(() => {});
-    recentCaptures = recentCaptures.filter((entry) => entry.path !== resolved);
+    trashed.push(resolved);
+  }
+  if (trashed.length) {
+    recentCaptures = recentCaptures.filter((entry) => !trashed.includes(entry.path));
     mainWindow?.webContents.send('app:library-changed'); notifyWorkspace();
     quickbarWindow?.webContents.send('quickbar:captures', { captures: recentCaptures, fresh: false });
     if (!recentCaptures.length && quickbarView === 'capture') positionQuickbar(false);
-  } else await runLibraryAction(resolved, action);
-  return { action, path: resolved };
+  }
+  return { trashed: trashed.length };
 }
 
 async function assertLibraryFile(filePath, extensions = LIBRARY_FILE) {
@@ -1192,6 +1205,19 @@ function runThumbnailFfmpeg(inputPath, outputPath) {
 
 // Library reloads are frequent; without this every screenshot was decoded at full size on each load.
 const thumbnailMemory = new Map();
+// The pages get a thumbnail as a short address of its cached file, served by this scheme (registered before the app is
+// ready); writing the whole picture into the list made every library load several megabytes.
+const THUMBNAIL_SCHEME = 'aurum-thumb';
+protocol.registerSchemesAsPrivileged([{ scheme: THUMBNAIL_SCHEME, privileges: { standard: true, secure: true, corsEnabled: true } }]);
+const thumbnailDirectory = () => path.join(app.getPath('userData'), 'library-thumbnails');
+const thumbnailUrl = (key) => `${THUMBNAIL_SCHEME}://t/${key}.jpg`;
+// The cached file behind a thumbnail address; null for anything else (only plain cache names are accepted).
+function thumbnailFile(url) {
+  try {
+    const name = path.basename(new URL(url).pathname);
+    return new URL(url).protocol === `${THUMBNAIL_SCHEME}:` && /^[0-9a-f]{40}\.jpg$/.test(name) ? path.join(thumbnailDirectory(), name) : null;
+  } catch { return null; }
+}
 
 async function thumbnailFor(item) {
   const memoryKey = `${item.path}|${item.modified}|${item.size}`;
@@ -1206,19 +1232,18 @@ async function thumbnailFor(item) {
 
 async function createThumbnail(item) {
   try {
-    const cacheDirectory = path.join(app.getPath('userData'), 'library-thumbnails');
+    const cacheDirectory = thumbnailDirectory();
     await fs.mkdir(cacheDirectory, { recursive: true });
     const cacheKey = crypto.createHash('sha1').update(`${item.path}|${item.modified}|${item.size}`).digest('hex');
     const thumbnailPath = path.join(cacheDirectory, `${cacheKey}.jpg`);
     if (item.extension === 'pdf') return null;
     if (['png', 'jpg'].includes(item.extension)) {
-      const cached = await fs.readFile(thumbnailPath).catch(() => null);
-      if (cached) return `data:image/jpeg;base64,${cached.toString('base64')}`;
+      if (await fs.access(thumbnailPath).then(() => true, () => false)) return thumbnailUrl(cacheKey);
       const image = nativeImage.createFromPath(item.path);
       if (image.isEmpty()) return null;
       const jpeg = image.resize({ width: 480, quality: 'good' }).toJPEG(82);
-      await fs.writeFile(thumbnailPath, jpeg).catch(() => {});
-      return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
+      // Not written (a full disk): the picture itself, as before.
+      return await fs.writeFile(thumbnailPath, jpeg).then(() => thumbnailUrl(cacheKey), () => `data:image/jpeg;base64,${jpeg.toString('base64')}`);
     }
     try { await fs.access(thumbnailPath); }
     catch {
@@ -1234,7 +1259,7 @@ async function createThumbnail(item) {
       })().finally(() => thumbnailJobs.delete(thumbnailPath)));
       if (!await thumbnailJobs.get(thumbnailPath)) return null;
     }
-    return `data:image/jpeg;base64,${(await fs.readFile(thumbnailPath)).toString('base64')}`;
+    return thumbnailUrl(cacheKey);
   } catch { return null; }
 }
 
@@ -1813,7 +1838,9 @@ function registerIpc() {
     return runFromWorkspace(action);
   });
   ipcMain.handle('workspace:folder', (_event, paths, folder) => setCaptureFolder(Array.isArray(paths) ? paths : [], folder));
-  ipcMain.handle('workspace:copy', (_event, paths) => copyCapturesToClipboard(paths));
+  // Several captures at once, from any window.
+  ipcMain.handle('captures:copy', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return copyCapturesToClipboard(paths); });
+  ipcMain.handle('captures:trash', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return trashCaptures(paths); });
   ipcMain.handle('workspace:dock', (event, patch) => panelFor(event).setDock(patch && typeof patch === 'object' ? patch : {}));
   ipcMain.on('workspace:resize', (event, grip) => { const panel = workspacePanels().find((candidate) => candidate.owns(event.sender)); panel?.resizeFrom(typeof grip === 'string' ? grip : null); });
   ipcMain.handle('workspace:dock-drag', (event, active) => { panelFor(event).dragTab(Boolean(active)); return true; });
@@ -1844,7 +1871,8 @@ function registerIpc() {
       const extension = path.extname(resolved).slice(1).toLowerCase();
       const stat = await fs.stat(resolved);
       const thumbnail = await thumbnailFor({ path: resolved, extension, modified: stat.mtimeMs, size: stat.size });
-      const icon = thumbnail ? nativeImage.createFromDataURL(thumbnail).resize({ width: 96 }) : nativeImage.createFromPath(resolved).resize({ width: 96 });
+      const cached = thumbnail && thumbnailFile(thumbnail);
+      const icon = (cached ? nativeImage.createFromPath(cached) : thumbnail ? nativeImage.createFromDataURL(thumbnail) : nativeImage.createFromPath(resolved)).resize({ width: 96 });
       event.sender.startDrag({ file: resolved, icon });
     } catch {}
   });
@@ -2094,6 +2122,11 @@ else app.on('second-instance', () => { showMainWindow(); mainWindow?.focus(); })
 
 app.whenReady().then(async () => {
   if (!singleInstance) return;
+  // Thumbnail addresses -> the cached files (nothing outside the thumbnail folder can be reached through it).
+  protocol.handle(THUMBNAIL_SCHEME, (request) => {
+    const file = thumbnailFile(request.url);
+    return file ? net.fetch(pathToFileURL(file).href) : new Response('', { status: 404 });
+  });
   // The desktop helper (fast screen copy and window list) starts compiling at once, in the background.
   if (process.env.SCREEN_STUDIO_QA !== '1') windowList.start().then(() => applyLaptopCaptureKey()).catch(() => {});
   await ensureOutputDirectory();

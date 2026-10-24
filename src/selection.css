@@ -1,0 +1,30 @@
+/* Choosing several files (library page and recent media): a small box on each row or card, a "choose all" button that
+   clears when pressed again, and a bar of actions that shows while something is chosen. */
+.clip-card { position: relative; }
+.pick { position: absolute; top: 8px; inset-inline-start: 8px; z-index: 4; width: 22px; height: 22px; padding: 0; border: 2px solid #ffffffd9; border-radius: 6px; background: #0007; box-shadow: 0 1px 3px #0006; cursor: pointer; display: grid; place-items: center; opacity: 0; transition: opacity .1s; }
+.library-item:hover .pick, .clip-card:hover .pick, .pick:focus-visible, [data-choosing="true"] .pick, .pick[aria-checked="true"] { opacity: 1; }
+.pick[aria-checked="true"] { background: var(--gold); border-color: var(--gold); }
+.pick[aria-checked="true"]::after { content: ""; width: 10px; height: 5px; border: solid var(--accent-text); border-width: 0 0 2.5px 2.5px; transform: translateY(-1px) rotate(-45deg); }
+.library-item.is-chosen, .clip-card.is-chosen { outline: 2px solid var(--gold); outline-offset: -2px; }
+.clip-card.is-chosen .clip-thumb { border-color: var(--gold); }
+
+.select-all { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.select-all:hover:not(:disabled) { border-color: var(--gold); }
+.select-all:disabled { opacity: .45; cursor: default; }
+.select-all i { width: 15px; height: 15px; border: 2px solid currentColor; border-radius: 4px; display: grid; place-items: center; }
+.select-all[aria-pressed="true"] { color: var(--gold); border-color: var(--gold); }
+.select-all[aria-pressed="true"] i { background: var(--gold); border-color: var(--gold); }
+.select-all[aria-pressed="true"] i::after { content: ""; width: 7px; height: 3.5px; border: solid var(--accent-text); border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
+
+.selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; padding: 8px 12px; border: 1px solid var(--gold); border-radius: 12px; background: color-mix(in srgb, var(--gold) 10%, var(--panel)); }
+.selection-bar[hidden] { display: none; }
+.selection-bar b { font-size: 13px; margin-inline-end: auto; }
+.selection-bar .ghost { height: 32px; padding: 0 12px; font-size: 12px; }
+.selection-bar .danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+
+/* The whole card chooses; the name renames (a text cursor and a light underline show it). */
+.library-list .library-item, #recent-library .clip-card { cursor: pointer; }
+.file-name { cursor: text; border-radius: 4px; }
+.library-list .file-icon, #recent-library .clip-thumb { cursor: zoom-in; }
+.file-name:hover { text-decoration: underline dotted; text-underline-offset: 3px; }
+.name-in-place { width: 100%; min-width: 120px; height: 28px; padding: 0 8px; border: 1px solid var(--gold); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-size: 13px; outline: none; }
