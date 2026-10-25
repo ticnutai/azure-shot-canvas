@@ -3000,6 +3000,13 @@ async function initialize() {
     else if (page === 'library' && control && event.code === 'KeyA') { event.preventDefault(); librarySelection.toggleAll(); }
     else if (event.key === 'Escape' && selection.place.chosen.size) selection.clear();
   });
+  // A shortcut changed from a button's right-click: kept and shown like one changed in the settings.
+  api.onShortcutsChanged?.((result) => {
+    state.shortcuts = result.shortcuts;
+    shortcutFallbackState = result.fallbacks || {};
+    try { localStorage.setItem('aurum-shortcuts', JSON.stringify(result.requested || state.shortcuts)); } catch {}
+    renderShortcutSettings(result.registration);
+  });
   api.getFeatures?.().then((value) => { state.features = value; }).catch(() => {});
   api.onFeatures?.((value) => { state.features = value; });
   // A mouse press during a recording (only reported while the click-rings extra is on).

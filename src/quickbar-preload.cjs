@@ -18,3 +18,10 @@ contextBridge.exposeInMainWorld('quickbarApi', {
   trashMany: (paths) => ipcRenderer.invoke('captures:trash', paths),
   openWorkspace: () => ipcRenderer.invoke('workspace:open')
 });
+
+// The keys of each action, shown in the buttons' hints, and the right-click menu to change them (shortcut-hints.js).
+contextBridge.exposeInMainWorld('shortcutHintsApi', {
+  labels: () => ipcRenderer.invoke('shortcuts:labels'),
+  onLabels: (callback) => ipcRenderer.on('shortcuts:labels', (_event, labels) => callback(labels)),
+  menu: (action) => ipcRenderer.send('shortcuts:menu', action)
+});

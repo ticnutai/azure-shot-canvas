@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   onExternalImage: (callback) => ipcRenderer.on('capture:external-image', (_event, payload) => callback(payload)),
   onToast: (callback) => ipcRenderer.on('app:toast', (_event, text) => callback(text)),
   getFeatures: () => ipcRenderer.invoke('features:get'),
+  onShortcutsChanged: (callback) => ipcRenderer.on('app:shortcuts-changed', (_event, result) => callback(result)),
   onRecordingClick: (callback) => ipcRenderer.on('recording:click', (_event, click) => callback(click)),
   setFeatures: (patch) => ipcRenderer.invoke('features:set', patch),
   featureAction: (id) => ipcRenderer.invoke('features:action', id),
@@ -86,4 +87,11 @@ contextBridge.exposeInMainWorld('screenStudio', {
   onUpdateState: (callback) => ipcRenderer.on('update:state', (_event, state) => callback(state)),
   importRegionAreas: (payload) => ipcRenderer.invoke('region:import-areas', payload),
   onQuickbarPreferences: (callback) => ipcRenderer.on('app:quickbar-preferences', (_event, value) => callback(value))
+});
+
+// The keys of each action, shown in the buttons' hints, and the right-click menu to change them (shortcut-hints.js).
+contextBridge.exposeInMainWorld('shortcutHintsApi', {
+  labels: () => ipcRenderer.invoke('shortcuts:labels'),
+  onLabels: (callback) => ipcRenderer.on('shortcuts:labels', (_event, labels) => callback(labels)),
+  menu: (action) => ipcRenderer.send('shortcuts:menu', action)
 });

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>שינוי קיצור</title>
+  <link rel="stylesheet" href="shortcut-editor.css">
+</head>
+<body>
+  <header><b>שינוי קיצור</b><span id="action-label"></span></header>
+  <p class="hint">לחצו על צירוף המקשים החדש (למשל קונטרול + שיפט + 5)</p>
+  <div id="keys" class="keys" aria-live="polite">ממתין למקשים…</div>
+  <p id="note" class="note"></p>
+  <p class="current">כרגע: <b id="current"></b></p>
+  <footer>
+    <button id="save" class="primary" disabled>שמירה</button>
+    <button id="none">ללא קיצור</button>
+    <button id="default">ברירת המחדל</button>
+    <button id="cancel">ביטול</button>
+  </footer>
+  <script src="shortcut-utils.cjs"></script>
+  <script src="shortcut-editor.js"></script>
+</body>
+</html>

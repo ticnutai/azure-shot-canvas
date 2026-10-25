@@ -136,14 +136,14 @@
                 <div class="preview-status"><span id="quality-status">4K · 60fps</span><span id="stage-time">00:00</span></div>
                 <button class="expand-button" id="expand-preview" aria-label="הגדלת התצוגה המקדימה">⛶</button>
                 <div class="empty-preview"><span>▰</span><b id="selected-source-label">תצוגה מקדימה — מסך מלא</b><p>בחר מקור למעלה, כוון את ההגדרות ולחץ על הקלטה כדי להתחיל</p></div>
-                <button class="snapshot-fab" id="screenshot-button" title="צילום תמונה">▣</button>
+                <button class="snapshot-fab" id="screenshot-button" data-hint-action="screenshot" title="צילום תמונה">▣</button>
                 <div class="audio-meter" aria-label="מד עוצמת קול"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
               </div>
               <div class="transport-bar">
                 <div class="capture-chips">
                   <button id="mic-chip" title="מיקרופון">♩ מיקרופון</button><button id="camera-chip" title="מצלמה">◘ מצלמה</button><button class="active" title="הדגשת עכבר">⌁ הדגשת עכבר</button>
                 </div>
-                <button type="button" class="collapse-toggle transport-collapse" data-collapse-toggle="transport" aria-expanded="true"><i aria-hidden="true">▴</i> <span>כיתוב</span></button><div class="transport-actions"><button class="pause-main" id="pause-recording">Ⅱ <span>השהה</span></button><button class="record-main" id="record-button" data-recording="false"><i class="record-action-icon" aria-hidden="true"></i><span>התחל הקלטה</span></button></div>
+                <button type="button" class="collapse-toggle transport-collapse" data-collapse-toggle="transport" aria-expanded="true"><i aria-hidden="true">▴</i> <span>כיתוב</span></button><div class="transport-actions"><button class="pause-main" id="pause-recording" data-hint-action="pause">Ⅱ <span>השהה</span></button><button class="record-main" id="record-button" data-hint-action="record" data-recording="false"><i class="record-action-icon" aria-hidden="true"></i><span>התחל הקלטה</span></button></div>
               </div>
             </div>
 
@@ -405,5 +405,6 @@
   <script src="appearance.js"></script>
   <script src="renderer.js"></script>
   <script src="features-ui.js"></script>
+  <script src="shortcut-hints.js"></script>
 </body>
 </html>

@@ -114,3 +114,12 @@ test('keys saved by an earlier version holding its old defaults move to PrtSc; c
   assert.equal(upgraded.repeatRegion.code, 'Digit9');
   assert.equal(upgraded.record.code, 'Digit2');
 });
+
+test('an action set to null keeps no shortcut; a missing action takes its default', () => {
+  const { normalizeShortcutMap, DEFAULT_SHORTCUTS } = require('../src/shortcut-utils.cjs');
+  const map = normalizeShortcutMap({ screenshot: null });
+  assert.equal(map.screenshot, null);
+  assert.deepEqual(map.record, normalizeShortcutMap({}).record);
+  assert.ok(DEFAULT_SHORTCUTS.screenshot);
+  assert.ok(normalizeShortcutMap(null));
+});

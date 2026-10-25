@@ -30,3 +30,10 @@ contextBridge.exposeInMainWorld('workspaceApi', {
   createGuide: (options) => ipcRenderer.invoke('workspace:guide', options),
   trim: (filePath, start, end) => ipcRenderer.invoke('workspace:trim', filePath, start, end)
 });
+
+// The keys of each action, shown in the buttons' hints, and the right-click menu to change them (shortcut-hints.js).
+contextBridge.exposeInMainWorld('shortcutHintsApi', {
+  labels: () => ipcRenderer.invoke('shortcuts:labels'),
+  onLabels: (callback) => ipcRenderer.on('shortcuts:labels', (_event, labels) => callback(labels)),
+  menu: (action) => ipcRenderer.send('shortcuts:menu', action)
+});

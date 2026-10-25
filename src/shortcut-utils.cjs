@@ -157,7 +157,10 @@ function acceleratorForBinding(value) {
 
 function normalizeShortcutMap(candidate = {}) {
   const result = {};
-  for (const action of Object.keys(ACTION_DEFINITIONS)) result[action] = normalizeBinding(candidate[action] ?? DEFAULT_SHORTCUTS[action]);
+  const given = candidate || {};
+  // A key that is there but empty (null) means "no shortcut"; only a missing key takes the default.
+  for (const action of Object.keys(ACTION_DEFINITIONS))
+    result[action] = normalizeBinding(Object.hasOwn(given, action) ? given[action] : DEFAULT_SHORTCUTS[action]);
   return result;
 }
 

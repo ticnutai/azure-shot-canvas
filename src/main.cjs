@@ -13,7 +13,7 @@ const { isOpenableLink, readCode } = require('./code-reader.cjs');
 const { keyLabel } = require('./key-echo.cjs');
 const { KeyOverlay } = require('./key-overlay.cjs');
 const { assertEditableImagePath, dataUrlBytes, editedCopyPath, imageMimeType, projectPathFor } = require('./editor-utils.cjs');
-const { ACTION_DEFINITIONS, DEFAULT_SHORTCUTS, acceleratorForBinding, inputMatchesBinding, normalizeShortcutMap, registerWithFallbacks, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
+const { ACTION_DEFINITIONS, ACTION_LABELS, DEFAULT_SHORTCUTS, acceleratorForBinding, bindingLabel, commonAppConflict, inputMatchesBinding, normalizeBinding, normalizeShortcutMap, registerWithFallbacks, reservedShortcutConflicts, shortcutConflicts } = require('./shortcut-utils.cjs');
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
@@ -145,7 +145,7 @@ let lastNotice = null;
 let lastTranslation = '';
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -1943,14 +1943,16 @@ function registerIpc() {
     return true;
   });
   ipcMain.handle('shortcuts:get', () => ({ shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration }));
-  ipcMain.handle('shortcuts:set', (_event, candidate) => {
-    const shortcuts = normalizeShortcutMap(candidate);
-    const conflicts = [...shortcutConflicts(shortcuts), ...reservedShortcutConflicts(shortcuts)];
-    if (conflicts.length) return { ok: false, conflicts, shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration };
-    activeShortcuts = shortcuts;
-    registerShortcuts();
-    return { ok: Object.values(shortcutRegistration).every((registered) => registered !== false), shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration };
+  ipcMain.handle('shortcuts:set', (_event, candidate) => applyShortcutMap(candidate));
+  ipcMain.handle('shortcuts:labels', () => shortcutLabels());
+  ipcMain.on('shortcuts:menu', (event, action) => shortcutMenu(event, String(action)));
+  ipcMain.handle('shortcut-editor:info', (event) => (shortcutEditor?.window?.webContents === event.sender ? { action: shortcutEditor.action, label: ACTION_LABELS[shortcutEditor.action], current: activeShortcuts[shortcutEditor.action] || null } : null));
+  ipcMain.handle('shortcut-editor:check', (event, binding) => (shortcutEditor?.window?.webContents === event.sender ? checkShortcut(shortcutEditor.action, binding) : { ok: false }));
+  ipcMain.handle('shortcut-editor:save', (event, binding) => {
+    if (shortcutEditor?.window?.webContents !== event.sender) return { ok: false };
+    return changeShortcut(shortcutEditor.action, binding);
   });
+  ipcMain.handle('shortcut-editor:close', (event) => { if (shortcutEditor?.window?.webContents === event.sender) shortcutEditor.window.close(); return true; });
   ipcMain.handle('shortcuts:test', (_event, action) => {
     if (!Object.hasOwn(ACTION_DEFINITIONS, action)) return false;
     mainWindow?.webContents.send('shortcut', action, { test: true });
@@ -1964,6 +1966,85 @@ function registerIpc() {
     return status.report ? shell.openPath(status.reportPath) : 'אין עדיין דוח QA';
   });
 }
+
+// ---- Shortcuts: one store (the settings page and the right-click on any button change the same keys) ----------------
+function applyShortcutMap(candidate) {
+  const shortcuts = normalizeShortcutMap(candidate);
+  const conflicts = [...shortcutConflicts(shortcuts), ...reservedShortcutConflicts(shortcuts)];
+  if (conflicts.length) return { ok: false, conflicts, shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration };
+  activeShortcuts = shortcuts;
+  registerShortcuts();
+  for (const contents of shortcutViewers()) contents.send('shortcuts:labels', shortcutLabels());
+  return { ok: Object.values(shortcutRegistration).every((registered) => registered !== false), shortcuts: effectiveShortcuts, requested: activeShortcuts, fallbacks: shortcutFallbacks, registration: shortcutRegistration };
+}
+// The keys in force for every action, as words ("Ctrl + Shift + 1"); '' = none. Buttons show it in their hint.
+function shortcutLabels() {
+  return Object.fromEntries(Object.keys(ACTION_DEFINITIONS).map((action) => [action, effectiveShortcuts[action] ? bindingLabel(effectiveShortcuts[action]) : '']));
+}
+function shortcutViewers() {
+  return [quickbarWindow, ...workspacePanels().map((panel) => panel.window), mainWindow].filter((win) => win && !win.isDestroyed()).map((win) => win.webContents);
+}
+// What a new combination for one action would meet: taken by another action, kept by the program or Windows, or
+// common in other programs (allowed, with a word of warning).
+function checkShortcut(action, value) {
+  const binding = normalizeBinding(value);
+  if (!binding) return { ok: false };
+  const candidate = { ...activeShortcuts, [action]: binding };
+  const clash = shortcutConflicts(candidate).find(([first, second]) => first === action || second === action);
+  const reserved = reservedShortcutConflicts(candidate).find(([owner]) => owner === action);
+  const takenBy = clash ? ACTION_LABELS[clash[0] === action ? clash[1] : clash[0]] : '';
+  return { ok: !clash && !reserved, takenBy, reserved: reserved ? reserved[1] : '', common: commonAppConflict(binding), focusedOnly: binding.scope === 'focused' };
+}
+// One action's keys changed (a combination, null = none, 'default'); the studio page keeps the choice like any other.
+function changeShortcut(action, value) {
+  if (!Object.hasOwn(ACTION_DEFINITIONS, action)) return { ok: false, message: 'פעולה לא מוכרת' };
+  const binding = value === 'default' ? DEFAULT_SHORTCUTS[action] : value === null ? null : normalizeBinding(value);
+  if (value !== null && value !== 'default' && !binding) return { ok: false, message: 'הצירוף לא תקין' };
+  if (binding && !checkShortcut(action, binding).ok) return { ok: false, message: 'הצירוף תפוס' };
+  const result = applyShortcutMap({ ...activeShortcuts, [action]: binding });
+  if (result.conflicts?.length) return { ok: false, message: 'הצירוף תפוס' };
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:shortcuts-changed', result);
+  return { ok: true, label: binding ? bindingLabel(binding) : '' };
+}
+// The small window that records the new keys, next to the pointer. While it is open the program's own shortcuts are let
+// go, so pressing one of them is read as the new combination instead of running its action.
+let shortcutEditor = null;
+async function openShortcutEditor(action) {
+  if (!Object.hasOwn(ACTION_DEFINITIONS, action)) return;
+  if (shortcutEditor?.window && !shortcutEditor.window.isDestroyed()) shortcutEditor.window.close();
+  const point = screen.getCursorScreenPoint();
+  const area = screen.getDisplayNearestPoint(point).workArea;
+  const size = { width: 400, height: 236 };
+  const win = new BrowserWindow({
+    width: size.width, height: size.height, x: Math.round(Math.min(area.x + area.width - size.width, Math.max(area.x, point.x - size.width / 2))), y: Math.round(Math.min(area.y + area.height - size.height, Math.max(area.y, point.y + 12))),
+    frame: false, resizable: false, minimizable: false, maximizable: false, alwaysOnTop: true, skipTaskbar: true, show: false, title: 'שינוי קיצור', backgroundColor: '#ffffff',
+    webPreferences: { preload: path.join(__dirname, 'shortcut-editor-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
+  });
+  shortcutEditor = { window: win, action };
+  globalShortcut.unregisterAll();
+  win.on('closed', () => { if (shortcutEditor?.window === win) shortcutEditor = null; registerShortcuts(); });
+  win.on('blur', () => { if (!win.isDestroyed() && process.env.SCREEN_STUDIO_QA !== '1') win.close(); });
+  win.setAlwaysOnTop(true, 'floating');
+  await win.loadFile(path.join(__dirname, 'shortcut-editor.html'));
+  if (process.env.SCREEN_STUDIO_QA !== '1' && !win.isDestroyed()) { win.show(); win.focus(); }
+}
+// The right-click menu of a button: the action's keys, change them, none, the default.
+function shortcutMenu(event, action) {
+  if (!Object.hasOwn(ACTION_DEFINITIONS, action)) return;
+  const current = effectiveShortcuts[action];
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  const isDefault = JSON.stringify(normalizeBinding(activeShortcuts[action])) === JSON.stringify(normalizeBinding(DEFAULT_SHORTCUTS[action]));
+  const menu = Menu.buildFromTemplate([
+    { label: `${ACTION_LABELS[action]} — ${current ? bindingLabel(current) : 'ללא קיצור'}`, enabled: false },
+    { type: 'separator' },
+    { label: 'שינוי קיצור…', click: () => openShortcutEditor(action) },
+    { label: 'ללא קיצור', enabled: Boolean(activeShortcuts[action]), click: () => changeShortcut(action, null) },
+    { label: 'חזרה לברירת המחדל', enabled: !isDefault, click: () => changeShortcut(action, 'default') }
+  ]);
+  lastShortcutMenu = { action, items: menu.items.map((item) => item.label) };
+  if (process.env.SCREEN_STUDIO_QA !== '1') menu.popup({ window: owner || undefined });
+}
+let lastShortcutMenu = null;
 
 function registerShortcuts() {
   globalShortcut.unregisterAll();

@@ -1,0 +1,21 @@
+/* The small window that records a new shortcut for one action (opened from a button's right-click menu). */
+:root { color-scheme: light; font-family: "Segoe UI", Arial, sans-serif; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #ffffff; color: #1f2633; user-select: none; }
+body { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid #d6dbe3; }
+header { display: flex; align-items: baseline; gap: 8px; -webkit-app-region: drag; }
+header b { font-size: 15px; }
+header span { color: #1f6fe5; font-weight: 600; font-size: 14px; }
+.hint { margin: 0; color: #5f6672; font-size: 12px; }
+.keys { min-height: 44px; display: grid; place-items: center; border: 2px dashed #9fb7e6; border-radius: 10px; font-size: 18px; font-weight: 600; direction: ltr; unicode-bidi: plaintext; }
+.keys.ready { border-style: solid; border-color: #1f6fe5; background: #eef4ff; }
+.note { margin: 0; min-height: 18px; font-size: 12px; color: #5f6672; }
+.note.warn { color: #b25e00; }
+.note.bad { color: #c0392b; }
+.current { margin: 0; font-size: 12px; color: #5f6672; }
+.current b { direction: ltr; unicode-bidi: plaintext; color: #1f2633; }
+footer { display: flex; gap: 6px; margin-top: auto; }
+button { height: 32px; padding: 0 12px; border: 1px solid #d6dbe3; border-radius: 8px; background: #f7f8fa; color: #1f2633; font: inherit; font-size: 12px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: #1f6fe5; }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #1f6fe5; border-color: #1f6fe5; color: #fff; font-weight: 600; }
