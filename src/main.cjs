@@ -1,4 +1,19 @@
 const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, Notification, protocol, screen, session, shell, Tray } = require('electron');
+// A test run must not disturb whoever works at this computer: its windows open as usual (the tests need them really
+// shown) but are fully see-through, clicks pass through them, and none of them takes the focus or the front. The opacity
+// a window asks for is remembered, so the pictures' pin can still be tested.
+if (process.env.SCREEN_STUDIO_QA === '1') {
+  const proto = BrowserWindow.prototype;
+  const asked = new WeakMap();
+  const setRealOpacity = proto.setOpacity;
+  const showInactive = proto.showInactive;
+  app.on('browser-window-created', (_event, win) => setRealOpacity.call(win, 0));
+  proto.setOpacity = function setOpacity(value) { asked.set(this, value); };
+  proto.getOpacity = function getOpacity() { return asked.get(this) ?? 1; };
+  proto.show = function show() { showInactive.call(this); };
+  proto.focus = function focus() {};
+  proto.moveTop = function moveTop() {};
+}
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const os = require('node:os');
@@ -61,6 +76,8 @@ const thumbnailJobs = new Map();
 let encoderCapabilities = null;
 let tray = null;
 let quickbarWindow = null;
+// The settings switch: the studio window and the bar stay out of captures and recordings, of this and any other program.
+let hideFromCaptures = true;
 let quickbarExpanded = false;
 let quickbarPreferences = { ...DEFAULT_QUICKBAR_PREFERENCES };
 let quickbarCursorTimer = null;
@@ -127,12 +144,21 @@ function isAutostartOn() {
   return app.getLoginItemSettings({ path: process.execPath, args: ['--hidden'] }).openAtLogin || app.getLoginItemSettings({ path: process.execPath }).openAtLogin;
 }
 // The installed app starts with Windows (hidden in the tray) from its first run; the setting can turn it off.
+// The choice is kept here too, so an entry that went missing from Windows' list comes back at the next opening. A file
+// from an earlier version holds no choice: what the list says today is taken as the choice, nothing is turned on by it.
+const autostartChoicePath = () => path.join(app.getPath('userData'), 'first-run-defaults.json');
+function saveAutostartChoice(wanted) {
+  return fs.writeFile(autostartChoicePath(), JSON.stringify({ autostart: true, wanted, at: new Date().toISOString() }), 'utf8').catch(() => {});
+}
+async function restoreAutostart() {
+  const saved = await readJson(autostartChoicePath());
+  const wanted = saved ? (saved.wanted ?? isAutostartOn()) : true;
+  if (wanted && !isAutostartOn()) setAutostart(true);
+  if (saved?.wanted !== wanted) await saveAutostartChoice(wanted);
+}
 async function applyFirstRunDefaults() {
   if (!app.isPackaged || process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1') return;
-  const marker = path.join(app.getPath('userData'), 'first-run-defaults.json');
-  if (await readJson(marker)) return;
-  setAutostart(true);
-  await fs.writeFile(marker, JSON.stringify({ autostart: true, at: new Date().toISOString() }), 'utf8').catch(() => {});
+  await restoreAutostart();
 }
 // Full-screen region picker (frozen screens); created when the app is ready.
 let regionCapture = null;
@@ -145,7 +171,7 @@ let lastNotice = null;
 let lastTranslation = '';
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, restoreAutostart, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -345,7 +371,7 @@ async function createQuickbarWindow({ forCapture = false } = {}) {
   quickbarWindow.setAlwaysOnTop(true, 'floating');
   quickbarWindow.on('closed', () => { quickbarWindow = null; });
   if (quickbarPreferences.enabled && process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1') quickbarWindow.showInactive();
-  quickbarWindow.setContentProtection(true);
+  quickbarWindow.setContentProtection(hideFromCaptures);
   quickbarWindow.webContents.send('quickbar:recording-state', Boolean(recordingSessions.size));
   updateQuickbarCursorTracking();
   // Opened by hand (not at Windows start-up): the bar opens for a moment and folds back, so it is easy to find.
@@ -1504,7 +1530,12 @@ function registerIpc() {
   ipcMain.handle('sources:list', getSources);
   // Hides the studio window from screen captures (Windows excludes it from capture), so a live preview of the
   // whole screen does not show itself recursively and full-screen recordings do not include the studio.
-  ipcMain.handle('window:capture-exclusion', (_event, enabled) => { mainWindow?.setContentProtection(Boolean(enabled)); return Boolean(enabled); });
+  ipcMain.handle('window:capture-exclusion', (_event, enabled) => {
+    hideFromCaptures = Boolean(enabled);
+    mainWindow?.setContentProtection(hideFromCaptures);
+    if (quickbarWindow && !quickbarWindow.isDestroyed()) quickbarWindow.setContentProtection(hideFromCaptures);
+    return hideFromCaptures;
+  });
   ipcMain.handle('capture:capabilities', () => getEncoderCapabilities());
   ipcMain.handle('capture:still', (_event, sourceId, maxWidth) => captureStill(sourceId, Number(maxWidth) || 0));
   ipcMain.handle('capture:prepare', (_event, options) => {
@@ -1775,7 +1806,9 @@ function registerIpc() {
   ipcMain.handle('app:version', () => app.getVersion());
   ipcMain.handle('app:autostart-set', (_event, enabled) => {
     setAutostart(enabled);
-    return app.getLoginItemSettings().openAtLogin;
+    saveAutostartChoice(Boolean(enabled));
+    // Read with the same path and --hidden it was written with: a bare read finds no match and reports "off".
+    return isAutostartOn();
   });
   ipcMain.handle('quickbar:get-state', () => ({ preferences: quickbarPreferences, expanded: quickbarExpanded, recording: Boolean(recordingSessions.size), view: quickbarView, captures: recentCaptures }));
   ipcMain.handle('capture:preview', (_event, filePath) => showCapturePreview(filePath));
