@@ -79,10 +79,13 @@
         $('#editor-width').value = selection.strokeWidth || 6;
         $('#editor-opacity').value = Math.round((selection.opacity ?? 1) * 100);
         if (selection.fontSize) $('#editor-font-size').value = selection.fontSize;
+        if (selection.fontFamily && [...$('#editor-font').options].some((option) => option.value === selection.fontFamily)) $('#editor-font').value = selection.fontFamily;
+        if (selection.fontFamily) $('#editor-bold').checked = isBold(selection.fontWeight);
         if (selection.text !== undefined) $('#editor-text').value = selection.text;
       },
       onRequestImage: () => $('#editor-overlay-file').click()
     });
+    engine.setStyle({ fontFamily: textChoice.font, fontWeight: textChoice.bold ? 'bold' : 'normal' });
     engine.setViewportSize(...fitSpace());
   };
 
@@ -222,6 +225,16 @@
   $('#editor-opacity').addEventListener('input', (event) => { $('#editor-opacity-output').textContent = `${event.target.value}%`; engine.setStyle({ opacity: Number(event.target.value) / 100 }); });
   $('#editor-font-size').addEventListener('input', (event) => { $('#editor-font-output').textContent = event.target.value; engine.setStyle({ fontSize: Number(event.target.value) }); });
   $('#editor-text').addEventListener('input', (event) => engine.setStyle({ text: event.target.value }));
+  // Font and bold: change the chosen text, and are remembered for the next text.
+  const isBold = (weight) => weight === 'bold' || Number(weight) >= 600;
+  const textFonts = window.AurumTextFonts;
+  const TEXT_CHOICE = 'aurum-editor-text';
+  const textChoice = textFonts.load(TEXT_CHOICE, { font: 'Segoe UI', bold: false });
+  for (const { name, label } of textFonts.available()) $('#editor-font').append(new Option(label, name));
+  $('#editor-font').value = textChoice.font;
+  $('#editor-bold').checked = textChoice.bold;
+  $('#editor-font').addEventListener('change', (event) => { textChoice.font = event.target.value; textFonts.save(TEXT_CHOICE, textChoice); engine?.setStyle({ fontFamily: textChoice.font }); });
+  $('#editor-bold').addEventListener('change', (event) => { textChoice.bold = event.target.checked; textFonts.save(TEXT_CHOICE, textChoice); engine?.setStyle({ fontWeight: textChoice.bold ? 'bold' : 'normal' }); });
   const addImageFile = (file) => { const reader = new FileReader(); reader.onload = () => engine?.addOverlay(reader.result); reader.readAsDataURL(file); };
   $('#editor-overlay-file').addEventListener('change', (event) => { const file = event.target.files[0]; if (!file) return; addImageFile(file); event.target.value = ''; });
   const copyToClipboard = async () => { await api.copyEditorImage(engine.exportDataUrl()); $('#editor-save-state').textContent = 'התמונה הועתקה ללוח'; };

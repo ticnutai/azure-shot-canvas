@@ -2980,6 +2980,7 @@ async function initialize() {
     executeShortcutAction(action, meta).catch((error) => showToast(`הפעלת הקיצור נכשלה: ${error.message}`));
   });
   api.onNavigate((page) => showPage(page));
+  api.onOpenShortcuts?.(() => { showPage('settings'); $('[data-preference-tab="shortcuts"]').click(); });
   api.onOpenEditor?.((filePath) => openInEditor(filePath).catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   api.onLibraryChanged?.(() => loadLibrary().catch(() => {}));
   for (const [name, selection] of SELECTION_PLACES) {

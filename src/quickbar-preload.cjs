@@ -16,7 +16,9 @@ contextBridge.exposeInMainWorld('quickbarApi', {
   openCapture: (filePath) => ipcRenderer.invoke('quickbar:open-capture', filePath),
   drag: (active) => ipcRenderer.invoke('quickbar:drag', active),
   trashMany: (paths) => ipcRenderer.invoke('captures:trash', paths),
-  openWorkspace: () => ipcRenderer.invoke('workspace:open')
+  openWorkspace: () => ipcRenderer.invoke('workspace:open'),
+  editShortcut: (action) => ipcRenderer.send('shortcuts:edit', action),
+  openShortcuts: () => ipcRenderer.send('shortcuts:open-settings')
 });
 
 // The keys of each action, shown in the buttons' hints, and the right-click menu to change them (shortcut-hints.js).

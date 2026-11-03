@@ -67,7 +67,7 @@ class AurumImageEditorEngine {
     this.canvas = new Canvas(canvasElement, { preserveObjectStacking: true, selection: true, fireRightClick: true, stopContextMenu: true, enableRetinaScaling: false });
     this.hooks = hooks;
     this.tool = 'select';
-    this.style = { stroke: '#ef3340', fill: 'transparent', strokeWidth: 6, opacity: 1, fontSize: 42 };
+    this.style = { stroke: '#ef3340', fill: 'transparent', strokeWidth: 6, opacity: 1, fontSize: 42, fontFamily: 'Segoe UI', fontWeight: 'normal' };
     this.zoom = 1;
     this.gridSize = 10;
     this.snap = false;
@@ -128,6 +128,8 @@ class AurumImageEditorEngine {
       opacity: object.opacity ?? 1,
       strokeWidth: object.strokeWidth || this.style.strokeWidth,
       fontSize: object.fontSize || this.style.fontSize,
+      fontFamily: object.fontFamily || '',
+      fontWeight: object.fontWeight ?? '',
       text: object.text || ''
     } : null);
   }
@@ -205,6 +207,8 @@ class AurumImageEditorEngine {
     if (object instanceof Textbox) {
       if (patch.stroke !== undefined) object.set(kind === 'callout' ? 'backgroundColor' : 'fill', patch.stroke);
       if (patch.fontSize !== undefined) object.set('fontSize', Number(patch.fontSize));
+      if (patch.fontFamily !== undefined) object.set('fontFamily', patch.fontFamily);
+      if (patch.fontWeight !== undefined) object.set('fontWeight', patch.fontWeight);
       if (patch.text !== undefined) object.set('text', patch.text);
     } else if (kind === 'counter') {
       if (patch.stroke !== undefined) object.getObjects()[0].set('fill', patch.stroke);
@@ -364,7 +368,7 @@ class AurumImageEditorEngine {
   }
 
   addText(point, callout = false) {
-    const text = new Textbox(callout ? 'הערה' : 'טקסט', this.baseOptions({ left: point.x, top: point.y, width: 360, fill: callout ? '#ffffff' : this.style.stroke, strokeWidth: 0, fontSize: this.style.fontSize, fontFamily: 'Segoe UI', direction: 'rtl', textAlign: 'right', backgroundColor: callout ? this.style.stroke : '', padding: callout ? 12 : 2 }));
+    const text = new Textbox(callout ? 'הערה' : 'טקסט', this.baseOptions({ left: point.x, top: point.y, width: 360, fill: callout ? '#ffffff' : this.style.stroke, strokeWidth: 0, fontSize: this.style.fontSize, fontFamily: this.style.fontFamily, fontWeight: this.style.fontWeight, direction: 'rtl', textAlign: 'right', backgroundColor: callout ? this.style.stroke : '', padding: callout ? 12 : 2 }));
     text.toolType = callout ? 'callout' : 'text';
     this.canvas.add(text);
     this.canvas.setActiveObject(text);

@@ -278,11 +278,56 @@
     schedule();
   }
 
+  // ---- Font and bold of text marks ----------------------------------------------------------------------
+  // Drawn as a list inside this window: a system drop-down would open behind a window that stays above everything.
+  const textFonts = window.AurumTextFonts;
+  const TEXT_CHOICE = 'aurum-region-text';
+  const textChoice = textFonts.load(TEXT_CHOICE, { font: 'Segoe UI', bold: true });
+  const textStyleBox = toolbar.querySelector('.text-style');
+  const fontButton = $('#font-button');
+  const boldButton = $('#bold-button');
+  const fontMenu = $('#font-menu');
+  const fontLabel = () => textFonts.available().find(({ name }) => name === textChoice.font)?.label || textChoice.font;
+  function syncTextStyle() {
+    fontButton.textContent = `${fontLabel()} ▾`;
+    fontButton.setAttribute('aria-expanded', String(!fontMenu.hidden));
+    boldButton.setAttribute('aria-pressed', String(textChoice.bold));
+    textInput.style.fontFamily = `"${textChoice.font}", "Segoe UI", Arial, sans-serif`;
+    textInput.style.fontWeight = textChoice.bold ? '700' : '400';
+  }
+  function changeTextStyle(patch) {
+    Object.assign(textChoice, patch);
+    textFonts.save(TEXT_CHOICE, textChoice);
+    syncTextStyle();
+    if (!textInput.hidden) textInput.focus();
+  }
+  function toggleFontMenu() {
+    fontMenu.hidden = !fontMenu.hidden;
+    if (!fontMenu.hidden) {
+      // Over the toolbar, or under it when there is no room above.
+      const below = toolbar.getBoundingClientRect().top < 300;
+      fontMenu.style.top = below ? '100%' : '';
+      fontMenu.style.bottom = below ? '' : '100%';
+    }
+    syncTextStyle();
+  }
+  for (const { name, label } of textFonts.available()) {
+    const item = document.createElement('button');
+    item.dataset.font = name;
+    item.setAttribute('role', 'menuitem');
+    item.style.fontFamily = `"${name}", "Segoe UI", sans-serif`;
+    item.textContent = label;
+    fontMenu.append(item);
+  }
+
   // ---- Toolbar ------------------------------------------------------------------------------------------
   function syncToolbar() {
     toolbar.querySelectorAll('[data-tool]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.tool === tool)));
     toolbar.querySelectorAll('[data-color]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
     toolbar.querySelector('[data-command="undo"]').disabled = !shapes.length;
+    textStyleBox.hidden = tool !== 'text';
+    if (tool !== 'text') fontMenu.hidden = true;
+    syncTextStyle();
     document.body.dataset.tool = tool;
   }
   function setTool(name) {
@@ -301,6 +346,9 @@
   toolbar.addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button || !selected) return;
+    if (button === fontButton) return toggleFontMenu();
+    if (button === boldButton) return changeTextStyle({ bold: !textChoice.bold });
+    if (button.dataset.font) { fontMenu.hidden = true; return changeTextStyle({ font: button.dataset.font }); }
     if (button.dataset.tool) setTool(button.dataset.tool);
     else if (button.dataset.color) { color = button.dataset.color; syncToolbar(); }
     else if (button.dataset.command === 'undo') undo();
@@ -350,7 +398,7 @@
   }
   function commitText() {
     if (!textAt) return;
-    const shape = { type: 'text', color, from: textAt, text: textInput.value };
+    const shape = { type: 'text', color, from: textAt, text: textInput.value, font: textChoice.font, bold: textChoice.bold };
     textAt = null;
     textInput.hidden = true;
     if (markup.isMeaningful(shape)) shapes.push(shape);

@@ -230,10 +230,10 @@
       ['scrollCapture', '⇣', 'עמוד גלילה אוטומטי', 'גולל ומחבר לבד'],
       ['screenshot', '▣', 'מסך מלא', 'המקור שנבחר באולפן'],
       ['screenshotEdit', '✎', 'צילום ופתיחה בעורך', ''],
-      ['openOutput', '⌑', 'פתיחת תיקיית השמירה', '']
+      ['openOutput', '⌑', 'פתיחת תיקיית השמירה', '', 'תיקיית השמירה']
     ],
     record: [
-      ['record', '●', 'התחלה או עצירה של הקלטה', 'המסך שנבחר באולפן'],
+      ['record', '●', 'התחלה או עצירה של הקלטה', 'המסך שנבחר באולפן', 'הקלטה'],
       ['recordRegion', '▱', 'הקלטת אזור או חלון', 'בוחרים על המסך'],
       ['pause', 'Ⅱ', 'השהיה או המשך', ''],
       ['microphone', '🎙', 'מיקרופון', 'הפעלה או השתקה'],
@@ -244,7 +244,7 @@
   function closeMenu({ notify = true } = {}) {
     if (document.body.dataset.menuOpen !== 'true') return;
     document.body.dataset.menuOpen = 'false';
-    document.querySelectorAll('.strip-more').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+    document.querySelectorAll('.strip-more, #strip-shortcuts').forEach((button) => button.setAttribute('aria-expanded', 'false'));
     if (notify) api.setMenu(false);
   }
   // Quick toggles for region capture, changed without leaving the menu.
@@ -288,10 +288,42 @@
     }));
     if (name === 'capture') menu.append(captureToggles());
     document.querySelectorAll('.strip-more').forEach((button) => button.setAttribute('aria-expanded', String(button.dataset.menu === name)));
+    document.querySelector('#strip-shortcuts').setAttribute('aria-expanded', 'false');
+    await showMenu(name);
+  }
+  async function showMenu(name) {
     await api.setMenu(true);
     document.body.dataset.menuOpen = 'true';
     document.body.dataset.menuName = name;
   }
+  // The keyboard icon: the bar's actions with their keys; a click changes the keys (the same small window as a right-click).
+  function shortcutRow(icon, label, keys, onClick, action) {
+    const item = document.createElement('button');
+    item.setAttribute('role', 'menuitem');
+    if (action) item.dataset.menuAction = action;
+    item.innerHTML = '<i></i><span></span><small dir="ltr"></small>';
+    item.querySelector('i').textContent = icon;
+    item.querySelector('span').textContent = label;
+    item.querySelector('small').textContent = keys;
+    item.addEventListener('click', () => { closeMenu(); onClick(); });
+    return item;
+  }
+  async function renderShortcutsMenu(labels) {
+    const seen = new Set();
+    const rows = [...MENUS.capture, ...MENUS.record].filter(([action]) => Object.hasOwn(labels, action) && !seen.has(action) && seen.add(action));
+    document.querySelector('#strip-menu').replaceChildren(
+      ...rows.map(([action, icon, label, , shortLabel]) => shortcutRow(icon, shortLabel || label, labels[action] || 'אין קיצור', () => api.editShortcut(action), action)),
+      shortcutRow('⌨', 'כל הקיצורים בהגדרות', '', () => api.openShortcuts())
+    );
+  }
+  async function openShortcutsMenu() {
+    await renderShortcutsMenu(await window.shortcutHintsApi.labels());
+    document.querySelectorAll('.strip-more').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+    document.querySelector('#strip-shortcuts').setAttribute('aria-expanded', 'true');
+    await showMenu('shortcuts');
+  }
+  window.shortcutHintsApi.onLabels((labels) => { if (document.body.dataset.menuOpen === 'true' && document.body.dataset.menuName === 'shortcuts') renderShortcutsMenu(labels); });
+  document.querySelector('#strip-shortcuts').addEventListener('click', () => (document.body.dataset.menuOpen === 'true' && document.body.dataset.menuName === 'shortcuts' ? closeMenu() : openShortcutsMenu()));
   document.querySelectorAll('.strip-more').forEach((button) => button.addEventListener('click', () => (
     document.body.dataset.menuOpen === 'true' && document.body.dataset.menuName === button.dataset.menu ? closeMenu() : openMenu(button.dataset.menu)
   )));

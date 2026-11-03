@@ -1979,6 +1979,8 @@ function registerIpc() {
   ipcMain.handle('shortcuts:set', (_event, candidate) => applyShortcutMap(candidate));
   ipcMain.handle('shortcuts:labels', () => shortcutLabels());
   ipcMain.on('shortcuts:menu', (event, action) => shortcutMenu(event, String(action)));
+  ipcMain.on('shortcuts:edit', (_event, action) => openShortcutEditor(String(action)));
+  ipcMain.on('shortcuts:open-settings', () => { showMainWindow(); mainWindow?.focus(); mainWindow?.webContents.send('app:open-shortcuts'); });
   ipcMain.handle('shortcut-editor:info', (event) => (shortcutEditor?.window?.webContents === event.sender ? { action: shortcutEditor.action, label: ACTION_LABELS[shortcutEditor.action], current: activeShortcuts[shortcutEditor.action] || null } : null));
   ipcMain.handle('shortcut-editor:check', (event, binding) => (shortcutEditor?.window?.webContents === event.sender ? checkShortcut(shortcutEditor.action, binding) : { ok: false }));
   ipcMain.handle('shortcut-editor:save', (event, binding) => {

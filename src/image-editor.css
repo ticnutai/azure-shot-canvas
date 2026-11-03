@@ -121,3 +121,5 @@ html[data-editor-open="true"] { overflow: hidden; }
 .editor-save-actions > * { white-space: nowrap; flex-shrink: 0; }
 .editor-save-actions .ghost, .editor-save-actions .gold-button { height: 36px; padding: 0 12px; }
 .editor-beautify-style { height: 36px; max-width: 112px; padding: 0 8px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2); color: var(--text); font: inherit; font-size: 12px; }
+.editor-properties label.editor-bold-line { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; }
+.editor-properties label.editor-bold-line input { width: 16px; height: 16px; margin: 0; flex: none; }

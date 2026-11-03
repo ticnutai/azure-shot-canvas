@@ -56,6 +56,11 @@
     context.restore();
   }
 
+  // A text mark's own font; marks without one are bold in the usual font.
+  function textFont(shape) {
+    return `${shape.bold === false ? 400 : 700} 20px "${shape.font || 'Segoe UI'}", "Segoe UI", Arial, sans-serif`;
+  }
+
   function drawShape(context, shape, { frozen, scale }) {
     if (shape.type === 'blur') return drawBlur(context, shape, frozen, scale);
     context.save();
@@ -77,7 +82,7 @@
       shape.points.forEach((point, index) => (index ? context.lineTo(point.x, point.y) : context.moveTo(point.x, point.y)));
       context.stroke();
     } else if (shape.type === 'text') {
-      context.font = '700 20px "Segoe UI", Arial, sans-serif';
+      context.font = textFont(shape);
       context.direction = 'rtl';
       context.textAlign = 'start';
       context.textBaseline = 'top';
