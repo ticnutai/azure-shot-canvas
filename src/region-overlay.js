@@ -424,9 +424,10 @@
       if (handle) { adjusting = { kind: handle, start: pointer, rect: { ...selected } }; return; }
       if (tool === 'move') {
         if (inside(pointer, selected)) { adjusting = { kind: 'move', start: pointer, rect: { ...selected } }; return; }
-        // Outside the selection with the move tool: start over with a new area (marks are dropped).
+        // Outside the selection with the move tool: start over with a new area, unless there are marks, which one
+        // stray click must not lose (Escape starts over).
+        if (shapes.length) return;
         selected = null;
-        shapes = [];
         document.body.dataset.editing = 'false';
         syncToolbar();
       } else {

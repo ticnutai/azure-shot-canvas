@@ -76,6 +76,44 @@ test.describe.serial('a press on the frozen screen always ends', () => {
     await cancel();
   });
 
+  test('a click outside the area does not lose the marks; with no marks it starts a new area', async () => {
+    const toolbarHidden = () => overlay.evaluate(() => document.querySelector('#toolbar').hidden);
+    const useTool = (name) => overlay.evaluate((tool) => document.querySelector(`[data-tool="${tool}"]`).click(), name);
+    const clickAt = async (x, y) => { await realMove(x, y); await press(x, y); await letGo(x, y); };
+    const settled = () => overlay.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await open();
+    await realMove(200, 200);
+    await press(200, 200);
+    await moveHeld(500, 450);
+    await letGo(500, 450);
+    await expect.poll(toolbarHidden).toBe(false);
+    await useTool('rect');
+    await realMove(250, 250);
+    await press(250, 250);
+    await moveHeld(350, 330);
+    await letGo(350, 330);
+    await expect.poll(undoOff).toBe(false);
+
+    await useTool('move');
+    const before = await area();
+    await clickAt(800, 700);
+    await settled();
+    expect(await undoOff()).toBe(false);
+    expect(await toolbarHidden()).toBe(false);
+    expect(await dragging()).toBe('false');
+    expect(await area()).toBe(before);
+
+    // The mark can still be taken back, and then a click outside starts a new area as before.
+    await overlay.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyZ', ctrlKey: true, bubbles: true })));
+    await expect.poll(undoOff).toBe(true);
+    await realMove(800, 700);
+    await press(800, 700);
+    await expect.poll(dragging).toBe('true');
+    await expect.poll(toolbarHidden).toBe(true);
+    await letGo(800, 700);
+    await cancel();
+  });
+
   test('the system takes the pointer away: nothing is chosen', async () => {
     await open();
     await realMove(100, 100);
