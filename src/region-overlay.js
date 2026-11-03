@@ -54,6 +54,9 @@
   const inside = (point, rect) => point.x >= rect.x && point.y >= rect.y && point.x <= rect.x + rect.width && point.y <= rect.y + rect.height;
   const clampToSelection = (point) => ({ x: Math.min(Math.max(selected.x, point.x), selected.x + selected.width), y: Math.min(Math.max(selected.y, point.y), selected.y + selected.height) });
 
+  // The magnifier reads this picture on every frame: kept in ordinary memory, where a read does not stall on the graphics card.
+  const frozenContext = () => frozen.getContext('2d', { willReadFrequently: true });
+
   function drawFrozen(image) {
     frozen.width = image.width;
     frozen.height = image.height;
@@ -65,7 +68,7 @@
       pixels[index + 2] = blue;
       pixels[index + 3] = 255;
     }
-    frozen.getContext('2d').putImageData(new ImageData(pixels, image.width, image.height), 0, 0);
+    frozenContext().putImageData(new ImageData(pixels, image.width, image.height), 0, 0);
   }
 
   const handlesOf = (rect) => {
@@ -152,7 +155,7 @@
 
   // Colour of one pixel of the frozen picture as #RRGGBB.
   function colourAt(x, y) {
-    const [red, green, blue] = frozen.getContext('2d').getImageData(Math.min(frozen.width - 1, Math.max(0, x)), Math.min(frozen.height - 1, Math.max(0, y)), 1, 1).data;
+    const [red, green, blue] = frozenContext().getImageData(Math.min(frozen.width - 1, Math.max(0, x)), Math.min(frozen.height - 1, Math.max(0, y)), 1, 1).data;
     return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
   }
 
@@ -370,6 +373,9 @@
 
   window.addEventListener('pointermove', (event) => {
     if (!session || finished) return;
+    // The button is up but its release never arrived (Windows took the pointer away, or a second button was involved):
+    // this is the release, or the mark would keep following the mouse.
+    if (event.isTrusted && !(event.buttons & 1) && (drawing || adjusting || dragStart)) release(pointer || pointFrom(event), event);
     pointer = pointFrom(event);
     shiftHeld = event.shiftKey;
     if (dragStart) dragEnd = pointer;
@@ -442,8 +448,7 @@
     schedule();
   });
 
-  window.addEventListener('pointerup', (event) => {
-    if (!session || finished || event.button !== 0) return;
+  function release(point, event) {
     if (drawing) {
       if (markup.isMeaningful(drawing)) shapes.push(drawing);
       drawing = null;
@@ -452,7 +457,7 @@
     }
     if (adjusting) { adjusting = null; return schedule(); }
     if (!dragStart) return;
-    dragEnd = pointFrom(event);
+    dragEnd = point;
     const dragged = dragSelection();
     const start = dragStart;
     dragStart = null;
@@ -462,6 +467,22 @@
     pointer = start;
     shiftHeld = event.shiftKey;
     choose(hoveredTarget() || screenBounds(), { markupNow: event.ctrlKey });
+  }
+  window.addEventListener('pointerup', (event) => {
+    if (!session || finished || event.button !== 0) return;
+    release(pointFrom(event), event);
+  });
+  // The system took the pointer in the middle of a press: nothing is chosen or saved by it, a mark drawn so far stays.
+  window.addEventListener('pointercancel', () => {
+    if (!session || finished) return;
+    if (drawing && markup.isMeaningful(drawing)) shapes.push(drawing);
+    drawing = null;
+    adjusting = null;
+    dragStart = null;
+    dragEnd = null;
+    document.body.dataset.dragging = 'false';
+    syncToolbar();
+    schedule();
   });
 
   window.addEventListener('dblclick', (event) => {
