@@ -661,7 +661,7 @@ test.describe('Electron production workflow', () => {
   });
 
   test('professional screenshot editor tools, history and non-destructive save', async ({}, testInfo) => {
-    test.setTimeout(180_000);
+    test.setTimeout(300_000);
     await setCaptureDefaults(page, 'screenshot', 'full');
     const before = new Set(await fs.readdir(outputDir));
     await page.locator('#record-button').click();

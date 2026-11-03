@@ -33,6 +33,8 @@ test.describe.serial('keys shown while recording', () => {
     const before = new Set(await fs.readdir(outputDir));
     await page.locator('#stop-recording').dispatchEvent('click');
     await expect.poll(async () => (await fs.readdir(outputDir)).some((name) => /\.(mp4|webm)$/.test(name) && !before.has(name)), { timeout: 60_000 }).toBe(true);
+    // The file appears before it is finished; until then the record button answers that it is still being saved.
+    await expect.poll(() => page.evaluate(() => Boolean(state.finalizing)), { timeout: 60_000 }).toBe(false);
   };
 
   test('1 · off by default: a recording shows no keys', async () => {
