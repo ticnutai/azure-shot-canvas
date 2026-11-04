@@ -27,7 +27,6 @@
     ocr: ['גררו סביב הטקסט להעתקה', 'לחיצה על חלון או על חלק ממנו', 'אסקייפ ביטול'],
     scroll: ['בחרו את האזור שנגלל — התוכנה תגלול ותחבר לבד', 'לחיצה על חלק בחלון בוחרת אותו', 'אסקייפ ביטול']
   };
-  const TOOL_KEYS = { KeyV: 'move', KeyA: 'arrow', KeyR: 'rect', KeyP: 'pen', KeyT: 'text', KeyB: 'blur', KeyN: 'number' };
 
   let session = null; // { displayId, width, height, scale, windows, last, purpose, markup }
   let pointer = null;
@@ -303,6 +302,7 @@
   }
   function toggleFontMenu() {
     fontMenu.hidden = !fontMenu.hidden;
+    if (!fontMenu.hidden && !keysPanel.hidden) closeToolKeys();
     if (!fontMenu.hidden) {
       // Over the toolbar, or under it when there is no room above.
       const below = toolbar.getBoundingClientRect().top < 300;
@@ -318,6 +318,81 @@
     item.style.fontFamily = `"${name}", "Segoe UI", sans-serif`;
     item.textContent = label;
     fontMenu.append(item);
+  }
+
+  // ---- The tools' keys: a list in this window (right-click on a tool, or the keyboard icon) ---------------
+  // Drawn here and not in a separate window: this screen stays above every other window.
+  const toolKeys = window.AurumToolKeys;
+  const TOOL_KEYS_SAVED = 'aurum-region-tool-keys';
+  const readToolKeys = () => {
+    try { return toolKeys.normalize(JSON.parse(localStorage.getItem(TOOL_KEYS_SAVED) || 'null')); } catch { return toolKeys.defaults(); }
+  };
+  let keyMap = readToolKeys();
+  let listeningTool = null;
+  const keysPanel = $('#keys-panel');
+  const keysNote = $('#keys-note');
+  const keysIcon = toolbar.querySelector('[data-command="tool-keys"]');
+  const WAITING = 'לחצו על מקש · מחיקה בלי מקש · אסקייפ ביטול';
+  const noteKeys = (text = '', kind = '') => { keysNote.textContent = text; keysNote.dataset.kind = kind; };
+  function renderToolKeys() {
+    for (const { tool, title } of toolKeys.TOOLS) {
+      const key = toolKeys.keyLabel(keyMap[tool]);
+      toolbar.querySelector(`[data-tool="${tool}"]`).title = `${title}${key ? ` (${key})` : ''} · לחיצה ימנית לשינוי המקש`;
+    }
+    $('#keys-rows').replaceChildren(...toolKeys.TOOLS.map(({ tool, label }) => {
+      const row = document.createElement('button');
+      row.dataset.keyTool = tool;
+      row.dataset.listening = String(listeningTool === tool);
+      row.append(Object.assign(document.createElement('span'), { textContent: label }), Object.assign(document.createElement('kbd'), { textContent: listeningTool === tool ? '…' : toolKeys.keyLabel(keyMap[tool]) || 'אין' }));
+      return row;
+    }));
+  }
+  function saveToolKeys(next) {
+    keyMap = toolKeys.normalize(next);
+    try { localStorage.setItem(TOOL_KEYS_SAVED, JSON.stringify(keyMap)); } catch {}
+  }
+  function listenForKey(tool) {
+    listeningTool = tool;
+    noteKeys(`${toolKeys.labelOf(tool)}: ${WAITING}`);
+    renderToolKeys();
+  }
+  function openToolKeys(tool = null) {
+    fontMenu.hidden = true;
+    keysPanel.hidden = false;
+    keysIcon.setAttribute('aria-expanded', 'true');
+    // Over the toolbar, or under it when there is no room above.
+    const below = toolbar.getBoundingClientRect().top < 340;
+    keysPanel.style.top = below ? '100%' : '';
+    keysPanel.style.bottom = below ? '' : '100%';
+    listeningTool = null;
+    noteKeys('לחיצה על שורה משנה את המקש');
+    if (tool) listenForKey(tool);
+    else renderToolKeys();
+    syncTextStyle();
+  }
+  function closeToolKeys() {
+    listeningTool = null;
+    keysPanel.hidden = true;
+    keysIcon.setAttribute('aria-expanded', 'false');
+    renderToolKeys();
+  }
+  function takeToolKey(event) {
+    if (/^(?:Shift|Control|Alt|Meta)(?:Left|Right)$/.test(event.code)) return;
+    const tool = listeningTool;
+    if (event.key === 'Escape') { listeningTool = null; noteKeys('המקש לא שונה'); return renderToolKeys(); }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      saveToolKeys({ ...keyMap, [tool]: '' });
+      listeningTool = null;
+      noteKeys(`ל"${toolKeys.labelOf(tool)}" אין עכשיו מקש`);
+      return renderToolKeys();
+    }
+    if (event.ctrlKey || event.altKey || event.metaKey) return noteKeys('כאן בוחרים מקש בודד, בלי קונטרול או אלט', 'bad');
+    const verdict = toolKeys.check(keyMap, tool, event.code);
+    if (!verdict.ok) return noteKeys(verdict.message, 'bad');
+    saveToolKeys({ ...keyMap, [tool]: event.code });
+    listeningTool = null;
+    noteKeys(`"${toolKeys.labelOf(tool)}" עובד עכשיו עם ${toolKeys.keyLabel(event.code)}`);
+    renderToolKeys();
   }
 
   // ---- Toolbar ------------------------------------------------------------------------------------------
@@ -346,6 +421,9 @@
   toolbar.addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button || !selected) return;
+    if (button === keysIcon) return keysPanel.hidden ? openToolKeys() : closeToolKeys();
+    if (button.dataset.keyTool) return listenForKey(button.dataset.keyTool);
+    if (button.dataset.command === 'keys-reset') { saveToolKeys(toolKeys.defaults()); listeningTool = null; noteKeys('חזרו המקשים הרגילים'); return renderToolKeys(); }
     if (button === fontButton) return toggleFontMenu();
     if (button === boldButton) return changeTextStyle({ bold: !textChoice.bold });
     if (button.dataset.font) { fontMenu.hidden = true; return changeTextStyle({ font: button.dataset.font }); }
@@ -356,6 +434,7 @@
     else if (button.dataset.command === 'save-area') saveArea();
     else if (button.dataset.after) finish(selected, button.dataset.after);
   });
+  renderToolKeys();
   for (const [index, value] of markup.COLORS.entries()) {
     const swatch = document.createElement('button');
     swatch.className = 'swatch';
@@ -537,18 +616,26 @@
   window.addEventListener('dblclick', (event) => {
     if (selected && tool === 'move' && inside(pointFrom(event), selected)) finish(selected, 'save');
   });
-  window.addEventListener('contextmenu', (event) => { event.preventDefault(); if (!selected) cancel(); });
+  window.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    const toolButton = event.target.closest?.('#toolbar [data-tool]');
+    if (toolButton && selected) return openToolKeys(toolButton.dataset.tool);
+    if (!selected) cancel();
+  });
 
   window.addEventListener('keydown', (event) => {
     if (!session || finished) return;
     shiftHeld = event.shiftKey;
+    if (listeningTool) { event.preventDefault(); return takeToolKey(event); }
+    if (event.key === 'Escape' && !keysPanel.hidden) { event.preventDefault(); return closeToolKeys(); }
     if (event.key === 'Escape') { event.preventDefault(); return cancel(); }
     if (selected) {
       if (event.key === 'Enter') { event.preventDefault(); return finish(selected, 'save'); }
       if (event.ctrlKey && event.code === 'KeyC') { event.preventDefault(); return finish(selected, 'copy'); }
       if (event.ctrlKey && event.code === 'KeyZ') { event.preventDefault(); return undo(); }
       if (event.ctrlKey && event.code === 'KeyE') { event.preventDefault(); return finish(selected, 'edit'); }
-      if (!event.ctrlKey && TOOL_KEYS[event.code]) { event.preventDefault(); return setTool(TOOL_KEYS[event.code]); }
+      const keyedTool = event.ctrlKey ? null : toolKeys.toolForKey(keyMap, event.code);
+      if (keyedTool) { event.preventDefault(); return setTool(keyedTool); }
       return;
     }
     if (event.key === 'Enter' && session.last && session.purpose === 'capture') { event.preventDefault(); return choose(session.last); }

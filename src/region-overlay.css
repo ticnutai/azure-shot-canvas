@@ -40,6 +40,15 @@ body[data-hint="false"] #hint{display:none}
 #font-menu{position:absolute;inset-inline-start:0;display:grid;gap:2px;width:150px;max-height:280px;overflow-y:auto;padding:4px;border:1px solid #39516d;border-radius:10px;background:#101923f5;box-shadow:0 12px 32px #000a;z-index:2}
 #font-menu[hidden]{display:none}
 #font-menu button{width:100%;text-align:right}
+#keys-panel{position:absolute;inset-inline-start:0;display:grid;gap:6px;width:250px;padding:10px;border:1px solid #39516d;border-radius:12px;background:#101923f5;box-shadow:0 12px 32px #000a;color:#dce8f5;font-size:13px;z-index:2}
+#keys-panel[hidden]{display:none}
+#keys-rows{display:grid;gap:2px}
+#keys-rows button{display:flex;align-items:center;justify-content:space-between;width:100%;font-size:13px}
+#keys-rows kbd{min-width:30px;padding:1px 6px;border:1px solid #39516d;border-radius:5px;background:#0b1420;color:#ffd36a;font:inherit;text-align:center;direction:ltr}
+#keys-rows button[data-listening="true"]{background:#4a3819;border-color:#c99124}
+#keys-note{min-height:32px;margin:0;color:#8ea5bf;font-size:12px;line-height:16px}
+#keys-note[data-kind="bad"]{color:#ff9b8f}
+#keys-panel>button{font-size:12px}
 #toolbar .dims{display:flex;align-items:center;gap:4px;padding:0 6px;border-inline-end:1px solid #2d4055}
 #toolbar .dims label{display:grid;gap:1px;justify-items:center}
 #toolbar .dims span{font-size:10px;color:#8ea5bf;line-height:1}

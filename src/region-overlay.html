@@ -16,9 +16,16 @@
       <button data-tool="blur" title="טשטוש מידע (B)">▦</button>
       <button data-tool="number" title="מספור שלבים (N)">①</button>
       <button data-command="undo" title="ביטול הסימון האחרון (Ctrl+Z)">↶</button>
+      <button data-command="tool-keys" aria-expanded="false" title="מקשי הכלים — צפייה ושינוי">⌨</button>
       <button data-command="save-area" title="שמירת האזור לשימוש חוזר (מקשי 1–9 בפעם הבאה)">⊕</button>
     </div>
     <div class="colors" aria-label="צבע"></div>
+    <div id="keys-panel" role="group" aria-label="מקשי הכלים" hidden>
+      <b>מקשי הכלים</b>
+      <div id="keys-rows"></div>
+      <p id="keys-note" role="status"></p>
+      <button data-command="keys-reset">חזרה לברירת המחדל</button>
+    </div>
     <div class="text-style" aria-label="סגנון הטקסט" hidden>
       <button id="font-button" aria-haspopup="menu" aria-expanded="false" title="גופן"></button>
       <button id="bold-button" aria-pressed="true" title="טקסט מודגש"><b>מודגש</b></button>
@@ -41,5 +48,6 @@
   <script src="region-utils.cjs"></script>
   <script src="region-markup.js"></script>
   <script src="text-fonts.js"></script>
+  <script src="region-tool-keys.js"></script>
   <script src="region-overlay.js"></script>
 </body></html>
