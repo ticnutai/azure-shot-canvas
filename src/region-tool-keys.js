@@ -10,10 +10,17 @@
     { tool: 'blur', label: 'טשטוש', title: 'טשטוש מידע', key: 'KeyB' },
     { tool: 'number', label: 'מספור', title: 'מספור שלבים', key: 'KeyN' }
   ]);
-  const USABLE = /^(?:Key[A-Z]|Digit[0-9]|F[1-9]|F1[0-2])$/;
+  // Every key that makes sense alone. Kept out: Escape, Enter, Delete and Backspace have their own work on this screen,
+  // the Shift-like keys only change other keys, and Print Screen reaches the page only when it is let go.
+  const USABLE = /^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Numpad(?:[0-9]|Add|Subtract|Multiply|Divide|Decimal)|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Comma|Period|Slash|Backslash|IntlBackslash|Backquote|Space|Tab|Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown|Insert)$/;
+  const KEY_NAMES = Object.freeze({
+    Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/', Backslash: '\\', IntlBackslash: '\\', Backquote: '`',
+    Space: 'רווח', Tab: 'טאב', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Home: 'הום', End: 'אנד', PageUp: 'עמוד למעלה', PageDown: 'עמוד למטה', Insert: 'אינסרט',
+    NumpadAdd: 'מספרים +', NumpadSubtract: 'מספרים -', NumpadMultiply: 'מספרים *', NumpadDivide: 'מספרים /', NumpadDecimal: 'מספרים .'
+  });
   const defaults = () => Object.fromEntries(TOOLS.map(({ tool, key }) => [tool, key]));
   const labelOf = (tool) => TOOLS.find((item) => item.tool === tool)?.label || '';
-  const keyLabel = (code) => (code ? code.replace(/^Key|^Digit/, '') : '');
+  const keyLabel = (code) => (code ? KEY_NAMES[code] || code.replace(/^Key|^Digit/, '').replace(/^Numpad/, 'מספרים ') : '');
   const toolForKey = (keys, code) => Object.keys(keys).find((tool) => keys[tool] === code) || null;
 
   // A saved map, trusted only as far as it is sound: a tool keeps a usable key of its own, or an empty one by choice;
@@ -29,7 +36,7 @@
   }
   // Whether a key can go to a tool, and in Hebrew why not.
   function check(keys, tool, code) {
-    if (!USABLE.test(code)) return { ok: false, message: 'אפשר לבחור אות, ספרה או מקש פונקציה' };
+    if (!USABLE.test(code)) return { ok: false, message: 'המקש הזה שמור לפעולה אחרת במסך, בחרו מקש אחר' };
     const owner = toolForKey(keys, code);
     if (owner && owner !== tool) return { ok: false, message: `המקש ${keyLabel(code)} כבר משמש את "${labelOf(owner)}"` };
     return { ok: true, message: '' };

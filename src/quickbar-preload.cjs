@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('quickbarApi', {
   onCardKey: (callback) => ipcRenderer.on('quickbar:card-key', (_event, action) => callback(action)),
   onPeek: (callback) => ipcRenderer.on('quickbar:peek', (_event, milliseconds) => callback(milliseconds)),
   setMenu: (open) => ipcRenderer.invoke('quickbar:set-menu', open),
+  onMenuClose: (callback) => ipcRenderer.on('quickbar:menu-close', () => callback()),
   history: () => ipcRenderer.invoke('quickbar:history'),
   openCapture: (filePath) => ipcRenderer.invoke('quickbar:open-capture', filePath),
   drag: (active) => ipcRenderer.invoke('quickbar:drag', active),

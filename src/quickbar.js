@@ -247,6 +247,20 @@
     document.querySelectorAll('.strip-more, #strip-shortcuts').forEach((button) => button.setAttribute('aria-expanded', 'false'));
     if (notify) api.setMenu(false);
   }
+  api.onMenuClose?.(() => closeMenu());
+  // Every menu opens with its name and an X; Escape closes it too (see syncMenuEscape in the main process).
+  function menuHead(title) {
+    const head = document.createElement('div');
+    head.className = 'menu-head';
+    const close = document.createElement('button');
+    close.className = 'menu-close';
+    close.textContent = '✕';
+    close.title = 'סגירה (אסקייפ)';
+    close.setAttribute('aria-label', 'סגירה');
+    close.addEventListener('click', () => closeMenu());
+    head.append(Object.assign(document.createElement('span'), { textContent: title }), close);
+    return head;
+  }
   // Quick toggles for region capture, changed without leaving the menu.
   const DELAYS = [0, 3, 5, 10];
   function captureToggles() {
@@ -286,6 +300,7 @@
       item.addEventListener('click', () => runBarAction(action));
       return item;
     }));
+    menu.prepend(menuHead(name === 'capture' ? 'אפשרויות צילום' : 'אפשרויות הקלטה'));
     if (name === 'capture') menu.append(captureToggles());
     document.querySelectorAll('.strip-more').forEach((button) => button.setAttribute('aria-expanded', String(button.dataset.menu === name)));
     document.querySelector('#strip-shortcuts').setAttribute('aria-expanded', 'false');
@@ -312,6 +327,7 @@
     const seen = new Set();
     const rows = [...MENUS.capture, ...MENUS.record].filter(([action]) => Object.hasOwn(labels, action) && !seen.has(action) && seen.add(action));
     document.querySelector('#strip-menu').replaceChildren(
+      menuHead('קיצורי מקשים'),
       ...rows.map(([action, icon, label, , shortLabel]) => shortcutRow(icon, shortLabel || label, labels[action] || 'אין קיצור', () => api.editShortcut(action), action)),
       shortcutRow('⌨', 'כל הקיצורים בהגדרות', '', () => api.openShortcuts())
     );

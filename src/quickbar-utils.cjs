@@ -78,7 +78,7 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
 // 'history' = the scrolling grid of recent captures; menu = a strip drop-down is open.
 // Preferences without a style (saved before the strip existed) keep the classic panel layout.
 // An open menu adds menuLength along the edge's depth (top) or menuDepth inward (sides); sides grow to menuLength tall.
-const STRIP = Object.freeze({ thickness: 64, length: 300, menuDepth: 276, menuLength: 344 });
+const STRIP = Object.freeze({ thickness: 64, length: 300, menuDepth: 276, menuLength: 376 });
 const HISTORY_SIZE = Object.freeze({ width: 392, height: 470 });
 // The hidden bar: a thin line along the edge with a small tab in its middle (the tab shows where the bar is and is
 // easy to point at; the rest of the strip stays see-through).

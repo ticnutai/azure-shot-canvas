@@ -94,9 +94,13 @@ const COMMON_APP_SHORTCUTS = Object.freeze({
   'Ctrl+Alt|Delete|global': 'מסך האבטחה של חלונות'
 });
 const MODIFIER_ORDER = ['Ctrl', 'Alt', 'Shift', 'Meta'];
-const KEY_CODE_PATTERN = /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|PrintScreen|Numpad[0-9]|Space|Enter|Escape|Arrow(?:Up|Down|Left|Right)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Backslash|Backquote|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Comma|Period|Slash)$/;
+const KEY_CODE_PATTERN = /^(Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|PrintScreen|Numpad(?:[0-9]|Add|Subtract|Multiply|Divide|Decimal)|Space|Enter|Escape|Arrow(?:Up|Down|Left|Right)|(?:Shift|Control|Alt|Meta)(?:Left|Right)|Backslash|Backquote|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Comma|Period|Slash)$/;
 // Punctuation keys by physical position (the same key on Hebrew and English layouts), as Electron names them.
 const PUNCTUATION_KEYS = Object.freeze({ Backslash: '\\', Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Comma: ',', Period: '.', Slash: '/' });
+
+// The signs on the number pad, as Electron names them.
+const NUMPAD_SIGNS = Object.freeze({ NumpadAdd: 'numadd', NumpadSubtract: 'numsub', NumpadMultiply: 'nummult', NumpadDivide: 'numdiv', NumpadDecimal: 'numdec' });
+const NUMPAD_LABELS = Object.freeze({ numadd: '+', numsub: '-', nummult: '*', numdiv: '/', numdec: '.' });
 
 function legacyBinding(value) {
   const parts = String(value || '').split('+').filter(Boolean);
@@ -138,13 +142,14 @@ function bindingFromInput(input = {}, template = {}) {
 
 function electronKey(code) {
   if (PUNCTUATION_KEYS[code]) return PUNCTUATION_KEYS[code];
+  if (NUMPAD_SIGNS[code]) return NUMPAD_SIGNS[code];
   return code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, 'num').replace('Space', 'Space').replace('Enter', 'Return');
 }
 
 function bindingLabel(value) {
   const binding = normalizeBinding(value);
   if (!binding) return 'לא מוגדר';
-  const key = electronKey(binding.code).replace('PrintScreen', 'PrtSc').replace('ControlLeft', 'Ctrl שמאל').replace('ControlRight', 'Ctrl ימין').replace('ShiftLeft', 'Shift שמאל').replace('ShiftRight', 'Shift ימין');
+  const key = electronKey(binding.code).replace('PrintScreen', 'PrtSc').replace('ControlLeft', 'Ctrl שמאל').replace('ControlRight', 'Ctrl ימין').replace('ShiftLeft', 'Shift שמאל').replace('ShiftRight', 'Shift ימין').replace(/^num(.+)$/, (_all, rest) => `מקלדת המספרים ${NUMPAD_LABELS[`num${rest}`] || rest}`);
   const prefix = binding.kind === 'double' ? 'פעמיים ' : '';
   return `${prefix}${[...binding.modifiers, key].join(' + ')}`;
 }

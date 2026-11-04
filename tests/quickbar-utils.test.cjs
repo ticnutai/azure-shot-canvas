@@ -97,12 +97,12 @@ test('strip hugs its edge at the dragged position, grows inward for a menu and n
   const workArea = { x: 0, y: 0, width: 1920, height: 1040 };
   const top = quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.5 }, true);
   assert.deepEqual(top, { x: 810, y: 0, width: 300, height: 64 });
-  assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.5 }, true, { menu: true }).height, 408);
+  assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.5 }, true, { menu: true }).height, 440);
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0 }, true).x, 0);
   assert.equal(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 1 }, true).x, 1620);
   assert.deepEqual(quickbarBounds(workArea, { style: 'strip', edge: 'top', offset: 0.25 }, false), { x: 420, y: 0, width: 120, height: 18 });
   const right = quickbarBounds(workArea, { style: 'strip', edge: 'right', offset: 0.5 }, true, { menu: true });
-  assert.deepEqual(right, { x: 1580, y: 348, width: 340, height: 344 });
+  assert.deepEqual(right, { x: 1580, y: 332, width: 340, height: 376 });
   const left = quickbarBounds(workArea, { style: 'strip', edge: 'left', offset: 0.5 }, true);
   assert.deepEqual(left, { x: 0, y: 370, width: 64, height: 300 });
   for (const edge of ['top', 'left', 'right']) for (const offset of [0, 0.5, 1]) for (const view of ['actions', 'capture', 'history']) {

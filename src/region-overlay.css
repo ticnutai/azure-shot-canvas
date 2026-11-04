@@ -1,6 +1,6 @@
 :root{font-family:"Segoe UI",Arial,sans-serif;color-scheme:dark}
 *{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;cursor:crosshair;user-select:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;cursor:crosshair;user-select:none;touch-action:none}
 #frozen,#marks{position:fixed;inset:0;width:100vw;height:100vh;display:block}
 #loupe{position:fixed;top:0;left:0;width:136px;border:2px solid #f5bd46;border-radius:10px;background:#0b1420;box-shadow:0 10px 28px #000a;overflow:hidden;pointer-events:none;display:none}
 #loupe-canvas{display:block;width:132px;height:132px;image-rendering:pixelated}
@@ -42,9 +42,11 @@ body[data-hint="false"] #hint{display:none}
 #font-menu button{width:100%;text-align:right}
 #keys-panel{position:absolute;inset-inline-start:0;display:grid;gap:6px;width:250px;padding:10px;border:1px solid #39516d;border-radius:12px;background:#101923f5;box-shadow:0 12px 32px #000a;color:#dce8f5;font-size:13px;z-index:2}
 #keys-panel[hidden]{display:none}
+.keys-head{display:flex;align-items:center;justify-content:space-between}
+#keys-panel .keys-head button{width:28px;height:28px;padding:0;font-size:13px}
 #keys-rows{display:grid;gap:2px}
 #keys-rows button{display:flex;align-items:center;justify-content:space-between;width:100%;font-size:13px}
-#keys-rows kbd{min-width:30px;padding:1px 6px;border:1px solid #39516d;border-radius:5px;background:#0b1420;color:#ffd36a;font:inherit;text-align:center;direction:ltr}
+#keys-rows kbd{min-width:30px;padding:1px 6px;border:1px solid #39516d;border-radius:5px;background:#0b1420;color:#ffd36a;font:inherit;text-align:center;unicode-bidi:plaintext}
 #keys-rows button[data-listening="true"]{background:#4a3819;border-color:#c99124}
 #keys-note{min-height:32px;margin:0;color:#8ea5bf;font-size:12px;line-height:16px}
 #keys-note[data-kind="bad"]{color:#ff9b8f}

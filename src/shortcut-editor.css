@@ -6,6 +6,7 @@ body { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; bord
 header { display: flex; align-items: baseline; gap: 8px; -webkit-app-region: drag; }
 header b { font-size: 15px; }
 header span { color: #1f6fe5; font-weight: 600; font-size: 14px; }
+#close { width: 28px; height: 28px; padding: 0; margin-inline-start: auto; -webkit-app-region: no-drag; }
 .hint { margin: 0; color: #5f6672; font-size: 12px; }
 .keys { min-height: 44px; display: grid; place-items: center; border: 2px dashed #9fb7e6; border-radius: 10px; font-size: 18px; font-weight: 600; direction: ltr; unicode-bidi: plaintext; }
 .keys.ready { border-style: solid; border-color: #1f6fe5; background: #eef4ff; }

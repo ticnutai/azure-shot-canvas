@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('regionApi', {
   visible: (displayId) => ipcRenderer.send('region:visible', displayId),
   finish: (displayId, rect, options) => ipcRenderer.send('region:finish', displayId, rect, options),
   cancel: () => ipcRenderer.send('region:cancel'),
+  journal: (lines) => ipcRenderer.send('region:journal', lines),
   saveArea: (displayId, rect) => ipcRenderer.invoke('region:save-area', displayId, rect),
   copyText: (text) => ipcRenderer.invoke('region:copy-text', text)
 });

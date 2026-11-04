@@ -71,7 +71,7 @@ test.describe.serial('slim capture strip', () => {
 
   test('each large button has a drop-down menu that grows the strip and closes again', async () => {
     await strip.locator('.strip-more[data-menu="capture"]').click();
-    await expect.poll(async () => (await barBounds()).bounds.height).toBe(408);
+    await expect.poll(async () => (await barBounds()).bounds.height).toBe(440);
     await expect(strip.locator('#strip-menu [data-menu-action]')).toHaveCount(7);
     await expect(strip.locator('#strip-menu .menu-toggle')).toHaveCount(3);
     await expect(strip.locator('#strip-menu [data-menu-action="repeatRegion"]')).toBeVisible();
@@ -79,6 +79,44 @@ test.describe.serial('slim capture strip', () => {
     await expect(strip.locator('#strip-menu [data-menu-action="pause"]')).toBeVisible();
     await strip.locator('.strip-more[data-menu="record"]').click();
     await expect.poll(async () => (await barBounds()).bounds.height).toBe(64);
+  });
+
+  test('an open menu closes with its X and with Escape, the bar stays open, and the key is held only meanwhile', async () => {
+    const held = () => app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered('Escape'));
+    const closed = async () => {
+      await expect(strip.locator('body')).toHaveAttribute('data-menu-open', 'false');
+      await expect.poll(async () => (await barBounds()).bounds.height).toBe(64);
+      await expect(strip.locator('body')).toHaveAttribute('data-expanded', 'true');
+    };
+    // Pinned: the real pointer is not on the bar, and it would fold by itself in the middle.
+    await strip.locator('#strip-pin').click();
+    for (const selector of ['.strip-more[data-menu="capture"]', '.strip-more[data-menu="record"]', '#strip-shortcuts']) {
+      await strip.locator(selector).click();
+      await expect(strip.locator('#strip-menu .menu-close')).toBeVisible();
+      await strip.locator('#strip-menu .menu-close').click();
+      await closed();
+    }
+    // A long list scrolls, and its X stays in view.
+    await strip.locator('#strip-shortcuts').click();
+    await strip.locator('#strip-menu').evaluate((menu) => { menu.scrollTop = menu.scrollHeight; });
+    const inView = await strip.locator('#strip-menu .menu-close').evaluate((button) => { const box = button.getBoundingClientRect(); return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) === button; });
+    expect(inView).toBe(true);
+    await strip.locator('#strip-shortcuts').click();
+    await closed();
+
+    await app.evaluate(() => { globalThis.__aurumQaRealMenuEscape = true; });
+    try {
+      expect(await held()).toBe(false);
+      await strip.locator('#strip-shortcuts').click();
+      await expect.poll(held).toBe(true);
+      // What the held key sends.
+      await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).webContents.send('quickbar:menu-close'));
+      await closed();
+      await expect.poll(held).toBe(false);
+    } finally {
+      await app.evaluate(({ globalShortcut }) => { globalThis.__aurumQaRealMenuEscape = false; globalShortcut.unregister('Escape'); });
+    }
+    await strip.locator('#strip-pin').click();
   });
 
   test('pin keeps it open; hide sends it back to the edge', async () => {

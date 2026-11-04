@@ -88,6 +88,41 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
     await escape();
   });
 
+  test('other keys too: minus, the number pad, the space bar; the reserved ones are refused; the panel has an X', async () => {
+    const realKey = (keyCode) => app.evaluate(({ BrowserWindow }, value) => {
+      const win = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('region-overlay.html') && candidate.isVisible());
+      win.webContents.focus();
+      win.webContents.sendInputEvent({ type: 'keyDown', keyCode: value });
+      win.webContents.sendInputEvent({ type: 'keyUp', keyCode: value });
+    }, keyCode);
+    await open();
+    await rightClick('blur');
+    await realKey('-');
+    await expect(rowKey('blur')).toHaveText('-');
+    await rightClick('number');
+    await press('NumpadSubtract', { key: '-' });
+    await expect(rowKey('number')).toHaveText('מספרים -');
+    await rightClick('text');
+    await realKey('Space');
+    await expect(rowKey('text')).toHaveText('רווח');
+    await rightClick('move');
+    await press('Enter', { key: 'Enter' });
+    await expect(overlay.locator('#keys-note')).toContainText('שמור');
+    await escape();
+    await overlay.locator('[data-command="keys-close"]').evaluate((button) => button.click());
+    await expect(overlay.locator('#keys-panel')).toBeHidden();
+    await expect(overlay.locator('#toolbar')).toBeVisible();
+
+    await realKey('-');
+    expect(await pressed('blur')).toBe('true');
+    await press('NumpadSubtract', { key: '-' });
+    expect(await pressed('number')).toBe('true');
+    await realKey('Space');
+    expect(await pressed('text')).toBe('true');
+    await expect(overlay.locator('#toolbar')).toBeVisible();
+    await escape();
+  });
+
   test('the choice is kept for the next capture, and the usual keys come back on request', async () => {
     await open();
     await press('KeyQ');

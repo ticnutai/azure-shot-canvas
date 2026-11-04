@@ -111,6 +111,14 @@
     context.restore();
   }
 
+  // The size of a text mark, so a click can find it later.
+  const measuring = document.createElement('canvas').getContext('2d');
+  function textSize(shape) {
+    measuring.font = textFont(shape);
+    const lines = shape.text.split('\n');
+    return { width: Math.ceil(Math.max(...lines.map((line) => measuring.measureText(line).width))), height: lines.length * 26 };
+  }
+
   // A drawn shape too small to mean anything (a stray click) is dropped.
   function isMeaningful(shape) {
     if (shape.type === 'text') return Boolean(shape.text.trim());
@@ -138,5 +146,5 @@
     return new Uint8Array(await blob.arrayBuffer());
   }
 
-  window.AurumMarkup = { COLORS, boundsOf, drawShape, isMeaningful, renderSelection };
+  window.AurumMarkup = { COLORS, boundsOf, drawShape, isMeaningful, renderSelection, textSize };
 })();

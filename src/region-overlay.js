@@ -6,6 +6,7 @@
   const api = window.regionApi;
   const geometry = window.AurumRegion;
   const markup = window.AurumMarkup;
+  const shapeEdit = window.AurumShapeEdit;
   const $ = (selector) => document.querySelector(selector);
   const frozen = $('#frozen');
   const marks = $('#marks');
@@ -21,6 +22,7 @@
   const GOLD = '#f5bd46';
   const LOUPE_ZOOM = 8;
   const HANDLE = 7;
+  const SHAPE_HANDLE = 9;
   const HINTS = {
     capture: ['גררו לבחירת אזור', 'לחיצה על חלון או על חלק ממנו מצלמת אותו (שיפט: החלון כולו)', 'אנטר האזור הקודם', 'רווח המסך כולו', 'C קוד הצבע', 'אסקייפ ביטול'],
     record: ['גררו לבחירת אזור להקלטה', 'לחיצה על חלון מקליטה אותו', 'רווח המסך כולו', 'אסקייפ ביטול'],
@@ -41,6 +43,9 @@
   let shapes = [];
   let drawing = null;
   let adjusting = null; // { kind: 'move' | handle name, start, rect }
+  let activeShape = null; // the mark that shows its handles
+  let changingShape = null; // { kind: 'move' | handle name, start, base, before }
+  let history = []; // the marks as they were before each change, for undo
   let shiftHeld = false;
 
   const screenBounds = () => ({ x: 0, y: 0, width: session.width, height: session.height });
@@ -123,6 +128,7 @@
         context.strokeRect(x - HANDLE / 2, y - HANDLE / 2, HANDLE, HANDLE);
       }
     }
+    if (activeShape) drawShapeHandles(context);
     if (pointer && !selected) {
       context.strokeStyle = 'rgba(255, 211, 106, 0.85)';
       context.lineWidth = 1;
@@ -139,6 +145,27 @@
     drawLoupe();
     syncDims();
     placeToolbar();
+  }
+
+  // The chosen mark's frame and handles: on this screen only, never in the saved picture.
+  function drawShapeHandles(context) {
+    const box = shapeEdit.boundsOf(activeShape);
+    root.dataset.activeBounds = [box.x, box.y, box.width, box.height].map(Math.round).join(',');
+    context.save();
+    context.strokeStyle = '#2f80ed';
+    context.lineWidth = 1;
+    if (activeShape.type !== 'arrow') {
+      context.setLineDash([5, 3]);
+      context.strokeRect(box.x - 0.5, box.y - 0.5, box.width + 1, box.height + 1);
+      context.setLineDash([]);
+    }
+    context.fillStyle = '#ffffff';
+    context.lineWidth = 1.5;
+    for (const { x, y } of shapeEdit.handlesOf(activeShape)) {
+      context.fillRect(x - SHAPE_HANDLE / 2, y - SHAPE_HANDLE / 2, SHAPE_HANDLE, SHAPE_HANDLE);
+      context.strokeRect(x - SHAPE_HANDLE / 2, y - SHAPE_HANDLE / 2, SHAPE_HANDLE, SHAPE_HANDLE);
+    }
+    context.restore();
   }
 
   function drawLabel(focus) {
@@ -241,6 +268,71 @@
     input.addEventListener('focus', () => input.select());
   }
 
+  // ---- A record of the presses (see writeJournal) -----------------------------------------------------------
+  let journalLines = [];
+  let pressInfo = null;
+  const noteJournal = (text) => { if (journalLines.length < 400) journalLines.push(`${new Date().toISOString()} ${text}`); };
+  const flushJournal = () => { if (journalLines.length) { api.journal?.(journalLines); journalLines = []; } };
+  function watchPress() {
+    if (!pressInfo) return;
+    const now = performance.now();
+    if (now - pressInfo.lastFrame > 120) noteJournal(`הפסקה ${Math.round(now - pressInfo.lastFrame)} מילישניות באמצע לחיצה`);
+    pressInfo.lastFrame = now;
+    requestAnimationFrame(watchPress);
+  }
+  function pressBegan(kind) {
+    pressInfo = { kind, began: performance.now(), lastFrame: performance.now(), moves: 0 };
+    noteJournal(`לחיצה: ${kind}, כלי ${tool}`);
+    requestAnimationFrame(watchPress);
+  }
+  function pressEnded(how) {
+    if (!pressInfo) return;
+    noteJournal(`סוף לחיצה (${how}): ${pressInfo.kind}, ${Math.round(performance.now() - pressInfo.began)} מילישניות, ${pressInfo.moves} תזוזות`);
+    pressInfo = null;
+    flushJournal();
+  }
+  window.addEventListener('error', (event) => { noteJournal(`שגיאה: ${event.message}`); flushJournal(); });
+  window.addEventListener('blur', () => { if (pressInfo) noteJournal('החלון איבד את המיקוד באמצע לחיצה'); });
+  document.body.addEventListener('lostpointercapture', () => { if (pressInfo) noteJournal('המערכת לקחה את העכבר באמצע לחיצה'); });
+
+  // ---- Changing marks --------------------------------------------------------------------------------------
+  const snapshot = () => shapeEdit.clone(shapes);
+  function addShape(shape) {
+    history.push(snapshot());
+    shapes.push(shape);
+  }
+  function chooseShape(shape) {
+    activeShape = shape || null;
+    if (!activeShape) delete root.dataset.activeBounds;
+    root.dataset.activeShape = activeShape?.type || '';
+    schedule();
+  }
+  function startShapeChange(kind, point) {
+    changingShape = { kind, start: point, base: shapeEdit.clone(activeShape), before: snapshot() };
+    pressBegan(kind === 'move' ? 'הזזת סימון' : 'ידית של סימון');
+  }
+  function endShapeChange() {
+    const { before } = changingShape;
+    changingShape = null;
+    if (JSON.stringify(before) !== JSON.stringify(shapes)) history.push(before);
+    syncToolbar();
+    schedule();
+  }
+  function deleteActiveShape() {
+    history.push(snapshot());
+    shapes = shapes.filter((shape) => shape !== activeShape);
+    chooseShape(null);
+    syncToolbar();
+  }
+  function pressEscape() {
+    if (listeningTool) return takeToolKey({ key: 'Escape', code: 'Escape' });
+    if (!keysPanel.hidden) return closeToolKeys();
+    if (!fontMenu.hidden) { fontMenu.hidden = true; return syncTextStyle(); }
+    if (textAt) { textAt = null; textInput.hidden = true; return schedule(); }
+    if (activeShape) return chooseShape(null);
+    cancel();
+  }
+
   // ---- Ending the session -------------------------------------------------------------------------------
   async function finish(rect, after = 'save') {
     if (finished || !session || !geometry.isUsable(rect)) return;
@@ -271,6 +363,7 @@
     if (!session.markup && !markupNow) return finish(rect, 'save');
     selected = rect;
     tool = 'move';
+    chooseShape(null);
     syncToolbar();
     document.body.dataset.editing = 'true';
     root.dataset.regionEditing = 'true';
@@ -399,7 +492,7 @@
   function syncToolbar() {
     toolbar.querySelectorAll('[data-tool]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.tool === tool)));
     toolbar.querySelectorAll('[data-color]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.color === color)));
-    toolbar.querySelector('[data-command="undo"]').disabled = !shapes.length;
+    toolbar.querySelector('[data-command="undo"]').disabled = !history.length;
     textStyleBox.hidden = tool !== 'text';
     if (tool !== 'text') fontMenu.hidden = true;
     syncTextStyle();
@@ -407,13 +500,15 @@
   }
   function setTool(name) {
     commitText();
+    if (name !== 'move') chooseShape(null);
     tool = name;
     syncToolbar();
     schedule();
   }
   function undo() {
     commitText();
-    shapes.pop();
+    if (history.length) shapes = history.pop();
+    chooseShape(null);
     syncToolbar();
     schedule();
   }
@@ -423,12 +518,18 @@
     if (!button || !selected) return;
     if (button === keysIcon) return keysPanel.hidden ? openToolKeys() : closeToolKeys();
     if (button.dataset.keyTool) return listenForKey(button.dataset.keyTool);
+    if (button.dataset.command === 'keys-close') return closeToolKeys();
     if (button.dataset.command === 'keys-reset') { saveToolKeys(toolKeys.defaults()); listeningTool = null; noteKeys('חזרו המקשים הרגילים'); return renderToolKeys(); }
     if (button === fontButton) return toggleFontMenu();
     if (button === boldButton) return changeTextStyle({ bold: !textChoice.bold });
     if (button.dataset.font) { fontMenu.hidden = true; return changeTextStyle({ font: button.dataset.font }); }
     if (button.dataset.tool) setTool(button.dataset.tool);
-    else if (button.dataset.color) { color = button.dataset.color; syncToolbar(); }
+    else if (button.dataset.color) {
+      color = button.dataset.color;
+      // The chosen mark takes the colour too.
+      if (activeShape && activeShape.type !== 'blur' && activeShape.color !== color) { history.push(snapshot()); activeShape.color = color; schedule(); }
+      syncToolbar();
+    }
     else if (button.dataset.command === 'undo') undo();
     else if (button.dataset.command === 'cancel') cancel();
     else if (button.dataset.command === 'save-area') saveArea();
@@ -480,7 +581,7 @@
     const shape = { type: 'text', color, from: textAt, text: textInput.value, font: textChoice.font, bold: textChoice.bold };
     textAt = null;
     textInput.hidden = true;
-    if (markup.isMeaningful(shape)) shapes.push(shape);
+    if (markup.isMeaningful(shape)) { Object.assign(shape, markup.textSize(shape)); addShape(shape); }
     syncToolbar();
     schedule();
   }
@@ -502,14 +603,19 @@
     if (!session || finished) return;
     // The button is up but its release never arrived (Windows took the pointer away, or a second button was involved):
     // this is the release, or the mark would keep following the mouse.
-    if (event.isTrusted && !(event.buttons & 1) && (drawing || adjusting || dragStart)) release(pointer || pointFrom(event), event);
+    if (event.isTrusted && !(event.buttons & 1) && (drawing || adjusting || dragStart || changingShape)) release(pointer || pointFrom(event), event, 'בלי כפתור');
     pointer = pointFrom(event);
+    if (pressInfo) pressInfo.moves += 1;
     shiftHeld = event.shiftKey;
     if (dragStart) dragEnd = pointer;
     if (drawing) {
       const point = clampToSelection(pointer);
       if (drawing.type === 'pen') drawing.points.push(point);
       else drawing.to = point;
+    }
+    if (changingShape) {
+      if (changingShape.kind === 'move') Object.assign(activeShape, shapeEdit.moveShape(changingShape.base, pointer.x - changingShape.start.x, pointer.y - changingShape.start.y, selected));
+      else Object.assign(activeShape, shapeEdit.resizeShape(changingShape.base, changingShape.kind, clampToSelection(pointer)));
     }
     if (adjusting) {
       const dx = pointer.x - adjusting.start.x;
@@ -530,9 +636,13 @@
       }
       selected = { x, y, width, height };
     }
-    if (selected && !adjusting && !drawing) {
+    if (selected && !adjusting && !drawing && !changingShape) {
+      const shapeHandle = activeShape && shapeEdit.handleAt(activeShape, pointer);
       const handle = handleAt(pointer);
-      document.body.style.cursor = handle ? CURSORS[handle] : tool === 'move' && inside(pointer, selected) ? (shapes.length ? 'default' : 'move') : tool === 'text' ? 'text' : 'crosshair';
+      document.body.style.cursor = shapeHandle ? CURSORS[shapeHandle] || 'grab'
+        : handle ? CURSORS[handle]
+          : tool === 'move' && inside(pointer, selected) ? (shapes.length && !shapeEdit.shapeAt(shapes, pointer) ? 'default' : 'move')
+            : tool === 'text' ? 'text' : 'crosshair';
     }
     const hintBox = hint.getBoundingClientRect();
     document.body.dataset.nearHint = String(pointer.y < hintBox.bottom + 30 && pointer.x > hintBox.left - 30 && pointer.x < hintBox.right + 30);
@@ -547,10 +657,15 @@
     document.body.setPointerCapture?.(event.pointerId);
     if (selected) {
       commitText();
+      const shapeHandle = activeShape && shapeEdit.handleAt(activeShape, pointer);
+      if (shapeHandle) return startShapeChange(shapeHandle, pointer);
       const handle = handleAt(pointer);
-      if (handle) { adjusting = { kind: handle, start: pointer, rect: { ...selected } }; return; }
+      if (handle) { adjusting = { kind: handle, start: pointer, rect: { ...selected } }; pressBegan('ידית של האזור'); return; }
       if (tool === 'move') {
-        if (inside(pointer, selected)) { adjusting = { kind: 'move', start: pointer, rect: { ...selected } }; return; }
+        const hit = inside(pointer, selected) && shapeEdit.shapeAt(shapes, pointer);
+        if (hit) { chooseShape(hit); return startShapeChange('move', pointer); }
+        chooseShape(null);
+        if (inside(pointer, selected)) { adjusting = { kind: 'move', start: pointer, rect: { ...selected } }; pressBegan('הזזת האזור'); return; }
         // Outside the selection with the move tool: start over with a new area, unless there are marks, which one
         // stray click must not lose (Escape starts over).
         if (shapes.length) return;
@@ -558,28 +673,41 @@
         document.body.dataset.editing = 'false';
         syncToolbar();
       } else {
-        if (!inside(pointer, selected)) return;
         const point = clampToSelection(pointer);
-        if (tool === 'text') return startText(point);
-        if (tool === 'number') {
-          shapes.push({ type: 'number', color, from: point, number: shapes.filter((shape) => shape.type === 'number').length + 1 });
+        if (tool === 'text' || tool === 'number') {
+          if (!inside(pointer, selected)) return;
+          // A click on a mark of the same kind chooses it, and it can be dragged; anywhere else adds a new one.
+          const same = shapeEdit.shapeAt(shapes.filter((shape) => shape.type === tool), pointer);
+          if (same) { chooseShape(same); return startShapeChange('move', pointer); }
+          chooseShape(null);
+          if (tool === 'text') return startText(point);
+          addShape({ type: 'number', color, from: point, number: Math.max(0, ...shapes.filter((shape) => shape.type === 'number').map((shape) => shape.number)) + 1 });
           syncToolbar();
           return schedule();
         }
+        // A press that starts outside the area draws too, from the nearest edge of the area.
+        chooseShape(null);
         drawing = tool === 'pen' ? { type: 'pen', color, points: [point] } : { type: tool, color, from: point, to: point };
+        pressBegan('ציור סימון');
         return schedule();
       }
     }
     dragStart = pointer;
     dragEnd = pointer;
     document.body.dataset.dragging = 'true';
+    pressBegan('בחירת אזור');
     schedule();
   });
 
-  function release(point, event) {
+  function release(point, event, how = 'רגיל') {
+    pressEnded(how);
+    if (changingShape) return endShapeChange();
     if (drawing) {
-      if (markup.isMeaningful(drawing)) shapes.push(drawing);
+      const done = drawing;
       drawing = null;
+      if (markup.isMeaningful(done)) { addShape(done); chooseShape(done); }
+      // A click and not a drawing: it chooses the mark under it.
+      else chooseShape(shapeEdit.shapeAt(shapes, point));
       syncToolbar();
       return schedule();
     }
@@ -603,7 +731,9 @@
   // The system took the pointer in the middle of a press: nothing is chosen or saved by it, a mark drawn so far stays.
   window.addEventListener('pointercancel', () => {
     if (!session || finished) return;
-    if (drawing && markup.isMeaningful(drawing)) shapes.push(drawing);
+    pressEnded('המערכת ביטלה');
+    if (changingShape) endShapeChange();
+    if (drawing && markup.isMeaningful(drawing)) addShape(drawing);
     drawing = null;
     adjusting = null;
     dragStart = null;
@@ -614,7 +744,8 @@
   });
 
   window.addEventListener('dblclick', (event) => {
-    if (selected && tool === 'move' && inside(pointFrom(event), selected)) finish(selected, 'save');
+    // A double click on a mark does not save: the second click of a quick pair must not end the work.
+    if (selected && tool === 'move' && inside(pointFrom(event), selected) && !shapeEdit.shapeAt(shapes, pointFrom(event))) finish(selected, 'save');
   });
   window.addEventListener('contextmenu', (event) => {
     event.preventDefault();
@@ -627,10 +758,10 @@
     if (!session || finished) return;
     shiftHeld = event.shiftKey;
     if (listeningTool) { event.preventDefault(); return takeToolKey(event); }
-    if (event.key === 'Escape' && !keysPanel.hidden) { event.preventDefault(); return closeToolKeys(); }
-    if (event.key === 'Escape') { event.preventDefault(); return cancel(); }
+    if (event.key === 'Escape') { event.preventDefault(); return pressEscape(); }
     if (selected) {
       if (event.key === 'Enter') { event.preventDefault(); return finish(selected, 'save'); }
+      if (activeShape && (event.key === 'Delete' || event.key === 'Backspace')) { event.preventDefault(); return deleteActiveShape(); }
       if (event.ctrlKey && event.code === 'KeyC') { event.preventDefault(); return finish(selected, 'copy'); }
       if (event.ctrlKey && event.code === 'KeyZ') { event.preventDefault(); return undo(); }
       if (event.ctrlKey && event.code === 'KeyE') { event.preventDefault(); return finish(selected, 'edit'); }
@@ -684,11 +815,17 @@
     dragEnd = null;
     selected = null;
     shapes = [];
+    history = [];
+    changingShape = null;
+    pressInfo = null;
     drawing = null;
     adjusting = null;
     textAt = null;
     textInput.hidden = true;
     tool = 'move';
+    chooseShape(null);
+    closeToolKeys();
+    fontMenu.hidden = true;
     pointer = data.pointer || null;
     document.body.dataset.dragging = 'false';
     document.body.dataset.editing = 'false';
@@ -710,14 +847,17 @@
   // Escape held by the main process while the overlay is open (it works even without keyboard focus).
   api.onKey?.((key) => {
     if (key !== 'Escape' || !session || finished) return;
-    if (textAt) { textAt = null; textInput.hidden = true; return schedule(); }
-    cancel();
+    pressEscape();
   });
   // The capture is over and the window hidden: give back the two full-screen pictures (tens of megabytes on large
   // screens). The next start draws them again at full size.
   api.onRelease?.(() => {
+    flushJournal();
     session = null;
     shapes = [];
+    history = [];
+    activeShape = null;
+    changingShape = null;
     frozen.width = 0;
     frozen.height = 0;
     marks.width = 0;

@@ -23,6 +23,7 @@
     else if (verdict.reserved) note(`הצירוף שמור ל${verdict.reserved} — בחרו צירוף אחר`, 'bad');
     else if (verdict.common) note(`שימו לב: ${verdict.common}. הקיצור של האולפן יקבל עדיפות`, 'warn');
     else if (verdict.focusedOnly) note('מקש בודד של אות או ספרה פועל רק כשהאולפן פתוח מולכם', 'warn');
+    else if (binding?.kind === 'single' && !/^(?:F\d+|PrintScreen)$/.test(binding.code)) note('שימו לב: כל עוד האולפן פועל, המקש הזה לא יעבוד בתוכנות אחרות. אנטר לשמירה', 'warn');
     else note('אנטר לשמירה · אסקייפ לביטול');
   }
 
@@ -53,6 +54,7 @@
   $('#none').addEventListener('click', () => save(null));
   $('#default').addEventListener('click', () => save('default'));
   $('#cancel').addEventListener('click', () => api.close());
+  $('#close').addEventListener('click', () => api.close());
 
   api.info().then((value) => {
     info = value;

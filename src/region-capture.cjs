@@ -34,11 +34,24 @@ class RegionCapture {
     ipcMain.on('region:visible', (event) => { const entry = owner(event); if (entry && !entry.window.isDestroyed()) entry.window.setOpacity(1); });
     ipcMain.on('region:finish', (event, displayId, rect, options = {}) => { if (owner(event)) this.active?.resolve({ displayId: String(displayId), rect, options: options || {} }); });
     ipcMain.on('region:cancel', (event) => { if (owner(event)) this.active?.resolve(null); });
+    ipcMain.on('region:journal', (event, lines) => { if (owner(event)) this.writeJournal(lines); });
     ipcMain.handle('region:copy-text', (event, text) => { if (!owner(event)) throw new Error('בקשה ממקור לא מורשה'); const value = String(text || '').slice(0, 64); if (/^#[0-9A-F]{6}$/i.test(value)) clipboard.writeText(value); return value; });
     ipcMain.handle('region:save-area', (event, displayId, rect) => { if (!owner(event)) throw new Error('בקשה ממקור לא מורשה'); return this.saveArea(String(displayId), rect); });
   }
 
   get isOpen() { return Boolean(this.active); }
+
+  // A small local record of presses on the frozen screen (when, which tool, how each ended, long pauses), to tell what
+  // happened when it got stuck. No pictures and no text; the file never grows past two small files.
+  async writeJournal(lines) {
+    if (!Array.isArray(lines) || !this.lastRegionPath) return;
+    const file = path.join(path.dirname(this.lastRegionPath), 'region-journal.log');
+    try {
+      const size = await fs.stat(file).then((stat) => stat.size).catch(() => 0);
+      if (size > 256 * 1024) await fs.rename(file, `${file}.old`).catch(() => {});
+      await fs.appendFile(file, `${lines.slice(0, 400).map((line) => String(line).slice(0, 300)).join('\n')}\n`, 'utf8');
+    } catch {}
+  }
 
   // Screens changed (added, removed, resolution or scaling): rebuild the overlays on the next capture.
   reset() {

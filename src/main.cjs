@@ -132,6 +132,17 @@ let quickbarDragTimer = null;
 // Card keys are registered only while the pointer is over the card, then released.
 let cardKeysPath = null;
 const registeredCardKeys = new Set();
+// The bar never takes the keyboard from the program in front, so Escape reaches its open menu as a key held only while
+// that menu is open. A test turns this on for itself; other test runs never grab real keys.
+let menuEscapeHeld = false;
+function syncMenuEscape() {
+  const wanted = Boolean(quickbarMenu && quickbarExpanded && !shortcutEditor);
+  if (wanted === menuEscapeHeld) return;
+  if (process.env.SCREEN_STUDIO_QA === '1' && !globalThis.__aurumQaRealMenuEscape) return;
+  if (!wanted) { globalShortcut.unregister('Escape'); menuEscapeHeld = false; return; }
+  if (globalShortcut.isRegistered('Escape')) return;
+  menuEscapeHeld = globalShortcut.register('Escape', () => quickbarWindow?.webContents.send('quickbar:menu-close'));
+}
 let isQuitting = false;
 // Launched by Windows at sign-in (or with --hidden): no studio window until the user opens it.
 const startHidden = process.argv.includes('--hidden');
@@ -346,6 +357,7 @@ function positionQuickbar(expanded = quickbarExpanded, { onlyIfMoved = false } =
     if (quickbarExpanded) { if (canShow) quickbarWindow.showInactive(); }
     else quickbarWindow.hide();
   } else if (canShow && !quickbarWindow.isVisible()) quickbarWindow.showInactive();
+  syncMenuEscape();
 }
 function updateQuickbarCursorTracking() {
   clearInterval(quickbarCursorTimer);
@@ -2057,6 +2069,7 @@ async function openShortcutEditor(action) {
   });
   shortcutEditor = { window: win, action };
   globalShortcut.unregisterAll();
+  menuEscapeHeld = false;
   win.on('closed', () => { if (shortcutEditor?.window === win) shortcutEditor = null; registerShortcuts(); });
   win.on('blur', () => { if (!win.isDestroyed() && process.env.SCREEN_STUDIO_QA !== '1') win.close(); });
   win.setAlwaysOnTop(true, 'floating');
@@ -2086,6 +2099,7 @@ function registerShortcuts() {
   // unregisterAll also dropped any live card keys; forget them so they are never 'released' over a user shortcut.
   registeredCardKeys.clear();
   cardKeysPath = null;
+  menuEscapeHeld = false;
   // QA runs never grab real system keys: everything counts as registered, nothing is replaced.
   const qa = process.env.SCREEN_STUDIO_QA === '1';
   const outcome = registerWithFallbacks(activeShortcuts, (action, binding) => {
@@ -2102,6 +2116,7 @@ function registerShortcuts() {
     printScreenNoticeShown = true;
     setTimeout(() => notify('מקש צילום המסך תפוס', 'תוכנה אחרת או כלי החיתוך של חלונות משתמשים בו. בהגדרות חלונות ← נגישות ← מקלדת: כבו את "שימוש במקש צילום המסך לפתיחת כלי החיתוך", או בחרו מקש אחר במרכז הקיצורים.'), 3000).unref?.();
   }
+  syncMenuEscape();
   return shortcutRegistration;
 }
 function handleShortcutPress(action, binding, source) {

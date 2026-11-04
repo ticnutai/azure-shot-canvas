@@ -32,6 +32,7 @@ body[data-look="office"] .pin-toggle[aria-pressed="true"]{background:#e3eeff;bor
 body[data-look="office"] #strip-grip span{background:repeating-linear-gradient(0deg,#b8c0cc 0 2px,transparent 2px 4px)}
 body[data-look="office"]:not([data-edge="top"]) #strip-grip span{background:repeating-linear-gradient(90deg,#b8c0cc 0 2px,transparent 2px 4px)}
 /* Menus */
+body[data-look="office"] .menu-head{background:#ffffff;color:#687183}
 body[data-look="office"] #strip-menu button{color:#1f2633}
 body[data-look="office"] #strip-menu button:hover{background:#eef3fb;border-color:transparent}
 body[data-look="office"] #strip-menu i{color:#1f6fe5}

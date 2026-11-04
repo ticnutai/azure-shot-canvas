@@ -44,7 +44,7 @@ test.describe.serial('font, bold and the shortcuts icon', () => {
     await strip().locator('#strip-menu [data-menu-action="record"]').evaluate((row) => row.click());
     await expect.poll(() => byUrl('shortcut-editor.html').length, { timeout: 10_000 }).toBe(1);
     await expect(byUrl('shortcut-editor.html')[0].locator('#action-label')).toHaveText('התחלה / עצירת הקלטה');
-    await byUrl('shortcut-editor.html')[0].locator('#cancel').evaluate((button) => button.click()).catch(() => {});
+    await byUrl('shortcut-editor.html')[0].locator('#close').evaluate((button) => button.click()).catch(() => {});
     await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.shortcutEditorOpen())).toBe(false);
 
     await icon.evaluate((button) => button.click());

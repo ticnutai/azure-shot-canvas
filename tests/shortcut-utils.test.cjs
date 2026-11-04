@@ -123,3 +123,11 @@ test('an action set to null keeps no shortcut; a missing action takes its defaul
   assert.ok(DEFAULT_SHORTCUTS.screenshot);
   assert.ok(normalizeShortcutMap(null));
 });
+
+test('the signs of the number pad can be chosen, with words and keys Electron knows', () => {
+  const { acceleratorForBinding: accelerator, bindingLabel: label, normalizeBinding: normal } = require('../src/shortcut-utils.cjs');
+  const binding = normal({ kind: 'chord', code: 'NumpadSubtract', modifiers: ['Ctrl'] });
+  assert.equal(accelerator(binding), 'CommandOrControl+numsub');
+  assert.equal(label(binding), 'Ctrl + מקלדת המספרים -');
+  assert.equal(label(normal({ kind: 'chord', code: 'Minus', modifiers: ['Ctrl'] })), 'Ctrl + -');
+});

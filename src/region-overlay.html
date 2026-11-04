@@ -21,7 +21,7 @@
     </div>
     <div class="colors" aria-label="צבע"></div>
     <div id="keys-panel" role="group" aria-label="מקשי הכלים" hidden>
-      <b>מקשי הכלים</b>
+      <div class="keys-head"><b>מקשי הכלים</b><button data-command="keys-close" aria-label="סגירה" title="סגירה (אסקייפ)">✕</button></div>
       <div id="keys-rows"></div>
       <p id="keys-note" role="status"></p>
       <button data-command="keys-reset">חזרה לברירת המחדל</button>
@@ -47,6 +47,7 @@
   </div>
   <script src="region-utils.cjs"></script>
   <script src="region-markup.js"></script>
+  <script src="region-shape-edit.js"></script>
   <script src="text-fonts.js"></script>
   <script src="region-tool-keys.js"></script>
   <script src="region-overlay.js"></script>
