@@ -48,6 +48,10 @@ const { RegionCapture } = require('./region-capture.cjs');
 const { WindowList } = require('./window-list.cjs');
 const { Updater } = require('./updater.cjs');
 const { RecordingControls } = require('./recording-controls.cjs');
+const { AppJournal } = require('./app-journal.cjs');
+const { expiredCaptures } = require('./auto-clean.cjs');
+const { LiveDraw } = require('./live-draw.cjs');
+const { RecordSchedule } = require('./record-schedule.cjs');
 
 if (process.env.SCREEN_STUDIO_USER_DATA_DIR) app.setPath('userData', path.resolve(process.env.SCREEN_STUDIO_USER_DATA_DIR));
 // Live inspection of the running program without touching its windows (scripts/cdp.cjs): only when asked for,
@@ -182,7 +186,7 @@ let lastNotice = null;
 let lastTranslation = '';
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, restoreAutostart, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ liveDraw, recordSchedule, appJournal, expiredNow, runAutoClean, setWatermarkLogo, lastPickedColor, lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, restoreAutostart, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -271,9 +275,127 @@ const textIndexer = new TextIndexer({
 });
 featureListeners.add((now) => { if (now.enabled.textIndex) textIndexer.start(); else textIndexer.stop(); });
 
+// ---- A watermark (an extra): the logo picture is kept in the program's data folder --------------------------------------
+const watermarkLogoPath = () => path.join(app.getPath('userData'), 'watermark-logo.png');
+async function setWatermarkLogo(filePath) {
+  const image = nativeImage.createFromPath(filePath);
+  if (image.isEmpty()) throw new Error('הקובץ שנבחר אינו תמונה שאפשר לקרוא');
+  const { height } = image.getSize();
+  const fitted = height > 256 ? image.resize({ height: 256, quality: 'best' }) : image;
+  await fs.writeFile(watermarkLogoPath(), fitted.toPNG());
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:features', features);
+  return true;
+}
+async function chooseWatermarkLogo() {
+  if (!featureOn('watermark')) return { message: 'הדליקו קודם את התוספת "סימן מים"' };
+  const chosen = await dialog.showOpenDialog(mainWindow, { title: 'בחירת תמונת לוגו', properties: ['openFile'], filters: [{ name: 'תמונות', extensions: ['png', 'jpg', 'jpeg'] }] });
+  if (chosen.canceled || !chosen.filePaths[0]) return {};
+  await setWatermarkLogo(chosen.filePaths[0]);
+  await saveFeatures({ values: { watermark: { source: 'logo' } } });
+  return { message: 'הלוגו נשמר ויופיע בצילומים ובהקלטות הבאים' };
+}
+
+// ---- Automatic cleaning (an extra): old captures go to the recycle bin ---------------------------------------------------
+async function expiredNow(now = Date.now()) {
+  const directory = await ensureOutputDirectory();
+  const names = (await fs.readdir(directory, { withFileTypes: true })).filter((entry) => entry.isFile() && !/\.partial\./i.test(entry.name)).map((entry) => entry.name);
+  const entries = [];
+  for (const name of names) {
+    const full = path.join(directory, name);
+    const stat = await fs.stat(full).catch(() => null);
+    if (stat) entries.push({ path: full, at: stat.mtimeMs, size: stat.size, favorite: Boolean((await readJson(`${full}.meta.json`))?.favorite) });
+  }
+  return expiredCaptures(entries, { days: featureValue('autoClean', 'days'), kind: featureValue('autoClean', 'kind'), now });
+}
+async function runAutoClean(now = Date.now()) {
+  if (!featureOn('autoClean')) return { skipped: 'off' };
+  // Never while recording or choosing an area.
+  if (recordingSessions.size || regionCapture?.isOpen) return { skipped: 'busy' };
+  const expired = await expiredNow(now);
+  if (!expired.length) return { moved: 0 };
+  await trashCaptures(expired.map((item) => item.path));
+  appJournal.write(`ניקוי אוטומטי: ${expired.length} קבצים הועברו לסל המיחזור`);
+  notify('ניקוי אוטומטי', `${expired.length} קבצים ישנים הועברו לסל המיחזור. אפשר להחזיר אותם משם`);
+  return { moved: expired.length };
+}
+let autoCleanTimer = null;
+function syncAutoClean() {
+  clearTimeout(autoCleanTimer);
+  autoCleanTimer = null;
+  if (!featureOn('autoClean') || process.env.SCREEN_STUDIO_QA === '1') return;
+  const next = (wait) => { autoCleanTimer = setTimeout(() => { runAutoClean().catch(() => {}).finally(() => next(6 * 60 * 60 * 1000)); }, wait); autoCleanTimer.unref?.(); };
+  next(10 * 60 * 1000);
+}
+featureListeners.add((now, before) => { if (now.enabled.autoClean !== before.enabled.autoClean) syncAutoClean(); });
+
+// ---- Scheduled recording (an extra) -----------------------------------------------------------------------------------------
+const recordSchedule = new RecordSchedule({
+  options: () => ({ time: featureValue('recordSchedule', 'time'), minutes: featureValue('recordSchedule', 'minutes'), repeat: featureValue('recordSchedule', 'repeat') }),
+  isRecording: () => recordingSessions.size > 0,
+  start: () => dispatchShortcut('recordStart', 'schedule'),
+  stop: () => mainWindow?.webContents.send('shortcut', 'recordStop', { source: 'schedule' }),
+  onEvent: (name, details = {}) => {
+    const notices = {
+      warn: ['הקלטה מתוזמנת', 'ההקלטה תתחיל בעוד דקה'],
+      started: ['הקלטה מתוזמנת התחילה', `היא תיעצר לבד בעוד ${details.minutes} דקות`],
+      stopped: ['הקלטה מתוזמנת הסתיימה', 'הקובץ נשמר בתיקיית השמירה'],
+      busy: ['הקלטה מתוזמנת לא התחילה', 'כבר רצה הקלטה אחרת'],
+      missed: ['הקלטה מתוזמנת לא התחילה', 'השעה עברה בזמן שהמחשב היה כבוי או ישן'],
+      failed: ['הקלטה מתוזמנת לא התחילה', 'בדקו שבאולפן נבחר מסך או חלון להקלטה']
+    }[name];
+    if (notices) { notify(...notices); appJournal.write(`הקלטה מתוזמנת: ${notices[0]}`); }
+    if (name === 'finished-once') saveFeatures({ enabled: { recordSchedule: false } }).catch(() => {});
+  }
+});
+let recordScheduleTimer = null;
+function syncRecordSchedule() {
+  clearInterval(recordScheduleTimer);
+  recordScheduleTimer = null;
+  if (!featureOn('recordSchedule')) { recordSchedule.disarm(); return; }
+  recordSchedule.arm();
+  if (process.env.SCREEN_STUDIO_QA !== '1') { recordScheduleTimer = setInterval(() => recordSchedule.tick(), 15_000); recordScheduleTimer.unref?.(); }
+}
+featureListeners.add((now, before) => {
+  if (now.enabled.recordSchedule !== before.enabled.recordSchedule || now.values.recordSchedule.time !== before.values.recordSchedule.time) syncRecordSchedule();
+});
+
+// ---- Drawing on the screen during a recording (an extra) ------------------------------------------------------------------
+let recordingActive = false;
+const liveDraw = new LiveDraw({
+  hidden: process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1',
+  onChange: (drawing) => recordingControls?.patch({ drawing }),
+  raise: () => recordingControls?.raise()
+});
+async function toggleLiveDraw() {
+  if (!featureOn('liveDraw')) { notify('ציור על המסך', 'הדליקו קודם את התוספת בהגדרות, בלשונית תוספות'); return false; }
+  if (!recordingActive) { notify('ציור על המסך', 'אפשר לצייר רק בזמן הקלטה'); return false; }
+  if (!liveDraw.isOpen) {
+    const details = recordingControls?.state || {};
+    const display = screen.getAllDisplays().find((item) => String(item.id) === String(details.displayId)) || screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    await liveDraw.open(display.bounds, featureValue('liveDraw', 'color'));
+  }
+  return liveDraw.setDrawing(!liveDraw.drawing);
+}
+featureListeners.add((now) => {
+  if (!now.enabled.liveDraw) liveDraw.close();
+  recordingControls?.patch({ canDraw: recordingActive && now.enabled.liveDraw });
+});
+
 // One entry point for the buttons that sit under the switches in the settings.
 async function featureAction(id) {
   if (id === 'interval-toggle') return toggleIntervalCapture();
+  if (id === 'watermark-logo') return chooseWatermarkLogo();
+  if (id === 'auto-clean-preview') {
+    if (!featureOn('autoClean')) return { message: 'הדליקו קודם את התוספת "ניקוי אוטומטי"' };
+    const expired = await expiredNow();
+    if (!expired.length) return { message: `אין כרגע קבצים ישנים מ־${featureValue('autoClean', 'days')} ימים` };
+    const megabytes = Math.round(expired.reduce((sum, item) => sum + item.size, 0) / (1024 * 1024));
+    return { message: `${expired.length} קבצים (${megabytes} מגה) יעברו לסל המיחזור בניקוי הבא` };
+  }
+  if (id === 'record-schedule-next') {
+    if (!featureOn('recordSchedule')) return { message: 'הדליקו קודם את התוספת "הקלטה מתוזמנת"' };
+    return { message: recordSchedule.nextAt ? `ההקלטה הבאה: ${new Date(recordSchedule.nextAt).toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' })}, למשך ${featureValue('recordSchedule', 'minutes')} דקות` : 'אין הקלטה מתוזמנת' };
+  }
   if (id === 'pin-clipboard') {
     if (!featureOn('pinPlus')) return { message: 'הדליקו קודם את התוספת "הצמדה משופרת"' };
     const result = await pinClipboard();
@@ -539,6 +661,7 @@ async function showCapturePreview(filePath) {
 // so it behaves exactly like every other screenshot — without bringing the studio window forward.
 // purpose 'capture' (toolbar: save / copy / editor / copy text), 'ocr' (text of an area to the clipboard),
 // 'record' (the area to record — the studio then records it).
+let lastPickedColor = null;
 // Hands a captured picture to the studio window to be finished and saved (or saves it here when the window is gone).
 async function deliverCapture({ png, width, height, after = 'save', title = '', afterAction = null }) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:external-image', { bytes: png, width, height, after, afterAction, title: quickbarPreferences.autoName ? title : '' });
@@ -562,6 +685,12 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture', afterOverr
       mode, purpose, markup: quickbarPreferences.regionMarkup,
       delay: purpose === 'capture' ? quickbarPreferences.captureDelay : 0, countdown: showCountdown
     });
+    if (result?.color) {
+      clipboard.writeText(result.color);
+      lastPickedColor = result.color;
+      notify('קוד הצבע הועתק ללוח', result.color);
+      return { color: result.color };
+    }
     if (result?.record) {
       const { rect, bounds } = result;
       showMainWindow();
@@ -851,6 +980,7 @@ function createWindow() {
   });
   if (devUrl && /^http:\/\/127\.0\.0\.1:\d+$/.test(devUrl)) mainWindow.loadURL(devUrl);
   else mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  mainWindow.on('session-end', () => { appJournal.reason('כיבוי המחשב או התנתקות מחלונות'); appJournal.end(); });
   mainWindow.on('close', (event) => {
     if (shouldHideMainWindowOnClose(quickbarPreferences, { quitting: isQuitting, qa: process.env.SCREEN_STUDIO_QA === '1', headless: process.env.SCREEN_STUDIO_HEADLESS === '1' })) {
       event.preventDefault();
@@ -1373,12 +1503,12 @@ function runInWorkspace(action) {
 // Capture from the window: it steps aside (like other capture tools) and comes back with the new capture in it.
 // Split in two, both windows step aside.
 async function runFromWorkspace(action) {
-  const regionAction = ['region', 'repeatRegion', 'ocrRegion', 'recordRegion', 'scrollCapture'].includes(action);
+  const regionAction = ['region', 'repeatRegion', 'ocrRegion', 'colorPick', 'recordRegion', 'scrollCapture'].includes(action);
   const shown = workspacePanels().filter((panel) => panel.isOpen() && panel.window.isVisible());
   if (regionAction && shown.length) {
     shown.forEach((panel) => panel.window.hide());
     await new Promise((resolve) => setTimeout(resolve, 150));
-    const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'], scrollCapture: ['pick', 'scroll'] }[action];
+    const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], colorPick: ['pick', 'color'], recordRegion: ['pick', 'record'], scrollCapture: ['pick', 'scroll'] }[action];
     await runRegionCapture(plan[0], { purpose: plan[1] }).catch(() => {});
     if (action !== 'recordRegion') shown.forEach((panel) => { if (panel.isOpen()) panel.window.showInactive(); });
     return true;
@@ -1849,6 +1979,7 @@ function registerIpc() {
   ipcMain.handle('update:check', async () => ({ ...(await updater?.check() || { status: 'unavailable' }), current: app.getVersion() }));
   ipcMain.handle('update:install', () => Boolean(updater?.installNow()));
   ipcMain.handle('features:get', () => features);
+  ipcMain.handle('features:watermark-logo', async () => fs.readFile(watermarkLogoPath()).catch(() => null));
   ipcMain.handle('features:action', (event, id) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return featureAction(String(id)); });
   ipcMain.on('pin:resize', (event, factor) => {
     const target = pinTarget(event);
@@ -1922,7 +2053,7 @@ function registerIpc() {
     } catch {}
   });
   // The studio's own capture buttons use the same frozen-screen picker as the shortcuts and the bar.
-  ipcMain.handle('region:capture', (_event, mode, purpose) => runRegionCapture(mode === 'last' ? 'last' : 'pick', { purpose: ['capture', 'record', 'ocr', 'scroll'].includes(purpose) ? purpose : 'capture' }));
+  ipcMain.handle('region:capture', (_event, mode, purpose) => runRegionCapture(mode === 'last' ? 'last' : 'pick', { purpose: ['capture', 'record', 'ocr', 'scroll', 'color'].includes(purpose) ? purpose : 'capture' }));
   ipcMain.handle('region:import-areas', (_event, payload) => regionCapture?.importAreas(payload || {}) || { imported: 0 });
   // A capture chosen in the history grid opens in the card, with all its actions.
   ipcMain.handle('quickbar:open-capture', async (_event, filePath) => {
@@ -1982,7 +2113,13 @@ function registerIpc() {
   });
   ipcMain.handle('quickbar:recording-state', async (_event, active, details = {}) => {
     quickbarWindow?.webContents.send('quickbar:recording-state', Boolean(active));
-    await recordingControls?.update(Boolean(active), details && typeof details === 'object' ? details : {});
+    const wasRecording = recordingActive;
+    recordingActive = Boolean(active);
+    await recordingControls?.update(recordingActive, { ...(details && typeof details === 'object' ? details : {}), canDraw: recordingActive && featureOn('liveDraw') });
+    if (!recordingActive) {
+      liveDraw.close();
+      if (wasRecording) recordSchedule.recordingEnded();
+    }
     await setKeyEcho(Boolean(active) && Boolean(details?.showKeys), details || {});
     await setClickEcho(Boolean(active) && featureOn('clickRipple'));
     return true;
@@ -2144,6 +2281,7 @@ function dispatchShortcut(action, source = 'unknown') {
     ensureOutputDirectory().then((directory) => shell.openPath(directory)).catch(() => {});
     return true;
   }
+  if (action === 'liveDraw') { toggleLiveDraw().catch(() => {}); return true; }
   // Region captures happen right on the screen: the studio window stays where it is.
   if (startRegionAction(action)) return true;
   if (mainWindow.isMinimized()) mainWindow.restore();
@@ -2197,7 +2335,7 @@ function applyLaptopCaptureKey() {
 
 // Actions that run on the frozen screen, without the studio window. True when the action was one of them.
 function startRegionAction(action) {
-  const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], recordRegion: ['pick', 'record'], scrollCapture: ['pick', 'scroll'] }[action];
+  const plan = { region: ['pick', 'capture'], repeatRegion: ['last', 'capture'], ocrRegion: ['pick', 'ocr'], colorPick: ['pick', 'color'], recordRegion: ['pick', 'record'], scrollCapture: ['pick', 'scroll'] }[action];
   if (!plan) return false;
   runRegionCapture(plan[0], { purpose: plan[1] });
   return true;
@@ -2233,6 +2371,7 @@ function buildTrayMenu() {
     { label: 'צילום אזור או חלון', click: () => runRegionCapture('pick') },
     { label: 'צילום האזור הקודם', click: () => runRegionCapture('last') },
     { label: 'העתקת טקסט מאזור', click: () => runRegionCapture('pick', { purpose: 'ocr' }) },
+    { label: 'דוגם צבע', click: () => runRegionCapture('pick', { purpose: 'color' }) },
     { label: 'הקלטת אזור', click: () => runRegionCapture('pick', { purpose: 'record' }) },
     { label: 'צילום מסך מלא', click: () => dispatchShortcut('screenshot', 'tray') },
     { label: 'לוח הצילומים', click: () => openWorkspace() },
@@ -2241,13 +2380,24 @@ function buildTrayMenu() {
     ...(featureOn('pinPlus') ? [{ label: 'הצמדת מה שבלוח', click: () => pinClipboard().catch(() => {}) }] : []),
     ...(featureOn('intervalCapture') ? [{ label: intervalCapture.running ? `עצירת צילום במרווחים (${intervalCapture.taken})` : 'התחלת צילום במרווחים', click: () => toggleIntervalCapture() }] : []),
     { type: 'separator' },
-    { label: 'יציאה', click: () => app.quit() }
+    { label: 'יציאה', click: () => { appJournal.reason('יציאה מהסמל ליד השעון'); app.quit(); } }
   ]));
 }
 
 // A second copy would run crash recovery on the first copy's live recording and delete its segments.
 // QA and live-reload dev runs restart the process back-to-back, so they skip the lock.
 const singleInstance = process.env.SCREEN_STUDIO_QA === '1' || Boolean(process.env.SCREEN_STUDIO_DEV_URL) || app.requestSingleInstanceLock();
+// How the program starts and ends (see app-journal.cjs). Only the copy that holds the lock writes it.
+const appJournal = new AppJournal({ directory: app.getPath('userData'), version: app.getVersion() });
+if (singleInstance) {
+  appJournal.begin({ hidden: process.argv.includes('--hidden') });
+  setInterval(() => appJournal.beat(), 5 * 60 * 1000).unref();
+  // These two only write down what happened; what the program does next is unchanged.
+  process.on('uncaughtExceptionMonitor', (error) => appJournal.write(`שגיאה לא מטופלת: ${error?.message || error}`));
+  process.on('unhandledRejection', (reason) => appJournal.write(`הבטחה שנדחתה בלי טיפול: ${reason?.message || reason}`));
+  app.on('render-process-gone', (_event, contents, details) => appJournal.write(`חלון קרס: ${path.basename(String(contents?.getURL?.() || '').split('?')[0]) || 'לא ידוע'}, סיבה ${details?.reason}, קוד ${details?.exitCode}`));
+  app.on('child-process-gone', (_event, details) => { if (details?.reason !== 'clean-exit') appJournal.write(`תהליך עזר נסגר: ${details?.type}, סיבה ${details?.reason}, קוד ${details?.exitCode}`); });
+}
 if (!singleInstance) app.quit();
 else app.on('second-instance', () => { showMainWindow(); mainWindow?.focus(); });
 
@@ -2265,6 +2415,8 @@ app.whenReady().then(async () => {
   await loadQuickbarPreferences();
   await loadFeatures();
   if (featureOn('textIndex')) textIndexer.start(20_000);
+  syncAutoClean();
+  syncRecordSchedule();
   await loadChosenIcon();
   await applyFirstRunDefaults();
   registerIpc();
@@ -2293,10 +2445,11 @@ app.whenReady().then(async () => {
   createWindow();
   updater = new Updater({ app, notify, onState: (state) => { buildTrayMenu(); mainWindow?.webContents.send('update:state', { ...state, current: app.getVersion() }); } });
   createTray();
+  updater.onInstall = () => appJournal.reason('התקנת עדכון');
   updater.start();
   // Pause / stop from the floating bar act on the recording without bringing the studio forward.
   recordingControls = new RecordingControls({
-    onAction: (action) => mainWindow?.webContents.send('shortcut', action, { source: 'recording-controls' }),
+    onAction: (action) => (action === 'liveDraw' ? toggleLiveDraw().catch(() => {}) : mainWindow?.webContents.send('shortcut', action, { source: 'recording-controls' })),
     hidden: process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1'
   });
   // The studio page loads first, so it is always the app's first window (automation and tools rely on that);
@@ -2326,8 +2479,9 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', () => { isQuitting = true; });
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed', () => { appJournal.reason('כל החלונות נסגרו'); if (process.platform !== 'darwin') app.quit(); });
 app.on('will-quit', () => {
+  if (singleInstance) appJournal.end();
   clearInterval(quickbarCursorTimer);
   clearInterval(quickbarDragTimer);
   if (qaProcess?.pid) {

@@ -72,6 +72,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   onRecordingClick: (callback) => ipcRenderer.on('recording:click', (_event, click) => callback(click)),
   setFeatures: (patch) => ipcRenderer.invoke('features:set', patch),
   featureAction: (id) => ipcRenderer.invoke('features:action', id),
+  watermarkLogo: () => ipcRenderer.invoke('features:watermark-logo'),
   onFeatures: (callback) => ipcRenderer.on('app:features', (_event, value) => callback(value)),
   exportSettings: (local) => ipcRenderer.invoke('settings:export', local),
   importSettings: () => ipcRenderer.invoke('settings:import'),

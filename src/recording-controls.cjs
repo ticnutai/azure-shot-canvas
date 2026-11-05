@@ -4,6 +4,7 @@ const { BrowserWindow, ipcMain, screen } = require('electron');
 const path = require('node:path');
 
 const BAR = Object.freeze({ width: 236, height: 46 });
+const DRAW_WIDTH = 304; // with the drawing button
 
 class RecordingControls {
   constructor({ onAction, hidden = false }) {
@@ -14,7 +15,7 @@ class RecordingControls {
     this.state = null;
     ipcMain.handle('recording-controls:action', (event, action) => {
       if (!this.bar || event.sender !== this.bar.webContents) throw new Error('בקשה ממקור לא מורשה');
-      if (!['pause', 'recordStop'].includes(action)) throw new Error('פעולה לא מוכרת');
+      if (!['pause', 'recordStop', 'liveDraw'].includes(action)) throw new Error('פעולה לא מוכרת');
       this.onAction(action);
       return true;
     });
@@ -33,10 +34,20 @@ class RecordingControls {
     this.bar?.webContents.send('recording-controls:state', this.state);
   }
 
+  // A change that needs no window moved: what the bar shows.
+  patch(details) {
+    if (!this.state) return;
+    this.state = { ...this.state, ...details };
+    if (this.bar && !this.bar.isDestroyed()) this.bar.webContents.send('recording-controls:state', this.state);
+  }
+
+  // The drawing window covers the screen; the bar stays above it, so it can still be reached.
+  raise() { if (!this.hidden && this.bar && !this.bar.isDestroyed()) this.bar.moveTop(); }
+
   async showBar(display, area) {
     if (!this.bar || this.bar.isDestroyed()) {
       this.bar = new BrowserWindow({
-        ...barBounds(display, area), show: false, frame: false, transparent: true, resizable: false, minimizable: false, maximizable: false,
+        ...barBounds(display, area, this.state?.canDraw ? DRAW_WIDTH : BAR.width), show: false, frame: false, transparent: true, resizable: false, minimizable: false, maximizable: false,
         fullscreenable: false, skipTaskbar: true, focusable: false, alwaysOnTop: true, hasShadow: false, title: 'שליטה בהקלטה',
         webPreferences: { preload: path.join(__dirname, 'recording-controls-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: false }
       });
@@ -97,14 +108,15 @@ function areaOnScreen(display, region) {
 
 // Under the area (centred), above it when there is no room, inside its top edge as a last resort;
 // for a whole-screen recording: centred at the top of the screen.
-function barBounds(display, area) {
+function barBounds(display, area, width = BAR.width) {
+  const size = { width, height: BAR.height };
   const work = display.workArea;
-  const clampX = (x) => Math.round(Math.min(Math.max(work.x + 6, x), work.x + work.width - BAR.width - 6));
-  if (!area || area.whole) return { ...BAR, x: clampX(work.x + (work.width - BAR.width) / 2), y: work.y + 10 };
-  const x = clampX(area.x + (area.width - BAR.width) / 2);
-  if (area.y + area.height + 10 + BAR.height <= work.y + work.height) return { ...BAR, x, y: area.y + area.height + 10 };
-  if (area.y - 10 - BAR.height >= work.y) return { ...BAR, x, y: area.y - 10 - BAR.height };
-  return { ...BAR, x, y: area.y + 10 };
+  const clampX = (x) => Math.round(Math.min(Math.max(work.x + 6, x), work.x + work.width - width - 6));
+  if (!area || area.whole) return { ...size, x: clampX(work.x + (work.width - width) / 2), y: work.y + 10 };
+  const x = clampX(area.x + (area.width - width) / 2);
+  if (area.y + area.height + 10 + BAR.height <= work.y + work.height) return { ...size, x, y: area.y + area.height + 10 };
+  if (area.y - 10 - BAR.height >= work.y) return { ...size, x, y: area.y - 10 - BAR.height };
+  return { ...size, x, y: area.y + 10 };
 }
 
 module.exports = { RecordingControls, areaOnScreen, barBounds };

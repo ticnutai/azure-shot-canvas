@@ -20,7 +20,8 @@
       control.type = field.type === 'number' ? 'number' : 'text';
       if (field.type === 'number') Object.assign(control, { min: field.min, max: field.max, step: field.step });
       if (field.type === 'text') control.maxLength = field.max || 80;
-      if (field.key === 'address') control.dir = 'ltr';
+      if (field.key === 'address' || field.key === 'time') control.dir = 'ltr';
+      if (field.key === 'time') control.placeholder = '09:00';
     }
     control.id = fieldId(feature, field);
     control.dataset.featureField = `${feature.id}:${field.key}`;

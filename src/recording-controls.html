@@ -11,6 +11,8 @@ body[data-paused="true"] .dot{background:#c99124;animation:none}
 .state{font-size:11px;color:#687183;margin-inline-end:auto;white-space:nowrap}
 button{-webkit-app-region:no-drag;height:30px;min-width:30px;padding:0 9px;display:flex;align-items:center;gap:5px;border:1px solid #e1e4ea;border-radius:7px;background:#ffffff;color:#1f2633;font:inherit;font-size:12px;cursor:default}
 button:hover{background:#eef3fb;border-color:#c9d6ea}
+#draw[hidden]{display:none}
+#draw[aria-pressed="true"]{background:#1f2633;border-color:#1f2633;color:#fff}
 #stop{background:#e0262d;border-color:#e0262d;color:#fff}
 #stop:hover{background:#c41f25}
 svg{width:14px;height:14px;fill:currentColor}
@@ -21,6 +23,7 @@ svg{width:14px;height:14px;fill:currentColor}
     <b id="time">00:00</b>
     <span class="state" id="state">מקליט</span>
     <button id="pause" title="השהיה / המשך"><svg viewBox="0 0 24 24" id="pause-icon"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span id="pause-label">השהיה</span></button>
+    <button id="draw" hidden aria-pressed="false" title="ציור על המסך. אסקייפ מסיים"><svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/></svg><span>ציור</span></button>
     <button id="stop" title="עצירה ושמירה"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg><span>עצירה</span></button>
   </div>
 <script>
@@ -42,8 +45,12 @@ svg{width:14px;height:14px;fill:currentColor}
     document.querySelector('#state').textContent = state.paused ? 'מושהה' : 'מקליט';
     document.querySelector('#pause-label').textContent = state.paused ? 'המשך' : 'השהיה';
     document.querySelector('#pause-icon').innerHTML = state.paused ? '<path d="M8 5l11 7-11 7z"/>' : '<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+    const draw = document.querySelector('#draw');
+    draw.hidden = !state.canDraw;
+    draw.setAttribute('aria-pressed', String(Boolean(state.drawing)));
     tick();
   }
+  document.querySelector('#draw').addEventListener('click', () => api.action('liveDraw'));
   document.querySelector('#pause').addEventListener('click', () => api.action('pause'));
   document.querySelector('#stop').addEventListener('click', () => api.action('recordStop'));
   api.onState(apply);

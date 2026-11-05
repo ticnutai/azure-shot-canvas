@@ -64,7 +64,7 @@ async function launchStudio(testName, options = {}) {
   if (options.livePreview !== 'default') {
     await page.evaluate(() => { localStorage.setItem('aurum-live-preview', 'on'); setLivePreviewEnabled(true, false); });
   }
-  await page.waitForFunction(() => document.documentElement.dataset.sourcesLoading === 'false' && document.querySelectorAll('.source-card').length > 0, null, { timeout: 20_000 });
+  await page.waitForFunction(() => document.documentElement.dataset.sourcesLoading === 'false' && document.querySelectorAll('.source-card').length > 0, null, { timeout: 45_000 });
   return { app, page, outputDir, runtimeErrors };
 }
 

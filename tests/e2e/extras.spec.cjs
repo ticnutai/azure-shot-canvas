@@ -43,11 +43,11 @@ test.describe.serial('optional extras', () => {
   const closePins = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((win) => win.webContents.getURL().startsWith('data:text/html')).forEach((win) => win.destroy()));
   const pinWindows = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().filter((win) => win.webContents.getURL().startsWith('data:text/html')).length);
 
-  test('1 · the tab: six extras, all off at first; a switch saves at once and turns its settings on', async () => {
+  test('1 · the tab: ten extras, all off at first; a switch saves at once and turns its settings on', async () => {
     await openTab();
-    await expect(page.locator('.feature-card[data-feature]')).toHaveCount(6);
+    await expect(page.locator('.feature-card[data-feature]')).toHaveCount(10);
     const off = await page.locator('[data-feature-switch]').evaluateAll((inputs) => inputs.map((input) => input.checked));
-    expect(off).toEqual([false, false, false, false, false, false]);
+    expect(off).toEqual(Array(10).fill(false));
     expect(await page.locator('#feature-intervalCapture-seconds').isDisabled()).toBe(true);
     await page.locator('[data-feature="intervalCapture"] .switch-row').click();
     await expect(page.locator('#feature-intervalCapture-seconds')).toBeEnabled();

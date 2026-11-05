@@ -57,6 +57,45 @@
         { key: 'address', label: 'כתובת המנוע (רק במחשב הזה)', type: 'text', default: DEFAULT_ENGINE, max: 80 }
       ],
       button: { id: 'translate-test', label: 'בדיקת חיבור למנוע' }
+    },
+    {
+      id: 'liveDraw', title: 'ציור על המסך בזמן הקלטה',
+      help: 'בזמן הקלטה: כפתור "ציור" בסרגל ההקלטה (או קיצור מקשים שתבחרו) מאפשר לצייר על המסך עט, חץ ומלבן, והציור נכנס להקלטה. אסקייפ חוזר לעבודה רגילה והציור נשאר עד שמנקים אותו או עד סוף ההקלטה.',
+      fields: [
+        { key: 'color', label: 'צבע התחלתי', type: 'select', options: [['#f13c50', 'אדום'], ['#ffc929', 'צהוב'], ['#2f80ed', 'כחול'], ['#27ae60', 'ירוק'], ['#111111', 'שחור']], default: '#f13c50' }
+      ]
+    },
+    {
+      id: 'watermark', title: 'סימן מים',
+      help: 'טקסט או לוגו בפינה של כל תמונה שנשמרת ושל כל הקלטה. על תמונה קטנה מאוד לא נוסף סימן, כדי שלא יסתיר אותה. תמונה שהועתקה ישירות ללוח נשארת בלי סימן.',
+      fields: [
+        { key: 'source', label: 'מה להוסיף', type: 'select', options: [['text', 'טקסט'], ['logo', 'לוגו']], default: 'text' },
+        { key: 'text', label: 'הטקסט', type: 'text', default: '', max: 60 },
+        { key: 'position', label: 'מיקום', type: 'select', options: [['bottom-right', 'ימין למטה'], ['bottom-left', 'שמאל למטה'], ['top-right', 'ימין למעלה'], ['top-left', 'שמאל למעלה'], ['center', 'במרכז']], default: 'bottom-right' },
+        { key: 'size', label: 'גודל', type: 'select', options: [['small', 'קטן'], ['medium', 'בינוני'], ['large', 'גדול']], default: 'medium' },
+        { key: 'opacity', label: 'אטימות (אחוזים)', type: 'number', min: 10, max: 100, step: 5, default: 60 },
+        { key: 'apply', label: 'על מה', type: 'select', options: [['both', 'תמונות והקלטות'], ['images', 'תמונות בלבד'], ['videos', 'הקלטות בלבד']], default: 'both' }
+      ],
+      button: { id: 'watermark-logo', label: 'בחירת תמונת לוגו' }
+    },
+    {
+      id: 'autoClean', title: 'ניקוי אוטומטי של צילומים ישנים',
+      help: 'צילומים והקלטות ישנים עוברים לסל המיחזור, ומשם אפשר להחזיר אותם. פריט שסומן כמועדף לא נמחק. הניקוי הראשון רץ 10 דקות אחרי ההדלקה ובכל 6 שעות אחר כך; כדאי ללחוץ קודם על הבדיקה כדי לראות כמה קבצים יעברו.',
+      fields: [
+        { key: 'days', label: 'לשמור כמה ימים', type: 'number', min: 1, max: 3650, step: 1, default: 90 },
+        { key: 'kind', label: 'מה לנקות', type: 'select', options: [['all', 'הכל'], ['images', 'תמונות בלבד'], ['videos', 'הקלטות בלבד']], default: 'all' }
+      ],
+      button: { id: 'auto-clean-preview', label: 'בדיקה: כמה קבצים יעברו לסל?' }
+    },
+    {
+      id: 'recordSchedule', title: 'הקלטה מתוזמנת',
+      help: 'הקלטה של המקור שנבחר באולפן מתחילה בשעה שקבעתם ונעצרת לבד. דקה לפני ההתחלה מופיעה הודעה. התוכנה צריכה לפעול באותה שעה; אם המחשב ישן או שכבר רצה הקלטה, ההקלטה לא תתחיל ותופיע הודעה.',
+      fields: [
+        { key: 'time', label: 'שעת ההתחלה', type: 'text', default: '09:00', max: 5 },
+        { key: 'minutes', label: 'כמה דקות להקליט', type: 'number', min: 1, max: 600, step: 1, default: 30 },
+        { key: 'repeat', label: 'חזרה', type: 'select', options: [['once', 'פעם אחת'], ['daily', 'כל יום']], default: 'once' }
+      ],
+      button: { id: 'record-schedule-next', label: 'מתי ההקלטה הבאה?' }
     }
   ];
 
@@ -67,6 +106,12 @@
       if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) return null;
       return `http://${url.hostname}:${url.port || 80}`;
     } catch { return null; }
+  }
+
+  // A time of day, always as HH:MM.
+  function cleanTime(value) {
+    const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(value || '').trim());
+    return match ? `${match[1].padStart(2, '0')}:${match[2]}` : null;
   }
 
   function defaults() {
@@ -89,6 +134,7 @@
     if (field.type === 'text') {
       const text = String(value ?? '').trim().slice(0, field.max || 80);
       if (field.key === 'address') return loopbackAddress(text) || fallback;
+      if (field.key === 'time') return cleanTime(text) || fallback;
       return text;
     }
     return fallback;
@@ -109,7 +155,7 @@
     return next;
   }
 
-  const api = { FEATURES, AFTER_OPTIONS, DEFAULT_ENGINE, defaults, normalizeFeatures, loopbackAddress };
+  const api = { FEATURES, AFTER_OPTIONS, DEFAULT_ENGINE, cleanTime, defaults, normalizeFeatures, loopbackAddress };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else window.aurumFeaturesDefs = api;
 })();

@@ -54,6 +54,7 @@ class Updater {
   // Closes the program, installs quietly and starts the new version.
   installNow() {
     if (this.state.status !== 'ready' || !autoUpdater) return false;
+    this.onInstall?.();
     setImmediate(() => autoUpdater.quitAndInstall(true, true));
     return true;
   }

@@ -1228,6 +1228,22 @@ function drawClickRipples() {
   }
 }
 
+// A watermark (an extra) on a picture or on a recording's frame. target: 'images' or 'videos'.
+function stampWatermark(canvas, context, target) {
+  const features = state.features;
+  if (!features?.enabled?.watermark) return false;
+  const settings = features.values.watermark;
+  if (settings.apply !== 'both' && settings.apply !== target) return false;
+  return window.aurumWatermark.drawWatermark(context, canvas.width, canvas.height, settings, state.watermarkLogo);
+}
+async function loadWatermarkLogo() {
+  const features = state.features;
+  if (!features?.enabled?.watermark || features.values.watermark.source !== 'logo') return;
+  const bytes = await api.watermarkLogo?.();
+  state.watermarkLogo?.close?.();
+  state.watermarkLogo = bytes ? await createImageBitmap(new Blob([bytes], { type: 'image/png' })) : null;
+}
+
 function drawFrame() {
   const sourceWidth = displayVideo.videoWidth;
   const sourceHeight = displayVideo.videoHeight;
@@ -1281,6 +1297,8 @@ function drawFrame() {
     roundedRect(recordingContext, x, y, targetWidth, targetHeight, radius);
     recordingContext.stroke();
   }
+  // Only on a recording: a screenshot taken from this canvas gets its mark once, when it is finished.
+  if (state.watermarkVideo) stampWatermark(recordingCanvas, recordingContext, 'videos');
 }
 
 function roundedRect(context, x, y, width, height, radius) {
@@ -1605,6 +1623,7 @@ async function beginScrollingCapture() {
     bar.classList.add('hidden');
     document.documentElement.dataset.scrollCapture = 'saving';
     if (!stitchedCanvas) throw new Error('לא התקבל פריים לצילום');
+    stampWatermark(stitchedCanvas, stitchedCanvas.getContext('2d'), 'images');
     const blob = await new Promise((resolve) => stitchedCanvas.toBlob(resolve, 'image/png'));
     const result = await api.saveScreenshot(await blob.arrayBuffer());
     document.documentElement.dataset.scrollCapture = 'saved';
@@ -1637,6 +1656,7 @@ async function beginCapture(kind, forcedScope = null, presetRegion = null) {
     return api.regionCapture('pick', 'record');
   }
   if (!state.selectedSource) return showToast('יש לבחור מסך או חלון תחילה');
+  state.watermarkVideo = kind === 'record';
   state.busy = true;
   setStatus('מכין מקורות…', 'busy');
   try {
@@ -1712,6 +1732,7 @@ async function finishAndSaveScreenshot(canvas, { title = '', afterAction } = {})
     } else document.documentElement.dataset.lastAutoRedactions = '0';
   }
   if (state.autoBeautify) canvas = await finish.beautifyCanvas(canvas.toDataURL('image/png'), state.autoBeautifyStyle);
+  document.documentElement.dataset.lastWatermark = String(stampWatermark(canvas, canvas.getContext('2d'), 'images'));
   const image = await finish.encode(canvas, state.imageFormat, state.imageQuality / 100);
   const result = await api.saveScreenshot(image.bytes, { format: state.imageFormat, width: image.width, height: image.height, title });
   runAfterScreenshot(result, afterAction);
@@ -3008,8 +3029,8 @@ async function initialize() {
     try { localStorage.setItem('aurum-shortcuts', JSON.stringify(result.requested || state.shortcuts)); } catch {}
     renderShortcutSettings(result.registration);
   });
-  api.getFeatures?.().then((value) => { state.features = value; }).catch(() => {});
-  api.onFeatures?.((value) => { state.features = value; });
+  api.getFeatures?.().then((value) => { state.features = value; return loadWatermarkLogo(); }).catch(() => {});
+  api.onFeatures?.((value) => { state.features = value; loadWatermarkLogo().catch(() => {}); });
   // A mouse press during a recording (only reported while the click-rings extra is on).
   api.onRecordingClick?.((click) => { if (state.recorder) state.clicks.push({ ...click, at: performance.now() }); });
   api.onExternalImage?.((payload) => saveExternalImage(payload).catch((error) => showToast(`שמירת הצילום נכשלה: ${error.message}`, 8000)));

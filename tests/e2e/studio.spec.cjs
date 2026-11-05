@@ -243,8 +243,8 @@ test.describe('Electron production workflow', () => {
     await expect(page.locator('#settings-page')).toHaveClass(/active/);
     await expect(page.locator('#output-path')).toContainText(outputDir);
     await page.locator('[data-preference-tab="shortcuts"]').click();
-    await expect(page.locator('[data-shortcut-action]')).toHaveCount(19);
-    await expect(page.locator('#shortcut-visible-count')).toHaveText('19');
+    await expect(page.locator('[data-shortcut-action]')).toHaveCount(21);
+    await expect(page.locator('#shortcut-visible-count')).toHaveText('21');
     // The capture key professional tools use: PrtSc for an area, Shift+PrtSc for the previous one, Ctrl+PrtSc for text.
     await expect(page.locator('[data-shortcut-action="region"]')).toHaveText('PrtSc');
     await expect(page.locator('[data-shortcut-action="repeatRegion"]')).toHaveText('Shift + PrtSc');

@@ -71,8 +71,8 @@ test.describe.serial('slim capture strip', () => {
 
   test('each large button has a drop-down menu that grows the strip and closes again', async () => {
     await strip.locator('.strip-more[data-menu="capture"]').click();
-    await expect.poll(async () => (await barBounds()).bounds.height).toBe(440);
-    await expect(strip.locator('#strip-menu [data-menu-action]')).toHaveCount(7);
+    await expect.poll(async () => (await barBounds()).bounds.height).toBe(484);
+    await expect(strip.locator('#strip-menu [data-menu-action]')).toHaveCount(8);
     await expect(strip.locator('#strip-menu .menu-toggle')).toHaveCount(3);
     await expect(strip.locator('#strip-menu [data-menu-action="repeatRegion"]')).toBeVisible();
     await strip.locator('.strip-more[data-menu="record"]').click();

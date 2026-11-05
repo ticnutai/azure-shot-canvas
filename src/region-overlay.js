@@ -27,6 +27,7 @@
     capture: ['גררו לבחירת אזור', 'לחיצה על חלון או על חלק ממנו מצלמת אותו (שיפט: החלון כולו)', 'אנטר האזור הקודם', 'רווח המסך כולו', 'C קוד הצבע', 'אסקייפ ביטול'],
     record: ['גררו לבחירת אזור להקלטה', 'לחיצה על חלון מקליטה אותו', 'רווח המסך כולו', 'אסקייפ ביטול'],
     ocr: ['גררו סביב הטקסט להעתקה', 'לחיצה על חלון או על חלק ממנו', 'אסקייפ ביטול'],
+    color: ['לחיצה על נקודה במסך מעתיקה את קוד הצבע שלה', 'אסקייפ ביטול'],
     scroll: ['בחרו את האזור שנגלל — התוכנה תגלול ותחבר לבד', 'לחיצה על חלק בחלון בוחרת אותו', 'אסקייפ ביטול']
   };
 
@@ -356,7 +357,7 @@
   // A chosen area: capture at once, or (quick marks on) keep it on screen with the toolbar.
   // markupNow: Control held on release opens the marks toolbar even when saving on release is the setting.
   function choose(rect, { markupNow = false } = {}) {
-    if (!geometry.isUsable(rect)) return;
+    if (session.purpose === 'color' || !geometry.isUsable(rect)) return;
     if (session.purpose === 'record') return finish(rect, 'record');
     if (session.purpose === 'ocr') return finish(rect, 'ocr');
     if (session.purpose === 'scroll') return finish(rect, 'scroll');
@@ -654,6 +655,12 @@
     if (event.button === 2) return selected ? undefined : cancel();
     if (event.button !== 0) return;
     pointer = pointFrom(event);
+    // The colour picker: one click and it is done.
+    if (session.purpose === 'color') {
+      finished = true;
+      api.finish(session.displayId, { x: pointer.x, y: pointer.y, width: 1, height: 1 }, { color: colourAt(Math.floor(pointer.x * session.scale), Math.floor(pointer.y * session.scale)) });
+      return;
+    }
     document.body.setPointerCapture?.(event.pointerId);
     if (selected) {
       commitText();
@@ -798,7 +805,7 @@
   function renderHint(purpose, savedCount = 0) {
     const [first, ...rest] = HINTS[purpose] || HINTS.capture;
     if (purpose === 'capture') rest.unshift(session.markup ? 'שחרור — סרגל סימון לפני השמירה' : 'שחרור — נשמר מיד · עם קונטרול: סימון לפני השמירה');
-    if (savedCount && purpose !== 'ocr') rest.splice(rest.length - 1, 0, savedCount === 1 ? 'מקש 1 האזור השמור' : `מקשים 1–${savedCount} אזורים שמורים`);
+    if (savedCount && purpose !== 'ocr' && purpose !== 'color') rest.splice(rest.length - 1, 0, savedCount === 1 ? 'מקש 1 האזור השמור' : `מקשים 1–${savedCount} אזורים שמורים`);
     const bold = document.createElement('b');
     bold.textContent = first;
     hint.replaceChildren(bold, ...rest.map((text) => Object.assign(document.createElement('span'), { textContent: text })));

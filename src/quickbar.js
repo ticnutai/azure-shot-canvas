@@ -212,7 +212,7 @@
   }
   // Region captures close the bar first, so it never sits on top of the frozen screen.
   const runBarAction = async (action) => {
-    if (action === 'region' || action === 'repeatRegion') await setExpanded(false);
+    if (action === 'region' || action === 'repeatRegion' || action === 'colorPick') await setExpanded(false);
     else closeMenu();
     return api.runAction(action);
   };
@@ -227,6 +227,7 @@
       ['region', '▱', 'אזור או חלון', 'גרירה או לחיצה על חלון'],
       ['repeatRegion', '↺', 'האזור הקודם', 'בלי לבחור שוב'],
       ['ocrRegion', 'א', 'העתקת טקסט מאזור', 'גם בעברית'],
+      ['colorPick', '◍', 'דוגם צבע', 'קוד הצבע מועתק ללוח'],
       ['scrollCapture', '⇣', 'עמוד גלילה אוטומטי', 'גולל ומחבר לבד'],
       ['screenshot', '▣', 'מסך מלא', 'המקור שנבחר באולפן'],
       ['screenshotEdit', '✎', 'צילום ופתיחה בעורך', ''],

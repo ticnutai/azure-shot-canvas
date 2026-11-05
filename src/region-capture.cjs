@@ -303,6 +303,7 @@ class RegionCapture {
       if (!choice) return { cancelled: true };
       const frozen = frozenList.find((item) => String(item.display.id) === choice.displayId);
       if (!frozen) return { cancelled: true };
+      if (purpose === 'color') return /^#[0-9A-F]{6}$/.test(choice.options.color) ? { color: choice.options.color } : { cancelled: true };
       const after = ['save', 'copy', 'edit', 'ocr', 'record'].includes(choice.options.after) ? choice.options.after : 'save';
       // A recording area: where on which screen, nothing is cut.
       if (purpose === 'record') return { record: true, displayId: choice.displayId, rect: choice.rect, bounds: { ...frozen.display.bounds } };
