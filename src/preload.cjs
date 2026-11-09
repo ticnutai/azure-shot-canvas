@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
+// A one-time download in the main program, with its progress (received, total) on the way.
+function downloadWithProgress(name, onProgress) {
+  const listener = (_event, received, total) => onProgress?.(received, total);
+  ipcRenderer.on(`${name}:progress`, listener);
+  return ipcRenderer.invoke(`${name}:download`).finally(() => ipcRenderer.removeListener(`${name}:progress`, listener));
+}
+
 contextBridge.exposeInMainWorld('screenStudio', {
   browserMode: false,
   qaEnabled: process.env.SCREEN_STUDIO_QA === '1',
@@ -74,11 +81,9 @@ contextBridge.exposeInMainWorld('screenStudio', {
   featureAction: (id) => ipcRenderer.invoke('features:action', id),
   aiModelStatus: () => ipcRenderer.invoke('ai-model:status'),
   aiModel: () => ipcRenderer.invoke('ai-model:read'),
-  aiModelDownload: (onProgress) => {
-    const listener = (_event, received, total) => onProgress?.(received, total);
-    ipcRenderer.on('ai-model:progress', listener);
-    return ipcRenderer.invoke('ai-model:download').finally(() => ipcRenderer.removeListener('ai-model:progress', listener));
-  },
+  aiModelDownload: (onProgress) => downloadWithProgress('ai-model', onProgress),
+  videoToolsStatus: () => ipcRenderer.invoke('video-tools:status'),
+  videoToolsDownload: (onProgress) => downloadWithProgress('video-tools', onProgress),
   watermarkLogo: () => ipcRenderer.invoke('features:watermark-logo'),
   onFeatures: (callback) => ipcRenderer.on('app:features', (_event, value) => callback(value)),
   exportSettings: (local) => ipcRenderer.invoke('settings:export', local),

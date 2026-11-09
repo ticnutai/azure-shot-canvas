@@ -2532,13 +2532,38 @@ async function refreshEngineStatus() {
   if (!container) return;
   container.innerHTML = '<article><small>סורק מנועים קיימים…</small></article>';
   try {
-    const engines = await api.getLocalEngines();
+    const [engines, video] = await Promise.all([api.getLocalEngines(), api.videoToolsStatus?.() || null]);
+    const languageNames = { heb: 'עברית', eng: 'אנגלית', osd: 'כיוון דף' };
+    const videoDetail = video?.installedOnComputer ? 'מותקן במחשב' : video?.active ? `הורד לתוך התוכנה (גרסה ${video.version})` : 'צריך להוריד פעם אחת';
     const entries = [
-      ['FFmpeg', engines.ffmpeg, engines.ffmpeg?.version], ['FFprobe', engines.ffprobe, engines.ffprobe?.version],
-      ['OCR', engines.ocr, (engines.ocr?.languages || []).join(', ') || 'ללא שפות'], ['Whisper מקומי', engines.transcription, engines.transcription?.model || engines.transcription?.url]
+      ['כלי הווידאו', engines.ffmpeg, videoDetail], ['בודק הווידאו', engines.ffprobe, videoDetail],
+      ['זיהוי טקסט', engines.ocr, `${engines.ocr?.builtIn ? 'מובנה בתוכנה · ' : ''}${(engines.ocr?.languages || []).map((code) => languageNames[code] || code).join(', ') || 'ללא שפות'}`],
+      ['תמלול מקומי', engines.transcription, engines.transcription?.available ? 'שרת התמלול עונה' : 'שרת התמלול לא פועל']
     ];
     container.innerHTML = entries.map(([name, engine, detail]) => `<article><small>${escapeHtml(name)}</small><b class="${engine?.available ? 'ok' : 'missing'}">${engine?.available ? '● זמין וקיים' : '○ לא זמין'}</b><span>${escapeHtml(detail || '—')}</span></article>`).join('');
+    // No video tool on this computer: one button downloads it into the program (about 110 MB, once).
+    if (video && !video.active && api.videoToolsDownload) {
+      const first = container.querySelector('article');
+      const button = document.createElement('button');
+      button.id = 'video-tools-download';
+      button.className = 'primary';
+      button.textContent = `הורדת כלי הווידאו (${Math.round(video.size / 1048576)} מגה, פעם אחת)`;
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try {
+          await api.videoToolsDownload((received, total) => { button.textContent = `מוריד… ${Math.round((received / total) * 100)}%`; });
+          showToast('כלי הווידאו מוכן: תמונה מונפשת, קובץ וידאו רגיל והתקרבות אוטומטית עובדים עכשיו');
+          refreshEngineStatus();
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = 'ההורדה נכשלה — לנסות שוב';
+          showToast(error.message);
+        }
+      });
+      first.append(button);
+    }
     document.documentElement.dataset.enginePolicy = engines.duplicatePolicy || 'unknown';
+    document.documentElement.dataset.videoTools = video ? (video.installedOnComputer ? 'computer' : video.active ? 'downloaded' : 'missing') : 'unknown';
   } catch (error) { container.innerHTML = `<article><b class="missing">בדיקת המנועים נכשלה</b><span>${escapeHtml(error.message)}</span></article>`; }
 }
 
