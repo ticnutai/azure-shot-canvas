@@ -865,20 +865,21 @@ async function updateMetadata(filePath, patch) {
   return updated;
 }
 
+// The language files for reading text. When the separate Tesseract program already has Hebrew and English, its own
+// folder is used as it is (no second copy; an old copy is removed). Otherwise the two files that come with the
+// program are copied once to the data folder (the built-in engine cannot read them from inside the packed program).
 async function ensureOcrLanguageData() {
   const cacheDirectory = path.join(app.getPath('userData'), 'ocr-tessdata');
-  await fs.mkdir(cacheDirectory, { recursive: true });
   const installedDirectory = process.env.TESSDATA_PREFIX || 'C:\\Program Files\\Tesseract-OCR\\tessdata';
-  const sources = {
-    heb: path.join(__dirname, 'tessdata', 'heb.traineddata'),
-    // Hebrew and English come with the program; page-direction data only when the separate program has it.
-    eng: path.join(__dirname, 'tessdata', 'eng.traineddata'),
-    osd: path.join(installedDirectory, 'osd.traineddata')
-  };
-  for (const [language, source] of Object.entries(sources)) {
+  const has = (folder, language) => fs.access(path.join(folder, `${language}.traineddata`)).then(() => true, () => false);
+  if (process.env.SCREEN_STUDIO_OCR_BUILT_IN !== '1' && await has(installedDirectory, 'heb') && await has(installedDirectory, 'eng')) {
+    fs.rm(cacheDirectory, { recursive: true, force: true }).catch(() => {});
+    return installedDirectory;
+  }
+  await fs.mkdir(cacheDirectory, { recursive: true });
+  for (const language of ['heb', 'eng']) {
     const target = path.join(cacheDirectory, `${language}.traineddata`);
-    try { await fs.access(target); }
-    catch { await fs.copyFile(source, target).catch((error) => { if (language !== 'osd') throw error; }); }
+    if (!await has(cacheDirectory, language)) await fs.copyFile(path.join(__dirname, 'tessdata', `${language}.traineddata`), target);
   }
   return cacheDirectory;
 }
