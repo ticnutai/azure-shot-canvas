@@ -15,6 +15,60 @@
     return { x: Math.min(shape.from.x, shape.to.x), y: Math.min(shape.from.y, shape.to.y), width: Math.abs(shape.to.x - shape.from.x), height: Math.abs(shape.to.y - shape.from.y) };
   };
 
+  // Smart erase on the frozen screen: what is in the box goes, filled from the background around it (smart-erase.js).
+  // Worked out once for each place and kept; while the box is still being dragged only its outline shows.
+  const erased = new Map();
+  function erasePiece(frozen, rect, scale) {
+    const pad = 16;
+    const fullWidth = frozen.width;
+    const fullHeight = frozen.height;
+    const left = Math.max(0, Math.floor(rect.x * scale) - pad);
+    const top = Math.max(0, Math.floor(rect.y * scale) - pad);
+    const width = Math.min(fullWidth, Math.ceil((rect.x + rect.width) * scale) + pad) - left;
+    const height = Math.min(fullHeight, Math.ceil((rect.y + rect.height) * scale) + pad) - top;
+    if (width < 3 || height < 3) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(frozen, left, top, width, height, 0, 0, width, height);
+    const image = context.getImageData(0, 0, width, height);
+    const eraser = window.AurumSmartErase;
+    const box = { x: rect.x * scale - left, y: rect.y * scale - top, width: rect.width * scale, height: rect.height * scale };
+    const mask = eraser.growMask(eraser.rectMask(width, height, box), width, height, 2);
+    const result = eraser.erase(image, mask);
+    if (!result) return null;
+    for (let index = 0; index < mask.length; index += 1) if (!mask[index]) image.data[index * 4 + 3] = 0;
+    context.putImageData(image, 0, 0);
+    return { canvas, x: left, y: top, method: result.method };
+  }
+  function drawErase(context, shape, frozen, scale, live) {
+    const rect = boundsOf(shape);
+    if (rect.width < 2 || rect.height < 2) return;
+    if (live || !window.AurumSmartErase) {
+      context.save();
+      context.fillStyle = 'rgba(255,45,122,0.14)';
+      context.fillRect(rect.x, rect.y, rect.width, rect.height);
+      context.strokeStyle = '#ff2d7a';
+      context.lineWidth = 2;
+      context.setLineDash([6, 4]);
+      context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+      context.restore();
+      return;
+    }
+    const key = [rect.x, rect.y, rect.width, rect.height, scale].map((value) => Math.round(value * 10)).join(',');
+    let piece = erased.get(key);
+    if (piece === undefined) {
+      piece = erasePiece(frozen, rect, scale);
+      erased.set(key, piece);
+      if (erased.size > 24) erased.delete(erased.keys().next().value);
+    }
+    if (piece) context.drawImage(piece.canvas, piece.x / scale, piece.y / scale, piece.canvas.width / scale, piece.canvas.height / scale);
+    if (piece) document.documentElement.dataset.lastErase = piece.method;
+  }
+  // Erasing changes the picture, not the marks drawn on it: erased places are drawn first.
+  const inOrder = (shapes) => [...shapes.filter((shape) => shape.type === 'erase'), ...shapes.filter((shape) => shape.type !== 'erase')];
+
   // Blur = coarse pixel blocks taken from the untouched frozen image (cannot be undone by sharpening).
   function drawBlur(context, shape, frozen, scale) {
     const rect = boundsOf(shape);
@@ -61,8 +115,9 @@
     return `${shape.bold === false ? 400 : 700} 20px "${shape.font || 'Segoe UI'}", "Segoe UI", Arial, sans-serif`;
   }
 
-  function drawShape(context, shape, { frozen, scale }) {
+  function drawShape(context, shape, { frozen, scale, live = false }) {
     if (shape.type === 'blur') return drawBlur(context, shape, frozen, scale);
+    if (shape.type === 'erase') return drawErase(context, shape, frozen, scale, live);
     context.save();
     if (shape.type === 'arrow') drawArrow(context, shape.from, shape.to, shape.color);
     else if (shape.type === 'rect') {
@@ -140,11 +195,11 @@
     context.beginPath();
     context.rect(rect.x, rect.y, rect.width, rect.height);
     context.clip();
-    for (const shape of shapes) drawShape(context, shape, { frozen, scale });
+    for (const shape of inOrder(shapes)) drawShape(context, shape, { frozen, scale });
     context.restore();
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     return new Uint8Array(await blob.arrayBuffer());
   }
 
-  window.AurumMarkup = { COLORS, boundsOf, drawShape, isMeaningful, renderSelection, textSize };
+  window.AurumMarkup = { COLORS, boundsOf, drawShape, inOrder, isMeaningful, renderSelection, textSize };
 })();

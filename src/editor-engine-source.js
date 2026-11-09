@@ -2,6 +2,7 @@ import {
   ActiveSelection, Canvas, Circle, Ellipse, FabricImage, Group, IText, Line,
   Path, PencilBrush, Polygon, Polyline, Rect, Shadow, Textbox, Triangle, util
 } from 'fabric';
+import smartErase from './smart-erase.js';
 
 // Lock flags are listed so a spotlight stays fixed in place after undo/redo restores it from JSON.
 const CUSTOM_PROPERTIES = ['dataRole', 'toolType', 'secureRedaction', 'lockMovementX', 'lockMovementY', 'lockScalingX', 'lockScalingY', 'lockRotation', 'hasControls'];
@@ -102,6 +103,14 @@ class AurumImageEditorEngine {
     this.canvas.on('text:editing:exited', ({ target }) => {
       if (target && !target.text.trim()) this.canvas.remove(target);
       this.pushHistory();
+    });
+    // The erasing brush: its stroke is only a guide; the place it covered is erased, and the stroke goes.
+    this.canvas.on('path:created', ({ path }) => {
+      if (this.tool !== 'erase-brush' || !path) return;
+      this.canvas.remove(path);
+      const points = this.brushPoints || [];
+      this.brushPoints = null;
+      this.eraseStroke(points, this.canvas.freeDrawingBrush?.width || 24).catch(() => {});
     });
     this.canvas.on('mouse:down', (event) => this.pointerDown(event));
     this.canvas.on('mouse:move', (event) => this.pointerMove(event));
@@ -259,13 +268,14 @@ class AurumImageEditorEngine {
   setTool(tool) {
     if (this.tool === 'polygon' && tool !== 'polygon') this.finishPolygon();
     this.tool = tool;
-    this.canvas.isDrawingMode = ['pen', 'highlighter'].includes(tool);
+    this.canvas.isDrawingMode = ['pen', 'highlighter', 'erase-brush'].includes(tool);
     this.canvas.selection = tool === 'select';
     this.canvas.skipTargetFind = tool !== 'select';
     if (this.canvas.isDrawingMode) {
       const brush = new PencilBrush(this.canvas);
       brush.color = tool === 'highlighter' ? `${this.style.stroke}66` : this.style.stroke;
       brush.width = tool === 'highlighter' ? this.style.strokeWidth * 4 : this.style.strokeWidth;
+      if (tool === 'erase-brush') { brush.color = '#ff2d7a66'; brush.width = Math.max(18, this.style.strokeWidth * 4); }
       this.canvas.freeDrawingBrush = brush;
     }
     this.canvas.defaultCursor = tool === 'select' ? 'default' : tool === 'pan' ? 'grab' : 'crosshair';
@@ -281,6 +291,7 @@ class AurumImageEditorEngine {
   }
 
   pointerDown(event) {
+    if (this.tool === 'erase-brush') { this.brushPoints = [this.scenePoint(event)]; return; }
     if (this.canvas.isDrawingMode || this.tool === 'select') return;
     const point = this.scenePoint(event);
     if (this.tool === 'text' || this.tool === 'callout') return this.addText(point, this.tool === 'callout');
@@ -290,16 +301,18 @@ class AurumImageEditorEngine {
     if (this.tool === 'pan') return;
     const options = this.baseOptions({ left: point.x, top: point.y, originX: 'left', originY: 'top' });
     let object;
-    if (['rect', 'redact', 'blur', 'pixelate', 'crop', 'magnify', 'spotlight'].includes(this.tool)) object = new Rect({ ...options, width: 1, height: 1, fill: this.tool === 'redact' ? '#000000' : this.tool === 'rect' ? this.style.fill : '#ffffff22', strokeDashArray: ['blur', 'pixelate', 'crop', 'magnify', 'spotlight'].includes(this.tool) ? [12, 8] : null });
+    if (['rect', 'redact', 'blur', 'pixelate', 'crop', 'magnify', 'spotlight', 'erase'].includes(this.tool)) object = new Rect({ ...options, width: 1, height: 1, fill: this.tool === 'redact' ? '#000000' : this.tool === 'rect' ? this.style.fill : '#ffffff22', strokeDashArray: ['blur', 'pixelate', 'crop', 'magnify', 'spotlight'].includes(this.tool) ? [12, 8] : null });
     else if (this.tool === 'ellipse') object = new Ellipse({ ...options, rx: 1, ry: 1 });
     else if (['line', 'arrow', 'double-arrow', 'measure'].includes(this.tool)) object = new Line([point.x, point.y, point.x, point.y], this.baseOptions({ fill: undefined }));
     if (!object) return;
     object.toolType = this.tool;
+    if (this.tool === 'erase') object.set({ fill: 'rgba(255,45,122,0.12)', stroke: '#ff2d7a', strokeWidth: 2, strokeDashArray: [6, 4], opacity: 1 });
     this.drawing = { start: point, object };
     this.canvas.add(object);
   }
 
   pointerMove(event) {
+    if (this.brushPoints && this.tool === 'erase-brush') { this.brushPoints.push(this.scenePoint(event)); return; }
     if (!this.drawing) return;
     const { start, object } = this.drawing;
     const point = this.constrainPoint(start, this.scenePoint(event), event.e?.shiftKey, object instanceof Line);
@@ -333,6 +346,8 @@ class AurumImageEditorEngine {
   }
 
   async pointerUp(event) {
+    // The erasing brush keeps its own history step (see eraseArea).
+    if (this.tool === 'erase-brush') return;
     if (this.canvas.isDrawingMode) {
       setTimeout(() => this.pushHistory(), 0);
       return;
@@ -351,6 +366,10 @@ class AurumImageEditorEngine {
     } else if (['blur', 'pixelate'].includes(object.toolType)) {
       this.canvas.remove(object);
       await this.addObscuredRegion(object, object.toolType);
+    } else if (object.toolType === 'erase') {
+      this.canvas.remove(object);
+      await this.eraseRect(object);
+      return;
     } else if (object.toolType === 'crop') {
       this.canvas.remove(object);
       await this.cropTo(object);
@@ -445,6 +464,76 @@ class AurumImageEditorEngine {
       context.drawImage(this.backgroundImageElement, left, top, width, height, 0, 0, width, height);
     }
     return { dataUrl: output.toDataURL('image/png'), left, top, width, height };
+  }
+
+  // ---- Smart erase: what is in the place goes, and the place is filled from the background around it ----------------
+  // The result is a picture of its own right above the background (under every mark), so it can be moved, deleted or
+  // undone like anything else. Earlier erases count as background for a later one.
+  async eraseArea(box, paintMask) {
+    const source = this.backgroundImageElement;
+    if (!source) return null;
+    const pad = 24;
+    const fullWidth = source.naturalWidth;
+    const fullHeight = source.naturalHeight;
+    const left = clamp(Math.floor(box.left) - pad, 0, fullWidth - 1);
+    const top = clamp(Math.floor(box.top) - pad, 0, fullHeight - 1);
+    const width = clamp(Math.ceil(box.left + box.width) + pad, left + 1, fullWidth) - left;
+    const height = clamp(Math.ceil(box.top + box.height) + pad, top + 1, fullHeight) - top;
+    if (width < 3 || height < 3) return null;
+    const work = document.createElement('canvas');
+    work.width = width;
+    work.height = height;
+    const context = work.getContext('2d', { willReadFrequently: true });
+    context.drawImage(source, left, top, width, height, 0, 0, width, height);
+    for (const object of this.canvas.getObjects()) {
+      if (object.toolType === 'erase' && object.getElement) context.drawImage(object.getElement(), object.left - left, object.top - top);
+    }
+    const image = context.getImageData(0, 0, width, height);
+    const mask = smartErase.growMask(paintMask(width, height, left, top), width, height, 2);
+    const result = smartErase.erase(image, mask, this.hooks.getEraseOptions?.() || {});
+    if (!result) return null;
+    for (let index = 0; index < mask.length; index += 1) if (!mask[index]) image.data[index * 4 + 3] = 0;
+    context.putImageData(image, 0, 0);
+    const piece = await FabricImage.fromURL(work.toDataURL('image/png'));
+    piece.set({ left, top, originX: 'left', originY: 'top', toolType: 'erase', objectCaching: false });
+    this.canvas.add(piece);
+    const under = this.backgroundObject ? this.canvas.getObjects().indexOf(this.backgroundObject) + 1 : 0;
+    this.canvas.moveObjectTo?.(piece, under);
+    this.canvas.requestRenderAll();
+    this.pushHistory();
+    this.hooks.onErase?.(result);
+    return result;
+  }
+
+  eraseRect(rect) {
+    const box = { left: rect.left, top: rect.top, width: rect.width * (rect.scaleX || 1), height: rect.height * (rect.scaleY || 1) };
+    return this.eraseArea(box, (width, height, left, top) => smartErase.rectMask(width, height, { x: box.left - left, y: box.top - top, width: box.width, height: box.height }));
+  }
+
+  eraseStroke(points, brushWidth) {
+    if (!points.length) return Promise.resolve(null);
+    const half = brushWidth / 2;
+    const xs = points.map((point) => point.x);
+    const ys = points.map((point) => point.y);
+    const box = { left: Math.min(...xs) - half, top: Math.min(...ys) - half, width: Math.max(...xs) - Math.min(...xs) + brushWidth, height: Math.max(...ys) - Math.min(...ys) + brushWidth };
+    return this.eraseArea(box, (width, height, left, top) => {
+      const paint = document.createElement('canvas');
+      paint.width = width;
+      paint.height = height;
+      const pen = paint.getContext('2d', { willReadFrequently: true });
+      pen.strokeStyle = '#000';
+      pen.fillStyle = '#000';
+      pen.lineWidth = brushWidth;
+      pen.lineCap = 'round';
+      pen.lineJoin = 'round';
+      pen.beginPath();
+      points.forEach((point, index) => (index ? pen.lineTo(point.x - left, point.y - top) : pen.moveTo(point.x - left, point.y - top)));
+      if (points.length === 1) { pen.arc(points[0].x - left, points[0].y - top, half, 0, Math.PI * 2); pen.fill(); } else pen.stroke();
+      const alpha = pen.getImageData(0, 0, width, height).data;
+      const mask = new Uint8Array(width * height);
+      for (let index = 0; index < mask.length; index += 1) mask[index] = alpha[index * 4 + 3] > 40 ? 1 : 0;
+      return mask;
+    });
   }
 
   async addObscuredRegion(rect, mode) {

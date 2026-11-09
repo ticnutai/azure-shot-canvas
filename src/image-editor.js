@@ -42,6 +42,8 @@
     engine?.setTool(tool);
     $$('[data-editor-tool]').forEach((button) => button.classList.toggle('active', button.dataset.editorTool === tool));
     shell.dispatchEvent(new CustomEvent('aurum:editor-tool', { detail: tool }));
+    const eraseOptions = $('#editor-erase-options');
+    if (eraseOptions) eraseOptions.hidden = !['erase', 'erase-brush'].includes(tool);
   };
 
   // The picture fits the whole work area, less only the area's own padding.
@@ -66,6 +68,20 @@
     canvas.id = 'editor-canvas';
     $('#editor-canvas-wrap').replaceChildren(canvas);
     engine = new window.AurumImageEditorEngine(canvas, {
+      // Smart erase: how to fill (and the user's own colour, when chosen); what was done is shown under the choice.
+      getEraseOptions: () => {
+        const own = $('#editor-erase-own')?.checked;
+        const hex = $('#editor-erase-color')?.value || '#ffffff';
+        return { method: own ? 'solid' : ($('#editor-erase-method')?.value || 'auto'), color: own ? [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).concat(255) : null };
+      },
+      onErase: (result) => {
+        const names = window.AurumSmartErase?.METHOD_NAMES || {};
+        const text = `נמחק. המקום מולא ב${names[result.method] || 'רקע'}${result.method === 'solid' ? ` (${result.hex})` : ''}.`;
+        const note = $('#editor-erase-result');
+        if (note) note.textContent = text;
+        shell.dataset.lastErase = result.method;
+        if (result.method === 'solid' && !$('#editor-erase-own')?.checked) $('#editor-erase-color').value = result.hex.toLowerCase();
+      },
       onHistory: ({ canUndo, canRedo }) => { $('#editor-undo').disabled = !canUndo; $('#editor-redo').disabled = !canRedo; setDirty(true); },
       onZoom: (zoom) => {
         const percent = Math.round(zoom * 100);
@@ -152,7 +168,14 @@
     if (loading) loading.catch(() => {}).finally(() => closing?.dispose()); else closing?.dispose();
   }
 
-  window.aurumEditor = { open: openEditor, close: closeEditor, isOpen: () => !shell.classList.contains('hidden'), stats: () => engine?.stats(), objects: () => engine?.annotationsJson() || [], exportDataUrl: () => engine?.exportDataUrl() };
+  window.aurumEditor = { open: openEditor, close: closeEditor, isOpen: () => !shell.classList.contains('hidden'), stats: () => engine?.stats(), objects: () => engine?.annotationsJson() || [], exportDataUrl: () => engine?.exportDataUrl(),
+    // Where a point of the picture is on the page (for checks that press the mouse on the picture).
+    sceneToClient: (x, y) => {
+      const box = engine.canvas.upperCanvasEl.getBoundingClientRect();
+      const view = engine.canvas.viewportTransform;
+      const ratio = box.width / engine.canvas.getWidth();
+      return { x: box.left + (x * view[0] + view[4]) * ratio, y: box.top + (y * view[3] + view[5]) * ratio };
+    } };
   $$('[data-editor-tool]').forEach((button) => button.addEventListener('click', () => selectTool(button.dataset.editorTool)));
   $$('[data-editor-mode]').forEach((button) => button.addEventListener('click', () => setMode(button.dataset.editorMode)));
   $('#editor-close').addEventListener('click', () => closeEditor());
@@ -276,7 +299,7 @@
     }
     if (event.key === 'Delete' || event.key === 'Backspace') engine.deleteSelected();
     if (event.key === 'Escape') selectTool('select');
-    const shortcuts = { KeyV: 'select', KeyA: 'arrow', KeyL: 'line', KeyR: 'rect', KeyO: 'ellipse', KeyP: 'polygon', KeyD: 'pen', KeyH: 'highlighter', KeyT: 'text', KeyN: 'counter', KeyB: 'blur', KeyC: 'crop', KeyS: 'spotlight' };
+    const shortcuts = { KeyV: 'select', KeyA: 'arrow', KeyL: 'line', KeyR: 'rect', KeyO: 'ellipse', KeyP: 'polygon', KeyD: 'pen', KeyH: 'highlighter', KeyT: 'text', KeyN: 'counter', KeyB: 'blur', KeyE: 'erase', KeyC: 'crop', KeyS: 'spotlight' };
     if (shortcuts[event.code]) selectTool(shortcuts[event.code]);
   });
 })();

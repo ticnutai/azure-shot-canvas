@@ -112,7 +112,8 @@
       context.rect(selected.x, selected.y, selected.width, selected.height);
       context.clip();
       const scale = session.scale;
-      for (const shape of drawing ? [...shapes, drawing] : shapes) markup.drawShape(context, shape, { frozen, scale });
+      for (const shape of markup.inOrder(shapes)) markup.drawShape(context, shape, { frozen, scale, live: Boolean(changingShape) && shape === activeShape });
+      if (drawing) markup.drawShape(context, drawing, { frozen, scale, live: true });
       context.restore();
     }
     if (focus) {
@@ -528,7 +529,7 @@
     else if (button.dataset.color) {
       color = button.dataset.color;
       // The chosen mark takes the colour too.
-      if (activeShape && activeShape.type !== 'blur' && activeShape.color !== color) { history.push(snapshot()); activeShape.color = color; schedule(); }
+      if (activeShape && activeShape.type !== 'blur' && activeShape.type !== 'erase' && activeShape.color !== color) { history.push(snapshot()); activeShape.color = color; schedule(); }
       syncToolbar();
     }
     else if (button.dataset.command === 'undo') undo();

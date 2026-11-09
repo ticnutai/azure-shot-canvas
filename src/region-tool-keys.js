@@ -8,7 +8,8 @@
     { tool: 'pen', label: 'עט', title: 'עט', key: 'KeyP' },
     { tool: 'text', label: 'טקסט', title: 'טקסט', key: 'KeyT' },
     { tool: 'blur', label: 'טשטוש', title: 'טשטוש מידע', key: 'KeyB' },
-    { tool: 'number', label: 'מספור', title: 'מספור שלבים', key: 'KeyN' }
+    { tool: 'number', label: 'מספור', title: 'מספור שלבים', key: 'KeyN' },
+    { tool: 'erase', label: 'מחיקה', title: 'מחיקה חכמה', key: 'KeyE' }
   ]);
   // Every key that makes sense alone. Kept out: Escape, Enter, Delete and Backspace have their own work on this screen,
   // the Shift-like keys only change other keys, and Print Screen reaches the page only when it is let go.

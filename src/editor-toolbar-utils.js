@@ -13,6 +13,7 @@
     { id: 'draw', label: 'ציור חופשי', tools: ['pen', 'highlighter'] },
     { id: 'text', label: 'טקסט ומספור', tools: ['text', 'callout', 'counter'] },
     { id: 'hide', label: 'הסתרת מידע', tools: ['redact', 'smart-redact', 'blur', 'pixelate'] },
+    { id: 'erase', label: 'מחיקה חכמה', tools: ['erase', 'erase-brush'] },
     { id: 'focus', label: 'הדגשה', tools: ['spotlight', 'magnify'] },
     { id: 'image', label: 'חיתוך ותמונה', tools: ['crop', 'image'] }
   ];

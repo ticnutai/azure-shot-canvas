@@ -75,7 +75,7 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
 
   test('the keyboard icon lists every tool; a row changes it, Delete leaves a tool without a key', async () => {
     await overlay.locator('[data-command="tool-keys"]').evaluate((button) => button.click());
-    await expect(overlay.locator('[data-key-tool]')).toHaveCount(7);
+    await expect(overlay.locator('[data-key-tool]')).toHaveCount(8);
     await overlay.locator('[data-key-tool="arrow"]').evaluate((row) => row.click());
     await press('Delete', { key: 'Delete' });
     await expect(rowKey('arrow')).toHaveText('אין');

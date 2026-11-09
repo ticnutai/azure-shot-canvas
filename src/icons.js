@@ -61,6 +61,8 @@
     waveform: '<path d="M3 12h1.5M7 8v8M11 5v14M15 9v6M19 11v2"/>',
     select: '<path d="M6 3.5v15.5l4.2-4.3 3 6.3 2.5-1.2-3-6.2H18z"/>',
     layout: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9.5 9v11"/>',
+    eraser: '<path d="M15.6 4.6l3.8 3.8a1.6 1.6 0 0 1 0 2.3L11.2 19H7.4l-3-3a1.6 1.6 0 0 1 0-2.3l8.9-9.1a1.6 1.6 0 0 1 2.3 0z"/><path d="M8.6 9.4l6 6M11.2 19H20"/>',
+    eraserBrush: '<path d="M14 4l6 6-8.5 8.5a2 2 0 0 1-2.8 0L5.5 15.3a2 2 0 0 1 0-2.8z"/><path d="M8 11.5l4.5 4.5"/><path d="M4 20h7"/><path d="M19.5 15.5v3M18 17h3"/>',
     pixelate: '<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 9.3h16M4 14.7h16M9.3 4v16M14.7 4v16"/><path d="M5.5 5.5h2.3v2.3H5.5zM11 11h2.2v2.2H11zM16.2 16.2h2.3v2.3h-2.3zM16.2 5.5h2.3v2.3h-2.3zM5.5 16.2h2.3v2.3H5.5z" fill="currentColor" stroke="none"/>',
     highlighter: '<path d="M9 14.5l-3 3V20h5l3-3"/><path d="M9 14.5L17.5 6a2.1 2.1 0 0 1 3 3L12 17.5z"/><path d="M3 21h18" stroke-opacity=".45" stroke-width="2.6"/>',
     fitCover: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 9.5V8h1.5M16 9.5V8h-1.5M8 14.5V16h1.5M16 14.5V16h-1.5"/>',
@@ -94,7 +96,7 @@
     '⌑': 'folder', '⊼': 'pin', '⇅': 'sort', '◎': 'spotlight', '¶': 'textScan', '◫': 'captions', '◴': 'gauge', '⚡': 'chip',
     '▱': 'drive', '⧉': 'copy', '⌫': 'trash', '▷': 'play', '⛶': 'maximize', '✦': 'sparkle', '⌖': 'select', '➜': 'arrow',
     '↔': 'doubleArrow', '╱': 'line', '⊷': 'ruler', '⬭': 'ellipse', '⬡': 'polygon', '①': 'counter', '□': 'rect', '▧': 'blur',
-    '✱': 'smartRedact', '⚑': 'flag', '✂': 'scissors', '≋': 'waveform', '⇣': 'scrollDown', '⍰': 'help', '⊟': 'layout', '▩': 'pixelate', '▬': 'highlighter', '⤢': 'fitCover', '⊡': 'fitContain', '❝': 'callout', '⊞': 'safeArea', '✒': 'pen', '⊕': 'zoomIn', '⧈': 'imageAdd', '❐': 'duplicate', '⟲': 'history', '✪': 'badge', '＋': 'plus', '−': 'minus', '⊤': 'type', '✕': 'close'
+    '✱': 'smartRedact', '⚑': 'flag', '✂': 'scissors', '≋': 'waveform', '⇣': 'scrollDown', '⍰': 'help', '⊟': 'layout', '▩': 'pixelate', '⌦': 'eraser', '⌧': 'eraserBrush', '▬': 'highlighter', '⤢': 'fitCover', '⊡': 'fitContain', '❝': 'callout', '⊞': 'safeArea', '✒': 'pen', '⊕': 'zoomIn', '⧈': 'imageAdd', '❐': 'duplicate', '⟲': 'history', '✪': 'badge', '＋': 'plus', '−': 'minus', '⊤': 'type', '✕': 'close'
   };
   const pattern = new RegExp(`(${Object.keys(GLYPHS).sort((a, b) => b.length - a.length).join('|')})[ \\u00a0]?`, 'u');
   const SKIP = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'PRE', 'CODE', 'svg', 'TITLE']);
