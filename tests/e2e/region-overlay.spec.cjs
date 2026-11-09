@@ -103,7 +103,7 @@ test.describe.serial('region capture on the frozen screen', () => {
   });
 
   test('copy from the toolbar saves and puts the picture on the clipboard; the area can be resized first', async () => {
-    await app.evaluate(({ clipboard }) => clipboard.clear());
+    await app.evaluate(async () => globalThis.__aurumQa.clipboard.clear());
     const before = new Set(await fs.readdir(outputDir));
     const since = Date.now();
     await pressShortcut('3');
@@ -116,7 +116,7 @@ test.describe.serial('region capture on the frozen screen', () => {
     const dimensions = await pngDimensions(await newPng(before));
     expect(dimensions.width).toBe(Math.round(150 * scale));
     expect(dimensions.height).toBe(Math.round(60 * scale));
-    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readImage().getSize().width)).toBe(Math.round(150 * scale));
+    await expect.poll(() => app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readImage()).getSize().width)).toBe(Math.round(150 * scale));
   });
 
   test('Escape cancels without saving; a click with no window under it takes the whole screen', async () => {
@@ -128,7 +128,7 @@ test.describe.serial('region capture on the frozen screen', () => {
     await overlay.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, bubbles: true })));
     await key(overlay, { key: 'c', code: 'KeyC' });
     await expect(overlay.locator('#note')).toContainText('הועתק קוד הצבע');
-    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toMatch(/^#[0-9A-F]{6}$/);
+    await expect.poll(() => app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readText()))).toMatch(/^#[0-9A-F]{6}$/);
     await expect(overlay.locator('#loupe-info')).toContainText('#');
     await key(overlay, { key: 'Escape' });
     await new Promise((resolve) => setTimeout(resolve, 800));
@@ -153,13 +153,13 @@ test.describe.serial('region capture on the frozen screen', () => {
     await pressShortcut('3');
     let overlay = await openedOverlay(since);
     await expect(overlay.locator('#hint')).toContainText('שחרור — נשמר מיד');
-    await app.evaluate(({ clipboard }) => clipboard.writeText('לפני הצילום'));
+    await app.evaluate(async () => await globalThis.__aurumQa.clipboard.writeText('לפני הצילום'));
     await drag(overlay, { x: 10, y: 10 }, { x: 90, y: 50 });
     const dimensions = await pngDimensions(await newPng(before));
     expect(dimensions.width).toBe(Math.round(80 * scale));
     // On by default: the capture is on the clipboard as a picture (ready to paste), not as text.
-    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readImage().getSize().width)).toBe(Math.round(80 * scale));
-    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('');
+    await expect.poll(() => app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readImage()).getSize().width)).toBe(Math.round(80 * scale));
+    expect(await app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readText()))).toBe('');
     // Control held on release: the toolbar instead, nothing saved yet.
     before = new Set(await fs.readdir(outputDir));
     since = Date.now();
@@ -192,9 +192,9 @@ test.describe.serial('region capture on the frozen screen', () => {
   test('a QR code in the area is read first: its content goes to the clipboard, a link opens from the notice', async () => {
     const QRCode = require('qrcode');
     const png = await QRCode.toBuffer('https://example.com/קוד', { margin: 4, scale: 6 });
-    const result = await app.evaluate(async ({ clipboard }, bytes) => {
+    const result = await app.evaluate(async (_electron, bytes) => {
       const outcome = await globalThis.__aurumQa.copyTextFromImage(Buffer.from(bytes));
-      return { outcome, clipboard: clipboard.readText(), notice: globalThis.__aurumQa.lastNotice };
+      return { outcome, clipboard: (await globalThis.__aurumQa.clipboard.readText()), notice: globalThis.__aurumQa.lastNotice };
     }, [...png]);
     expect(result.outcome).toMatchObject({ code: true });
     expect(result.clipboard).toBe('https://example.com/קוד');

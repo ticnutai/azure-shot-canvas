@@ -56,7 +56,7 @@ test.describe.serial('journal and new extras', () => {
     });
     await expect.poll(() => qa('lastPickedColor'), { timeout: 10_000 }).toMatch(/^#[0-9A-F]{6}$/);
     const picked = await qa('lastPickedColor');
-    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(picked);
+    expect(await app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readText()))).toBe(picked);
     expect(overlay).toBeTruthy();
   });
 

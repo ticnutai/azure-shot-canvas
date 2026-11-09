@@ -29,7 +29,8 @@ test.describe.serial('slim capture strip', () => {
     expect(collapsed.bounds).toMatchObject({ width: 120, y: collapsed.workArea.y });
     // An 18px strip (5px line + a tab with the lens in the middle); Windows may keep the window a few pixels taller.
     // Right after start the window is a little taller for a moment, then settles.
-    await expect.poll(async () => (await barBounds()).bounds.height, { timeout: 5000 }).toBeLessThanOrEqual(24);
+    // (What shows and takes the pointer: the window cut to the tab when Windows keeps it taller.)
+    await expect.poll(() => app.evaluate(({ BrowserWindow }) => { const shape = globalThis.__aurumQa.quickbarShape(); return shape?.length ? shape[0].height : BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).getBounds().height; }), { timeout: 5000 }).toBeLessThanOrEqual(24);
     expect(await strip.locator('#edge-handle').evaluate((node) => node.getBoundingClientRect().height)).toBe(18);
     expect(await strip.locator('#edge-handle span').evaluate((node) => getComputedStyle(node).display)).toBe('block');
     await strip.locator('#edge-handle').click();
@@ -301,7 +302,7 @@ test.describe.serial('slim capture strip', () => {
     await workspace.locator('.item').first().click();
     await expect(workspace.locator('.ribbon [data-item-action="copy"]')).toBeEnabled();
     await workspace.locator('.ribbon [data-item-action="copy"]').click();
-    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readImage().isEmpty())).toBe(false);
+    await expect.poll(() => app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readImage()).isEmpty())).toBe(false);
     await workspace.evaluate(() => { localStorage.setItem('aurum-ws-theme', 'graphite'); });
     await workspace.reload();
     await workspace.waitForFunction(() => document.documentElement.dataset.ready === 'true');

@@ -60,7 +60,7 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
   test('2 · one capture is still copied as a picture', async () => {
     await workspace.locator('.item').first().click();
     await workspace.keyboard.press('Control+C');
-    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readImage().isEmpty())).toBe(false);
+    await expect.poll(() => app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readImage()).isEmpty())).toBe(false);
   });
 
   test('3 · into the edge: open against the right edge and above others; folded it is the small tab only', async () => {

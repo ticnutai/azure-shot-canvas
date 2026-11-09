@@ -79,7 +79,7 @@ test.describe.serial('captures window split in two', () => {
     await expect(win.locator('.ribbon [data-item-action="edit"]')).toBeEnabled();
     await win.locator('.ribbon [data-item-action="copy"]').click();
     await expect(list.locator('#count')).toContainText('הצילום הועתק');
-    await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readImage().isEmpty())).toBe(false);
+    await expect.poll(() => app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readImage()).isEmpty())).toBe(false);
     // Two chosen: the one-capture buttons turn off again.
     await list.locator('.item').nth(1).click({ modifiers: ['Control'] });
     await expect(win.locator('.ribbon [data-item-action="edit"]')).toBeDisabled();
@@ -169,7 +169,8 @@ test.describe.serial('captures window split in two', () => {
     await pointer({ x: wide.x + wide.width, y: wide.y + wide.height });
     await press('se', 'pointerdown', 1);
     await pointer({ x: wide.x + wide.width - 50, y: wide.y + wide.height - 2000 });
-    await expect.poll(async () => (await bounds()).height).toBe(380);
+    // (On a double-density screen Windows may round the smallest height up by a point.)
+    await expect.poll(async () => Math.abs((await bounds()).height - 380) <= 1).toBe(true);
     expect((await bounds()).width).toBe(wide.width - 50);
     await press('se', 'pointerup', 0);
     // Let go: moving the pointer no longer changes the window.

@@ -1,6 +1,6 @@
 {
   "name": "hebrew-screen-studio",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "description": "אולפן צילום והקלטת מסך מקומי ל-Windows",
   "main": "src/main.cjs",
   "author": "Screen Studio",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "electron": "^39.0.0",
+    "electron": "^45.2.3",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.25.9",
     "fabric": "^7.4.0",

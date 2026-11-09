@@ -42,12 +42,12 @@ test.describe.serial('the floating panel: pictures, copy on click, handles', () 
   });
 
   test('2 · a click on a picture copies it to the clipboard', async () => {
-    await app.evaluate(({ clipboard }) => clipboard.clear());
+    await app.evaluate(async () => globalThis.__aurumQa.clipboard.clear());
     await bar().locator('#show-gallery').click();
     await expect(bar().locator('.history-item')).toHaveCount(2);
     await bar().locator('.history-item').first().click();
     await expect(bar().locator('.history-item.copied')).toHaveCount(1);
-    const copied = await app.evaluate(({ clipboard }) => { const image = clipboard.readImage(); return image.isEmpty() ? null : image.getSize(); });
+    const copied = await app.evaluate(async () => { const image = (await globalThis.__aurumQa.clipboard.readImage()); return image.isEmpty() ? null : image.getSize(); });
     expect(copied).toEqual({ width: 160, height: 90 });
     await expect(bar().locator('html')).toHaveAttribute('data-view', 'history');
     await bar().locator('#history-gallery').click();

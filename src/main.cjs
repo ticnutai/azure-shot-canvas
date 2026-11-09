@@ -1,4 +1,5 @@
-const { app, BrowserWindow, clipboard, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, Notification, protocol, screen, session, shell, Tray } = require('electron');
+const { app, BrowserWindow, desktopCapturer, dialog, globalShortcut, ipcMain, Menu, nativeImage, net, Notification, protocol, screen, session, shell, Tray } = require('electron');
+const clip = require('./clipboard-access.cjs');
 // A test run must not disturb whoever works at this computer: its windows open as usual (the tests need them really
 // shown) but are fully see-through, clicks pass through them, and none of them takes the focus or the front. The opacity
 // a window asks for is remembered, so the pictures' pin can still be tested.
@@ -192,7 +193,7 @@ let lastNotice = null;
 let lastTranslation = '';
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ liveDraw, recordSchedule, appJournal, expiredNow, runAutoClean, setWatermarkLogo, lastPickedColor, lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), ...(process.env.SCREEN_STUDIO_QA === '1' ? { exportSettings, importSettings, deliverCapture, restoreAutostart, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ liveDraw, recordSchedule, appJournal, expiredNow, runAutoClean, setWatermarkLogo, lastPickedColor, lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), quickbarShape: () => quickbarShape, ...(process.env.SCREEN_STUDIO_QA === '1' ? { clipboard: clip, exportSettings, importSettings, deliverCapture, restoreAutostart, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -478,6 +479,10 @@ function positionQuickbar(expanded = quickbarExpanded, { onlyIfMoved = false } =
   if (!quickbarExpanded) { quickbarView = 'actions'; quickbarMenu = false; quickbarWindow.setFocusable(false); setCardKeys(null); }
   lastQuickbarTarget = quickbarBounds(quickbarExpanded);
   quickbarWindow.setBounds(lastQuickbarTarget, false);
+  fitQuickbarShape(lastQuickbarTarget);
+  // Windows may settle the size a moment later: the cut is checked once more.
+  const settledTarget = lastQuickbarTarget;
+  setTimeout(() => { if (settledTarget === lastQuickbarTarget) fitQuickbarShape(settledTarget); }, 200);
   quickbarWindow.setAlwaysOnTop(true, 'floating');
   // With the bar switched off, the window only exists to show the capture card: no edge tab once it closes.
   const canShow = process.env.SCREEN_STUDIO_QA !== '1' && process.env.SCREEN_STUDIO_HEADLESS !== '1';
@@ -486,6 +491,19 @@ function positionQuickbar(expanded = quickbarExpanded, { onlyIfMoved = false } =
     else quickbarWindow.hide();
   } else if (canShow && !quickbarWindow.isVisible()) quickbarWindow.showInactive();
   syncMenuEscape();
+}
+// Windows keeps a window at least ~36 points tall (since Electron 44 nothing turns that off), so the folded 18-point
+// tab would be a taller window whose see-through part still took the clicks meant for what is under it (a browser's
+// tabs at the top of the screen). The window is cut to exactly the size asked for; the rest is not part of it.
+let quickbarShape = null;
+function fitQuickbarShape(wanted) {
+  if (!quickbarWindow || quickbarWindow.isDestroyed() || typeof quickbarWindow.setShape !== 'function') return;
+  const actual = quickbarWindow.getBounds();
+  const bigger = actual.width > wanted.width || actual.height > wanted.height;
+  const next = bigger ? [{ x: Math.max(0, wanted.x - actual.x), y: Math.max(0, wanted.y - actual.y), width: wanted.width, height: wanted.height }] : [];
+  if (JSON.stringify(next) === JSON.stringify(quickbarShape)) return;
+  quickbarShape = next;
+  try { quickbarWindow.setShape(next); } catch {}
 }
 function updateQuickbarCursorTracking() {
   clearInterval(quickbarCursorTimer);
@@ -577,10 +595,10 @@ async function runLibraryAction(filePath, action, options = {}) {
     if (IMAGE_FILE.test(resolved)) {
       const image = await clipboardImageFor(resolved);
       if (!image) throw new Error('לא ניתן להעתיק את התמונה ללוח');
-      clipboard.writeImage(image);
+      await clip.writeImage(image);
       return { action, path: resolved, image: true };
     }
-    clipboard.writeText(resolved);
+    await clip.writeText(resolved);
     return { action, path: resolved };
   }
   if (action === 'ocr') {
@@ -598,7 +616,7 @@ async function runLibraryAction(filePath, action, options = {}) {
     await fs.copyFile(resolved, target);
     return { action, path: target };
   }
-  if (action === 'share') { const share = await privateShareServer.share(resolved, 30); clipboard.writeText(share.url); return { action, ...share }; }
+  if (action === 'share') { const share = await privateShareServer.share(resolved, 30); await clip.writeText(share.url); return { action, ...share }; }
   if (action === 'open-folder') { shell.showItemInFolder(resolved); return { action, path: resolved }; }
   if (action === 'pin') return { action, ...(await pinImageWindow(resolved)) };
   return { action, renderer: true, path: resolved };
@@ -629,8 +647,8 @@ async function pinImageWindow(resolved) {
 }
 // What is on the clipboard now: a picture, a colour or a text, pinned as it is.
 async function pinClipboard() {
-  const image = clipboard.readImage();
-  const picked = classifyClipboard({ hasImage: !image.isEmpty(), text: clipboard.readText() });
+  const image = await clip.readImage();
+  const picked = classifyClipboard({ hasImage: !image.isEmpty(), text: await clip.readText() });
   if (picked.kind === 'none') return { pinned: false, message: 'בלוח אין כרגע תמונה, טקסט או צבע להצמדה' };
   if (picked.kind === 'image') { const size = image.getSize(); return openPin({ kind: 'image', dataUrl: image.toDataURL(), width: size.width, height: size.height }); }
   return openPin(picked);
@@ -692,7 +710,7 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture', afterOverr
       delay: purpose === 'capture' ? quickbarPreferences.captureDelay : 0, countdown: showCountdown
     });
     if (result?.color) {
-      clipboard.writeText(result.color);
+      await clip.writeText(result.color);
       lastPickedColor = result.color;
       notify('קוד הצבע הועתק ללוח', result.color);
       return { color: result.color };
@@ -715,7 +733,7 @@ async function runRegionCapture(mode = 'pick', { purpose = 'capture', afterOverr
     if (!result?.png) return result;
     if (result.after === 'ocr') return copyTextFromImage(result.png);
     // Copy at once (the clipboard has the picture even while the studio is still saving it).
-    if (!noClipboard && (result.after === 'copy' || quickbarPreferences.autoCopy)) clipboard.writeImage(nativeImage.createFromBuffer(result.png));
+    if (!noClipboard && (result.after === 'copy' || quickbarPreferences.autoCopy)) await clip.writeImage(result.png);
     // The action after saving: chosen for this very capture, else the one of this kind of shortcut (an extra), else the general one.
     await deliverCapture({ png: result.png, width: result.width, height: result.height, after: result.after || 'save', title: result.title || '', afterAction: afterOverride || afterActionFor(scrolled ? 'scroll' : 'region') });
     return { captured: true, width: result.width, height: result.height, after: result.after || 'save', marks: result.marks || 0 };
@@ -733,7 +751,7 @@ async function copyTextFromImage(png) {
     const size = image.getSize();
     const code = readCode(image.toBitmap(), size.width, size.height);
     if (code) {
-      clipboard.writeText(code);
+      await clip.writeText(code);
       lastOcrText = code;
       notify('נקרא קוד — התוכן הועתק ללוח', isOpenableLink(code) ? `${code.slice(0, 110)}\nלחיצה כאן פותחת את הקישור` : code.slice(0, 120), isOpenableLink(code) ? () => shell.openExternal(code) : null);
       return { ocr: true, code: true, characters: code.length };
@@ -749,17 +767,17 @@ async function copyTextFromImage(png) {
     if (text && featureOn('translate')) {
       try {
         const translation = await translateText(text, { address: featureValue('translate', 'address'), model: featureValue('translate', 'model'), target: featureValue('translate', 'target') });
-        clipboard.writeText(translation.text);
+        await clip.writeText(translation.text);
         lastTranslation = translation.text;
         notify(`הטקסט תורגם ל${featureValue('translate', 'target')} והועתק ללוח`, translation.text.slice(0, 120));
         return { ocr: true, characters: text.length, translated: true };
       } catch (error) {
-        clipboard.writeText(text);
+        await clip.writeText(text);
         notify('התרגום לא בוצע — הטקסט המקורי הועתק', error.message);
         return { ocr: true, characters: text.length, translated: false, translateError: error.message };
       }
     }
-    if (text) clipboard.writeText(text);
+    if (text) await clip.writeText(text);
     notify(text ? 'הטקסט הועתק ללוח' : 'לא נמצא טקסט באזור', text ? text.slice(0, 120) : 'נסו לבחור אזור גדול יותר או ברור יותר');
     return { ocr: true, characters: text.length };
   } catch (error) {
@@ -1701,7 +1719,7 @@ function registerIpc() {
     // Every capture lands on the clipboard as a picture, ready to paste (PDF pages are JPEG inside).
     if (quickbarPreferences.autoCopy) {
       const image = format === 'webp' ? await clipboardImageFor(filePath) : nativeImage.createFromBuffer(data);
-      if (image && !image.isEmpty()) clipboard.writeImage(image);
+      if (image && !image.isEmpty()) await clip.writeImage(image);
     }
     return { path: filePath };
   });
@@ -1832,7 +1850,7 @@ function registerIpc() {
   ipcMain.handle('library:share-local', async (_event, filePath) => {
     const resolved = await assertLibraryFile(filePath);
     const share = await privateShareServer.share(resolved, 30);
-    clipboard.writeText(share.url);
+    await clip.writeText(share.url);
     return { ...share, path: resolved };
   });
   ipcMain.handle('library:analyze', async (_event, filePath) => {
@@ -1941,7 +1959,7 @@ function registerIpc() {
   ipcMain.handle('editor:copy-image', async (_event, dataUrl) => {
     const image = nativeImage.createFromDataURL(dataUrl);
     if (image.isEmpty()) throw new Error('לא ניתן להעתיק את התמונה');
-    clipboard.writeImage(image);
+    await clip.writeImage(image);
     return true;
   });
   ipcMain.handle('output:open', async () => shell.openPath(await ensureOutputDirectory()));
@@ -2202,7 +2220,7 @@ function registerIpc() {
   });
   ipcMain.handle('qa:status', qaStatus);
   ipcMain.handle('qa:run', runQa);
-  ipcMain.handle('qa:copy', (_event, text) => { clipboard.writeText(String(text || '')); return true; });
+  ipcMain.handle('qa:copy', async (_event, text) => { await clip.writeText(String(text || '')); return true; });
   ipcMain.handle('qa:open-report', async () => {
     const status = await qaStatus();
     return status.report ? shell.openPath(status.reportPath) : 'אין עדיין דוח QA';

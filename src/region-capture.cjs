@@ -2,7 +2,8 @@
 // drags (or clicks a window) right on the real screen, and the selection is cut from that frozen image — no
 // studio window, no preview stream. Overlay windows are created once per screen and reused, so later
 // captures open instantly.
-const { BrowserWindow, clipboard, desktopCapturer, globalShortcut, ipcMain, nativeImage, screen } = require('electron');
+const { BrowserWindow, desktopCapturer, globalShortcut, ipcMain, nativeImage, screen } = require('electron');
+const clip = require('./clipboard-access.cjs');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -35,7 +36,7 @@ class RegionCapture {
     ipcMain.on('region:finish', (event, displayId, rect, options = {}) => { if (owner(event)) this.active?.resolve({ displayId: String(displayId), rect, options: options || {} }); });
     ipcMain.on('region:cancel', (event) => { if (owner(event)) this.active?.resolve(null); });
     ipcMain.on('region:journal', (event, lines) => { if (owner(event)) this.writeJournal(lines); });
-    ipcMain.handle('region:copy-text', (event, text) => { if (!owner(event)) throw new Error('בקשה ממקור לא מורשה'); const value = String(text || '').slice(0, 64); if (/^#[0-9A-F]{6}$/i.test(value)) clipboard.writeText(value); return value; });
+    ipcMain.handle('region:copy-text', async (event, text) => { if (!owner(event)) throw new Error('בקשה ממקור לא מורשה'); const value = String(text || '').slice(0, 64); if (/^#[0-9A-F]{6}$/i.test(value)) await clip.writeText(value); return value; });
     ipcMain.handle('region:save-area', (event, displayId, rect) => { if (!owner(event)) throw new Error('בקשה ממקור לא מורשה'); return this.saveArea(String(displayId), rect); });
   }
 

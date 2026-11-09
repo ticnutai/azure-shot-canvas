@@ -112,8 +112,8 @@ test.describe.serial('optional extras', () => {
     const refused = await page.evaluate(() => window.screenStudio.featureAction('pin-clipboard'));
     expect(refused.message).toContain('הדליקו קודם');
     await setFeatures({ enabled: { pinPlus: true } });
-    const open = async (text) => { await app.evaluate(({ clipboard }, value) => clipboard.writeText(value), text); const before = await pinWindows(); await page.evaluate(() => window.screenStudio.featureAction('pin-clipboard')); await expect.poll(pinWindows, { timeout: 15_000 }).toBe(before + 1); };
-    await app.evaluate(({ clipboard }) => clipboard.clear());
+    const open = async (text) => { await app.evaluate(async (_electron, value) => await globalThis.__aurumQa.clipboard.writeText(value), text); const before = await pinWindows(); await page.evaluate(() => window.screenStudio.featureAction('pin-clipboard')); await expect.poll(pinWindows, { timeout: 15_000 }).toBe(before + 1); };
+    await app.evaluate(async () => globalThis.__aurumQa.clipboard.clear());
     expect((await page.evaluate(() => window.screenStudio.featureAction('pin-clipboard'))).message).toContain('אין כרגע');
     await open('טקסט להצמדה <b>לא נדלק</b>');
     await open('#336699');
@@ -140,7 +140,7 @@ test.describe.serial('optional extras', () => {
     await act(colorPin.id, 'dispatchEvent(new WheelEvent("wheel", { deltaY: -100, cancelable: true }))');
     await expect.poll(async () => (await act(colorPin.id, '0')).bounds.width).toBeGreaterThan(start.width);
     // A picture on the clipboard is pinned as a picture.
-    await app.evaluate(({ clipboard, nativeImage }, bytes) => clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(bytes))), await textPicture('Pin'));
+    await app.evaluate(async ({ nativeImage }, bytes) => await globalThis.__aurumQa.clipboard.writeImage(nativeImage.createFromBuffer(Buffer.from(bytes))), await textPicture('Pin'));
     const before = await pinWindows();
     await page.evaluate(() => window.screenStudio.featureAction('pin-clipboard'));
     await expect.poll(pinWindows, { timeout: 15_000 }).toBe(before + 1);
@@ -194,7 +194,7 @@ test.describe.serial('optional extras', () => {
     const address = `http://127.0.0.1:${engine.address().port}`;
     try {
       const picture = await textPicture('Hello World');
-      const recognise = () => app.evaluate(async ({ clipboard }, bytes) => { clipboard.writeText('before'); const outcome = await globalThis.__aurumQa.copyTextFromImage(Buffer.from(bytes)); return { outcome, clipboard: clipboard.readText() }; }, picture);
+      const recognise = () => app.evaluate(async (_electron, bytes) => { await globalThis.__aurumQa.clipboard.writeText('before'); const outcome = await globalThis.__aurumQa.copyTextFromImage(Buffer.from(bytes)); return { outcome, clipboard: (await globalThis.__aurumQa.clipboard.readText()) }; }, picture);
       // Off: the text is copied as it was recognised, the engine is never asked.
       const plain = await recognise();
       expect(plain.outcome.translated).toBeUndefined();
@@ -215,7 +215,7 @@ test.describe.serial('optional extras', () => {
       }
     } finally { await new Promise((resolve) => engine.close(resolve)); }
     // Engine down: the original text is copied and the notice says why.
-    const down = await app.evaluate(async ({ clipboard }, bytes) => { const outcome = await globalThis.__aurumQa.copyTextFromImage(Buffer.from(bytes)); return { outcome, clipboard: clipboard.readText(), notice: globalThis.__aurumQa.lastNotice }; }, await textPicture('Hello World'));
+    const down = await app.evaluate(async (_electron, bytes) => { const outcome = await globalThis.__aurumQa.copyTextFromImage(Buffer.from(bytes)); return { outcome, clipboard: (await globalThis.__aurumQa.clipboard.readText()), notice: globalThis.__aurumQa.lastNotice }; }, await textPicture('Hello World'));
     {
       expect(down.outcome.translated).toBe(false);
       expect(down.clipboard).not.toBe('שלום מהמנוע המקומי');

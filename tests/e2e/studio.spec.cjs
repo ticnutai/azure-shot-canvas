@@ -460,7 +460,8 @@ test.describe('Electron production workflow', () => {
     });
     expect(topBounds.bounds).toMatchObject({ width: 120, y: topBounds.workArea.y });
     expect(topBounds.bounds.height).toBeGreaterThanOrEqual(18);
-    await expect.poll(async () => (await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).getBounds().height))).toBeLessThanOrEqual(24);
+    // What shows and takes the pointer: the window, cut to the tab when Windows keeps it taller (see fitQuickbarShape).
+    await expect.poll(() => app.evaluate(({ BrowserWindow }) => { const shape = globalThis.__aurumQa.quickbarShape(); return shape?.length ? shape[0].height : BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).getBounds().height; })).toBeLessThanOrEqual(24);
 
     await page.locator('#quickbar-activation').selectOption('hover');
     await expect(quickbarPage.locator('body')).toHaveAttribute('data-activation', 'hover');
@@ -642,7 +643,7 @@ test.describe('Electron production workflow', () => {
     await expect.poll(async () => fs.stat(clientCopy).then((stat) => stat.size).catch(() => 0)).toBeGreaterThan(1000);
     const metadata = JSON.parse(await fs.readFile(`${screenshotPath}.meta.json`, 'utf8'));
     expect(metadata.ocrText.length).toBeGreaterThan(3);
-    const clipboardImage = await app.evaluate(({ clipboard }) => clipboard.readImage().getSize());
+    const clipboardImage = await app.evaluate(async () => (await globalThis.__aurumQa.clipboard.readImage()).getSize());
     expect(clipboardImage.width).toBeGreaterThan(0);
     await page.locator('[data-page="settings"]').click();
     await page.locator('[data-preference-tab="workflows"]').click();
@@ -1199,17 +1200,17 @@ test.describe('Electron production workflow', () => {
     await expect(card.locator('#capture-thumb')).toHaveAttribute('src', /^aurum-thumb:\/\/t\/[0-9a-f]{40}\.jpg$/);
     await expect.poll(() => card.locator('#capture-thumb').evaluate((image) => image.complete && image.naturalWidth > 0)).toBe(true);
 
-    await app.evaluate(({ clipboard }) => clipboard.clear());
+    await app.evaluate(async () => globalThis.__aurumQa.clipboard.clear());
     await card.locator('[data-capture-action="copy"]').click();
-    await expect.poll(() => app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty())).toBe(true);
+    await expect.poll(() => app.evaluate(async () => !(await globalThis.__aurumQa.clipboard.readImage()).isEmpty())).toBe(true);
 
     // Card keys: live only while the pointer is over the card, run the same handler as the buttons.
     await card.locator('#quickbar').dispatchEvent('mouseenter');
     await expect(card.locator('html')).toHaveAttribute('data-card-keys', '7');
-    await app.evaluate(({ clipboard }) => clipboard.clear());
+    await app.evaluate(async () => globalThis.__aurumQa.clipboard.clear());
     const sendCardKey = (action) => app.evaluate(({ BrowserWindow }, key) => BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('quickbar.html')).webContents.send('quickbar:card-key', key), action);
     await sendCardKey('copy');
-    await expect.poll(() => app.evaluate(({ clipboard }) => !clipboard.readImage().isEmpty())).toBe(true);
+    await expect.poll(() => app.evaluate(async () => !(await globalThis.__aurumQa.clipboard.readImage()).isEmpty())).toBe(true);
     await card.locator('#quickbar').dispatchEvent('mouseleave');
     await expect(card.locator('html')).toHaveAttribute('data-card-keys', '0');
     const pinWindows = () => app.windows().filter((candidate) => candidate.url().startsWith('data:text/html'));
