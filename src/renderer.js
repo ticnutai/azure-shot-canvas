@@ -2538,7 +2538,7 @@ async function refreshEngineStatus() {
     const entries = [
       ['כלי הווידאו', engines.ffmpeg, videoDetail], ['בודק הווידאו', engines.ffprobe, videoDetail],
       ['זיהוי טקסט', engines.ocr, `${engines.ocr?.builtIn ? 'מובנה בתוכנה · ' : ''}${(engines.ocr?.languages || []).map((code) => languageNames[code] || code).join(', ') || 'ללא שפות'}`],
-      ['תמלול מקומי', engines.transcription, engines.transcription?.available ? 'שרת התמלול עונה' : 'שרת התמלול לא פועל']
+      ['תמלול מקומי', engines.transcription, engines.transcription?.local ? `מנוע שכבר במחשב · מודל ${engines.transcription.model}` : engines.transcription?.available ? 'שרת התמלול עונה' : 'לא נמצא מנוע תמלול במחשב']
     ];
     container.innerHTML = entries.map(([name, engine, detail]) => `<article><small>${escapeHtml(name)}</small><b class="${engine?.available ? 'ok' : 'missing'}">${engine?.available ? '● זמין וקיים' : '○ לא זמין'}</b><span>${escapeHtml(detail || '—')}</span></article>`).join('');
     // No video tool on this computer: one button downloads it into the program (about 110 MB, once).

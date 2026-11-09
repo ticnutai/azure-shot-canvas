@@ -51,6 +51,10 @@ const { RecordingControls } = require('./recording-controls.cjs');
 const { AppJournal } = require('./app-journal.cjs');
 const { AiModel, MODEL: AI_MODEL } = require('./ai-model.cjs');
 const { VideoTools, VIDEO_TOOLS } = require('./video-tools.cjs');
+const { LocalTranscriber } = require('./local-transcriber.cjs');
+// Transcription with the engine already on this computer, when there is no transcription server (nothing is downloaded).
+let localTranscriber = null;
+const transcriber = () => localTranscriber || (localTranscriber = new LocalTranscriber({ run: runHidden, workDirectory: path.join(app.getPath('userData'), 'transcription') }));
 const { expiredCaptures } = require('./auto-clean.cjs');
 const { LiveDraw } = require('./live-draw.cjs');
 const { RecordSchedule } = require('./record-schedule.cjs');
@@ -1801,7 +1805,7 @@ function registerIpc() {
   });
   ipcMain.handle('storage:status', storageStatus);
   ipcMain.handle('tools:engines', async () => {
-    const engines = await discoverLocalEngines();
+    const engines = await discoverLocalEngines({ localTranscriber: transcriber() });
     try { await ensureOcrLanguageData(); engines.ocr.languages = [...new Set([...(engines.ocr.languages || []), 'heb'])]; engines.ocr.hebrewBundled = true; } catch {}
     return engines;
   });
@@ -1861,7 +1865,7 @@ function registerIpc() {
   });
   ipcMain.handle('library:transcribe', async (_event, filePath) => {
     const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
-    const result = await transcribeMedia(resolved, { language: 'he' });
+    const result = await transcribeMedia(resolved, { language: 'he', localTranscriber: transcriber() });
     await updateMetadata(resolved, { transcriptText: result.text, transcriptPath: result.transcriptPath, srtPath: result.srtPath, transcribedAt: new Date().toISOString() });
     return result;
   });

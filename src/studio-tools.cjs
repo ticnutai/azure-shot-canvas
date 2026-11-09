@@ -59,12 +59,14 @@ async function discoverLocalEngines(options = {}) {
   const transcriptionUrl = options.transcriptionUrl || DEFAULT_TRANSCRIPTION_URL;
   let whisper = null;
   try { whisper = await fetchJson(`${transcriptionUrl}/health`, {}, 2_500); } catch {}
+  // No server: the engine already on this computer (Python with faster-whisper and a model already there).
+  const local = !whisper && options.localTranscriber ? await options.localTranscriber.find().catch(() => null) : null;
   return {
     ffmpeg: { available: ffmpeg.ok, version: ffmpeg.stdout.split(/\r?\n/)[0] || null },
     ffprobe: { available: ffprobe.ok, version: ffprobe.stdout.split(/\r?\n/)[0] || null },
     // Reading text always works (built-in engine); the list shows the separate program's languages when it is there.
     ocr: { available: true, builtIn: !tesseract.ok, languages: languages.stdout.split(/\r?\n/).filter((line) => /^[a-z]{3}$/i.test(line.trim())).map((line) => line.trim()) },
-    transcription: { available: Boolean(whisper), url: transcriptionUrl, model: whisper?.current_model || whisper?.model || null },
+    transcription: { available: Boolean(whisper || local?.available), url: whisper ? transcriptionUrl : null, local: Boolean(!whisper && local?.available), model: whisper?.current_model || whisper?.model || local?.model?.name || null },
     duplicatePolicy: 'reuse-existing-only'
   };
 }
@@ -137,19 +139,25 @@ function wordsToSrt(words = [], maxWords = 9) {
 async function transcribeMedia(filePath, options = {}) {
   const baseUrl = options.transcriptionUrl || DEFAULT_TRANSCRIPTION_URL;
   const health = await fetchJson(`${baseUrl}/health`, {}, 3_000).catch(() => null);
-  if (!health) throw new Error('מנוע התמלול המקומי הקיים אינו פעיל');
-  const bytes = await fs.readFile(filePath);
-  const form = new FormData();
-  form.append('file', new Blob([bytes]), path.basename(filePath));
-  form.append('language', options.language || 'he');
-  form.append('normalize', '0');
-  const result = await fetchJson(`${baseUrl}/transcribe`, { method: 'POST', body: form }, options.timeoutMs || 3_600_000);
-  const transcript = { ...result, sourcePath: filePath, createdAt: new Date().toISOString(), engineUrl: baseUrl };
+  let result;
+  let engine = baseUrl;
+  if (health) {
+    const bytes = await fs.readFile(filePath);
+    const form = new FormData();
+    form.append('file', new Blob([bytes]), path.basename(filePath));
+    form.append('language', options.language || 'he');
+    form.append('normalize', '0');
+    result = await fetchJson(`${baseUrl}/transcribe`, { method: 'POST', body: form }, options.timeoutMs || 3_600_000);
+  } else if (options.localTranscriber && (await options.localTranscriber.find()).available) {
+    result = await options.localTranscriber.transcribe(filePath, { language: options.language || 'he' });
+    engine = `local:${result.model}`;
+  } else throw new Error('לא נמצא מנוע תמלול: אין שרת תמלול פעיל, ואין במחשב פייתון עם ספריית התמלול ומודל שכבר הורד');
+  const transcript = { ...result, sourcePath: filePath, createdAt: new Date().toISOString(), engineUrl: engine };
   const transcriptPath = `${filePath}.transcript.json`;
   const srtPath = `${filePath}.srt`;
   await fs.writeFile(transcriptPath, JSON.stringify(transcript, null, 2), 'utf8');
   await fs.writeFile(srtPath, wordsToSrt(result.wordTimings || []), 'utf8');
-  return { text: result.text || '', transcriptPath, srtPath, wordCount: (result.wordTimings || []).length, duration: result.duration || 0 };
+  return { text: result.text || '', transcriptPath, srtPath, wordCount: (result.wordTimings || []).length, duration: result.duration || 0, engine };
 }
 
 // The separate program when it is installed (and not turned off for tests), the built-in engine otherwise.
