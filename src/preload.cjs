@@ -72,6 +72,13 @@ contextBridge.exposeInMainWorld('screenStudio', {
   onRecordingClick: (callback) => ipcRenderer.on('recording:click', (_event, click) => callback(click)),
   setFeatures: (patch) => ipcRenderer.invoke('features:set', patch),
   featureAction: (id) => ipcRenderer.invoke('features:action', id),
+  aiModelStatus: () => ipcRenderer.invoke('ai-model:status'),
+  aiModel: () => ipcRenderer.invoke('ai-model:read'),
+  aiModelDownload: (onProgress) => {
+    const listener = (_event, received, total) => onProgress?.(received, total);
+    ipcRenderer.on('ai-model:progress', listener);
+    return ipcRenderer.invoke('ai-model:download').finally(() => ipcRenderer.removeListener('ai-model:progress', listener));
+  },
   watermarkLogo: () => ipcRenderer.invoke('features:watermark-logo'),
   onFeatures: (callback) => ipcRenderer.on('app:features', (_event, value) => callback(value)),
   exportSettings: (local) => ipcRenderer.invoke('settings:export', local),

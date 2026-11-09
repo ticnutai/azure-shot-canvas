@@ -49,6 +49,7 @@ const { WindowList } = require('./window-list.cjs');
 const { Updater } = require('./updater.cjs');
 const { RecordingControls } = require('./recording-controls.cjs');
 const { AppJournal } = require('./app-journal.cjs');
+const { AiModel, MODEL: AI_MODEL } = require('./ai-model.cjs');
 const { expiredCaptures } = require('./auto-clean.cjs');
 const { LiveDraw } = require('./live-draw.cjs');
 const { RecordSchedule } = require('./record-schedule.cjs');
@@ -1979,6 +1980,25 @@ function registerIpc() {
   ipcMain.handle('update:check', async () => ({ ...(await updater?.check() || { status: 'unavailable' }), current: app.getVersion() }));
   ipcMain.handle('update:install', () => Boolean(updater?.installNow()));
   ipcMain.handle('features:get', () => features);
+  // The erasing model: downloaded once on request (a test run may point it at a local copy).
+  const aiModel = new AiModel({
+    directory: app.getPath('userData'),
+    fetchImpl: (url) => net.fetch(url),
+    model: process.env.SCREEN_STUDIO_QA === '1' && process.env.SCREEN_STUDIO_AI_MODEL_URL ? { ...AI_MODEL, url: process.env.SCREEN_STUDIO_AI_MODEL_URL } : AI_MODEL
+  });
+  ipcMain.handle('ai-model:status', (event) => (isTrustedSender(event) ? aiModel.status() : null));
+  ipcMain.handle('ai-model:read', (event) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return aiModel.read(); });
+  ipcMain.handle('ai-model:download', async (event) => {
+    if (!isTrustedSender(event)) throw new Error('לא מורשה');
+    let last = 0;
+    const result = await aiModel.download((received, total) => {
+      if (received - last < 512 * 1024 && received < total) return;
+      last = received;
+      if (!event.sender.isDestroyed()) event.sender.send('ai-model:progress', received, total);
+    });
+    appJournal.write('מודל המחיקה בבינה מלאכותית הורד');
+    return result;
+  });
   ipcMain.handle('features:watermark-logo', async () => fs.readFile(watermarkLogoPath()).catch(() => null));
   ipcMain.handle('features:action', (event, id) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return featureAction(String(id)); });
   ipcMain.on('pin:resize', (event, factor) => {

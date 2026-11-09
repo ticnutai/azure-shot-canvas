@@ -62,6 +62,37 @@
     $$('[data-editor-mode]').forEach((button) => button.classList.toggle('active', button.dataset.editorMode === mode));
   };
 
+  // ---- The artificial intelligence model for erasing: its state, its one-time download -------------------------------
+  const aiState = { ready: false, downloading: false };
+  function setAiStatus(text) {
+    const status = $('#editor-ai-status');
+    const button = $('#editor-ai-download');
+    if (!status) return;
+    status.textContent = text || (aiState.ready ? 'בינה מלאכותית: מוכנה. במצב אוטומטי היא משמשת לתמונות עשירות.' : aiState.downloading ? 'בינה מלאכותית: מורידה…' : 'בינה מלאכותית: עוד לא הורדה. לתמונות, לאנשים ולחפצים.');
+    if (button) button.hidden = aiState.ready || aiState.downloading;
+    shell.dataset.aiReady = String(aiState.ready);
+  }
+  async function refreshAi() {
+    if (!window.AurumAiErase) { const row = $('#editor-ai-row'); if (row) row.hidden = true; return; }
+    try { Object.assign(aiState, await window.AurumAiErase.status()); } catch {}
+    setAiStatus();
+  }
+  $('#editor-ai-download')?.addEventListener('click', async () => {
+    aiState.downloading = true;
+    setAiStatus();
+    try {
+      await window.AurumAiErase.download((received, total) => setAiStatus(`בינה מלאכותית: מורידה… ${Math.round((received / total) * 100)}%`));
+      aiState.ready = true;
+    } catch (error) {
+      setAiStatus(`ההורדה לא הצליחה: ${error.message}`);
+      aiState.downloading = false;
+      return;
+    }
+    aiState.downloading = false;
+    setAiStatus();
+  });
+  refreshAi();
+
   const createEngine = () => {
     engine?.dispose();
     const canvas = document.createElement('canvas');
@@ -72,11 +103,22 @@
       getEraseOptions: () => {
         const own = $('#editor-erase-own')?.checked;
         const hex = $('#editor-erase-color')?.value || '#ffffff';
-        return { method: own ? 'solid' : ($('#editor-erase-method')?.value || 'auto'), color: own ? [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).concat(255) : null };
+        return { method: own ? 'solid' : ($('#editor-erase-method')?.value || 'auto'), color: own ? [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16)).concat(255) : null, aiReady: aiState.ready };
+      },
+      // Artificial intelligence: only once its model is on this computer.
+      aiInpaint: window.AurumAiErase ? async (image, mask) => {
+        if (!aiState.ready) throw new Error('צריך קודם להוריד את מודל הבינה המלאכותית (הכפתור בלוח המחיקה)');
+        setAiStatus('בינה מלאכותית: עובדת על התמונה…');
+        try { return await window.AurumAiErase.inpaint(image, mask); } finally { setAiStatus(); }
+      } : null,
+      onEraseError: (error) => {
+        const note = $('#editor-erase-result');
+        if (note) note.textContent = `המחיקה לא בוצעה: ${error.message}`;
+        shell.dataset.lastErase = 'error';
       },
       onErase: (result) => {
         const names = window.AurumSmartErase?.METHOD_NAMES || {};
-        const text = `נמחק. המקום מולא ב${names[result.method] || 'רקע'}${result.method === 'solid' ? ` (${result.hex})` : ''}.`;
+        const text = result.method === 'ai' ? 'נמחק. המקום מולא בבינה מלאכותית.' : `נמחק. המקום מולא ב${names[result.method] || 'רקע'}${result.method === 'solid' ? ` (${result.hex})` : ''}.`;
         const note = $('#editor-erase-result');
         if (note) note.textContent = text;
         shell.dataset.lastErase = result.method;

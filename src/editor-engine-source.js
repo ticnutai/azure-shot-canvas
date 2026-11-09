@@ -472,7 +472,10 @@ class AurumImageEditorEngine {
   async eraseArea(box, paintMask) {
     const source = this.backgroundImageElement;
     if (!source) return null;
-    const pad = 24;
+    const options = this.hooks.getEraseOptions?.() || {};
+    // Artificial intelligence sees more of the picture around the place, to know what belongs there.
+    const wantsAi = options.method === 'ai' || (options.method !== 'solid' && options.method !== 'lines' && options.method !== 'smooth' && options.aiReady);
+    const pad = wantsAi ? Math.round(clamp(Math.max(box.width, box.height) * 0.75, 48, 400)) : 24;
     const fullWidth = source.naturalWidth;
     const fullHeight = source.naturalHeight;
     const left = clamp(Math.floor(box.left) - pad, 0, fullWidth - 1);
@@ -490,7 +493,17 @@ class AurumImageEditorEngine {
     }
     const image = context.getImageData(0, 0, width, height);
     const mask = smartErase.growMask(paintMask(width, height, left, top), width, height, 2);
-    const result = smartErase.erase(image, mask, this.hooks.getEraseOptions?.() || {});
+    // Automatic: artificial intelligence (when its model is here) only where the plain ways fall short — a busy picture.
+    const plan = smartErase.analyze(image, mask);
+    if (!plan) return null;
+    const useAi = this.hooks.aiInpaint && (options.method === 'ai' || (wantsAi && plan.method === 'smooth'));
+    let result;
+    try {
+      result = useAi ? { ...(await this.hooks.aiInpaint(image, mask)), detected: plan.method } : smartErase.erase(image, mask, options);
+    } catch (error) {
+      this.hooks.onEraseError?.(error);
+      return null;
+    }
     if (!result) return null;
     for (let index = 0; index < mask.length; index += 1) if (!mask[index]) image.data[index * 4 + 3] = 0;
     context.putImageData(image, 0, 0);

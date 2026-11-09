@@ -20,6 +20,8 @@ html[data-editor-open="true"] { overflow: hidden; }
 .editor-erase-options { margin-bottom: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .editor-erase-options select { width: 100%; }
 .editor-erase-options input[type="color"] { width: 40px; height: 26px; padding: 2px; border: 1px solid var(--line); border-radius: 6px; background: transparent; cursor: pointer; }
+.editor-ai-row { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted, #687183); }
+.editor-ai-row button { align-self: stretch; }
 .editor-erase-result { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted, #687183); }
 .image-editor-shell[data-tools-position="right"] .editor-layout { grid-template-columns: var(--props-w) minmax(0,1fr) auto; grid-template-areas: "props work tools"; }
 .image-editor-shell[data-tools-position="top"] .editor-layout { grid-template-columns: minmax(0,1fr) var(--props-w); grid-template-rows: auto minmax(0,1fr); grid-template-areas: "tools tools" "work props"; }
