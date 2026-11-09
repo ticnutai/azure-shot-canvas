@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const ocrEngine = require('./ocr-engine.cjs');
 
 const DEFAULT_TRANSCRIPTION_URL = 'http://127.0.0.1:3000';
 
@@ -61,7 +62,8 @@ async function discoverLocalEngines(options = {}) {
   return {
     ffmpeg: { available: ffmpeg.ok, version: ffmpeg.stdout.split(/\r?\n/)[0] || null },
     ffprobe: { available: ffprobe.ok, version: ffprobe.stdout.split(/\r?\n/)[0] || null },
-    ocr: { available: tesseract.ok, languages: languages.stdout.split(/\r?\n/).filter((line) => /^[a-z]{3}$/i.test(line.trim())).map((line) => line.trim()) },
+    // Reading text always works (built-in engine); the list shows the separate program's languages when it is there.
+    ocr: { available: true, builtIn: !tesseract.ok, languages: languages.stdout.split(/\r?\n/).filter((line) => /^[a-z]{3}$/i.test(line.trim())).map((line) => line.trim()) },
     transcription: { available: Boolean(whisper), url: transcriptionUrl, model: whisper?.current_model || whisper?.model || null },
     duplicatePolicy: 'reuse-existing-only'
   };
@@ -150,19 +152,25 @@ async function transcribeMedia(filePath, options = {}) {
   return { text: result.text || '', transcriptPath, srtPath, wordCount: (result.wordTimings || []).length, duration: result.duration || 0 };
 }
 
+// The separate program when it is installed (and not turned off for tests), the built-in engine otherwise.
+const useProgram = () => process.env.SCREEN_STUDIO_OCR_BUILT_IN !== '1' && ocrEngine.hasProgram(existingExecutable('tesseract'));
+
 async function runOcr(filePath, options = {}) {
+  if (!useProgram()) return { text: await ocrEngine.recognizeBuiltIn(filePath, { tessdataDirectory: options.tessdataDirectory, mode: 'text' }), language: 'heb+eng', engine: 'built-in' };
   const language = options.language || 'heb+eng';
   const args = [filePath, 'stdout', '-l', language, '--psm', '6'];
   if (options.tessdataDirectory) args.push('--tessdata-dir', options.tessdataDirectory);
   const tesseractCommand = existingExecutable('tesseract');
   let result = await runHidden(tesseractCommand, args, { timeoutMs: 120_000 });
   if (!result.ok && language.includes('heb')) result = await runHidden(tesseractCommand, [filePath, 'stdout', '-l', 'eng', '--psm', '6'], { timeoutMs: 120_000 });
-  if (!result.ok) throw new Error(`OCR נכשל: ${result.error}`);
+  if (!result.ok && options.tessdataDirectory) return { text: await ocrEngine.recognizeBuiltIn(filePath, { tessdataDirectory: options.tessdataDirectory, mode: 'text' }), language: 'heb+eng', engine: 'built-in' };
+  if (!result.ok) throw new Error(`זיהוי הטקסט נכשל: ${result.error}`);
   return { text: result.stdout.trim(), language: result.stdout.trim() ? (language.includes('heb') && !/Failed loading language 'heb'/.test(result.error || '') ? language : 'eng') : language };
 }
 
 // Word boxes (TSV) for smart redact. Sparse-text mode suits screenshots, where text sits in scattered UI pieces.
 async function runOcrWords(filePath, options = {}) {
+  if (!useProgram()) return ocrEngine.recognizeBuiltIn(filePath, { tessdataDirectory: options.tessdataDirectory, mode: 'words' });
   const tesseractCommand = existingExecutable('tesseract');
   const base = [filePath, 'stdout', '--psm', '11'];
   if (options.tessdataDirectory) base.push('--tessdata-dir', options.tessdataDirectory);
@@ -170,7 +178,8 @@ async function runOcrWords(filePath, options = {}) {
   // and tesseract then silently falls back to plain text.
   let result = await runHidden(tesseractCommand, [...base, '-l', 'heb+eng', '-c', 'tessedit_create_tsv=1'], { timeoutMs: 120_000 });
   if (!result.ok) result = await runHidden(tesseractCommand, [filePath, 'stdout', '--psm', '11', '-l', 'eng', '-c', 'tessedit_create_tsv=1'], { timeoutMs: 120_000 });
-  if (!result.ok) throw new Error(`OCR נכשל: ${result.error}`);
+  if (!result.ok && options.tessdataDirectory) return ocrEngine.recognizeBuiltIn(filePath, { tessdataDirectory: options.tessdataDirectory, mode: 'words' });
+  if (!result.ok) throw new Error(`זיהוי הטקסט נכשל: ${result.error}`);
   return result.stdout;
 }
 

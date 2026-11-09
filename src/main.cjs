@@ -50,6 +50,7 @@ const { Updater } = require('./updater.cjs');
 const { RecordingControls } = require('./recording-controls.cjs');
 const { AppJournal } = require('./app-journal.cjs');
 const { AiModel, MODEL: AI_MODEL } = require('./ai-model.cjs');
+const { VideoTools, VIDEO_TOOLS } = require('./video-tools.cjs');
 const { expiredCaptures } = require('./auto-clean.cjs');
 const { LiveDraw } = require('./live-draw.cjs');
 const { RecordSchedule } = require('./record-schedule.cjs');
@@ -866,13 +867,14 @@ async function ensureOcrLanguageData() {
   const installedDirectory = process.env.TESSDATA_PREFIX || 'C:\\Program Files\\Tesseract-OCR\\tessdata';
   const sources = {
     heb: path.join(__dirname, 'tessdata', 'heb.traineddata'),
-    eng: path.join(installedDirectory, 'eng.traineddata'),
+    // Hebrew and English come with the program; page-direction data only when the separate program has it.
+    eng: path.join(__dirname, 'tessdata', 'eng.traineddata'),
     osd: path.join(installedDirectory, 'osd.traineddata')
   };
   for (const [language, source] of Object.entries(sources)) {
     const target = path.join(cacheDirectory, `${language}.traineddata`);
     try { await fs.access(target); }
-    catch { await fs.copyFile(source, target); }
+    catch { await fs.copyFile(source, target).catch((error) => { if (language !== 'osd') throw error; }); }
   }
   return cacheDirectory;
 }
@@ -1988,17 +1990,25 @@ function registerIpc() {
   });
   ipcMain.handle('ai-model:status', (event) => (isTrustedSender(event) ? aiModel.status() : null));
   ipcMain.handle('ai-model:read', (event) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return aiModel.read(); });
-  ipcMain.handle('ai-model:download', async (event) => {
+  // A one-time download with its progress sent back to the page that asked for it.
+  const downloadChannel = (name, download, journalLine) => ipcMain.handle(`${name}:download`, async (event) => {
     if (!isTrustedSender(event)) throw new Error('לא מורשה');
     let last = 0;
-    const result = await aiModel.download((received, total) => {
+    const result = await download((received, total) => {
       if (received - last < 512 * 1024 && received < total) return;
       last = received;
-      if (!event.sender.isDestroyed()) event.sender.send('ai-model:progress', received, total);
+      if (!event.sender.isDestroyed()) event.sender.send(`${name}:progress`, received, total);
     });
-    appJournal.write('מודל המחיקה בבינה מלאכותית הורד');
+    appJournal.write(journalLine);
     return result;
   });
+  downloadChannel('ai-model', (progress) => aiModel.download(progress), 'מודל המחיקה בבינה מלאכותית הורד');
+  // The video tool: the computer's own when installed, otherwise downloaded once (see video-tools.cjs).
+  const qaVideoUrl = process.env.SCREEN_STUDIO_QA === '1' && process.env.SCREEN_STUDIO_VIDEO_TOOLS_URL;
+  const videoTools = new VideoTools({ directory: app.getPath('userData'), fetchImpl: (url) => net.fetch(url), run: (command, args) => runHidden(command, args, { timeoutMs: 120_000 }), tools: qaVideoUrl ? { ...VIDEO_TOOLS, url: qaVideoUrl } : VIDEO_TOOLS });
+  const videoToolsStarted = videoTools.activate().catch(() => null);
+  ipcMain.handle('video-tools:status', async (event) => { if (!isTrustedSender(event)) return null; await videoToolsStarted; return videoTools.status(); });
+  downloadChannel('video-tools', videoTools.download, 'כלי הווידאו הורד והותקן בתוך התוכנה');
   ipcMain.handle('features:watermark-logo', async () => fs.readFile(watermarkLogoPath()).catch(() => null));
   ipcMain.handle('features:action', (event, id) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return featureAction(String(id)); });
   ipcMain.on('pin:resize', (event, factor) => {
