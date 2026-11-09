@@ -112,9 +112,9 @@ test.describe.serial('image editor tool bar and full-screen layout', () => {
       return { ids, unique: new Set(ids).size, slots: bar.querySelectorAll(':scope > .tool-group, :scope > button').length, shown, total: document.querySelectorAll('[data-editor-tool]').length };
     });
     expect(census.unique).toBe(census.ids.length);
-    expect(census.total).toBe(20);
-    expect(census.slots).toBe(8);
-    expect(census.shown).toBe(8);
+    expect(census.total).toBe(22);
+    expect(census.slots).toBe(9);
+    expect(census.shown).toBe(9);
     await page.locator('.tool-group[data-group="shapes"] .group-more').click();
     const flyout = page.locator('.tool-group.open .group-members > button');
     await expect(flyout).toHaveCount(3);
@@ -235,7 +235,7 @@ test.describe.serial('image editor tool bar and full-screen layout', () => {
     const all = [...controls.choices, ...controls.toggles];
     expect(new Set(all).size).toBe(all.length);
     expect(new Set(controls.rows).size).toBe(controls.rows.length);
-    expect(controls.rows.length).toBe(21);
+    expect(controls.rows.length).toBe(23);
     expect(controls.selectLocked).toBe(true);
     const box = await boxes(['#editor-view-panel', '.editor-tools']);
     expect(box['#editor-view-panel'].left).toBeGreaterThan(box['.editor-tools'].right);
