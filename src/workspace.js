@@ -380,7 +380,10 @@
     const box = button.getBoundingClientRect();
     showMenu(ACTION_MENUS[button.dataset.menu], box.left, box.top - 8 - ACTION_MENUS[button.dataset.menu].length * 36 - 12, (action) => api.runAction(action));
   }));
-  document.addEventListener('pointerdown', (event) => { if (!menu.hidden && !menu.contains(event.target)) closeMenu(); });
+  // A press anywhere else closes the menu (the design button itself opens and closes its own menu).
+  document.addEventListener('pointerdown', (event) => { if (!menu.hidden && !menu.contains(event.target) && !event.target.closest?.('#theme-button')) closeMenu(); });
+  // The title bar moves the window and gives the page no press: leaving the window closes the menu too.
+  window.addEventListener('blur', () => { if (!menu.hidden) closeMenu(); });
 
   // ---- Buttons and keys -----------------------------------------------------------------------------------
   document.querySelectorAll('.round-action[data-action], .ribbon [data-action]').forEach((button) => button.addEventListener('click', () => api.runAction(button.dataset.action)));
@@ -394,6 +397,8 @@
     applyLook({ size: Number($('#thumb-size').value) + (event.deltaY < 0 ? 20 : -20) });
   }, { passive: false });
   $('#theme-button').addEventListener('click', (event) => {
+    // Pressed again while its menu is open: the menu closes.
+    if (!menu.hidden && menu.querySelector('[data-theme-choice]')) return closeMenu();
     const box = event.currentTarget.getBoundingClientRect();
     menu.replaceChildren(Object.assign(document.createElement('div'), { className: 'menu-title', textContent: 'עיצוב' }), ...THEMES.map(([key, label, color]) => {
       const button = document.createElement('button');

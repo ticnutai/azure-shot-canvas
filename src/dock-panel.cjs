@@ -13,15 +13,26 @@ async function readJson(filePath) {
   try { return JSON.parse(await fs.readFile(filePath, 'utf8')); } catch { return null; }
 }
 
-// The folded window is cut to the tab's own shape — a thin line along the edge and a small tab in its middle — so
-// nothing else of the (non-transparent) window shows. An empty list gives the whole window back. With the "line" tab
-// style (chosen for the top bar in the settings) every tab of the program is the thin line only.
+// The folded window is cut to the tab's own shape, so nothing else of the (non-transparent) window shows: a round
+// button floating a little off the edge (FLOAT, one strip per row), or, with the "line" tab style chosen for the top
+// bar in the settings, a thin line along the edge. An empty list gives the whole window back.
 // `shift` moves the shape inside the window (how far Windows left the window from where it was asked to be).
+const FLOAT = Object.freeze({ thickness: 48, length: 48, diameter: 38 });
+const tabSize = (style) => (style === 'line' ? undefined : FLOAT);
+function roundButton() {
+  const radius = FLOAT.diameter / 2;
+  const centre = FLOAT.thickness / 2;
+  const rows = [];
+  for (let row = 0; row < FLOAT.diameter; row += 1) {
+    const half = Math.round(Math.sqrt(Math.max(0, radius * radius - (row + 0.5 - radius) ** 2)));
+    if (half > 0) rows.push({ x: Math.round(centre - half), y: Math.round(centre - radius) + row, width: half * 2, height: 1 });
+  }
+  return rows;
+}
 function tabShape(edge, style = 'tab', shift = { x: 0, y: 0 }) {
   const move = (rects) => rects.map((rect) => ({ ...rect, x: rect.x + shift.x, y: rect.y + shift.y }));
-  if (style === 'line') return move(edge === 'top' ? [{ x: 0, y: 0, width: 120, height: 5 }] : [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }]);
-  if (edge === 'top') return move([{ x: 0, y: 0, width: 120, height: 5 }, { x: 36, y: 0, width: 48, height: 18 }]);
-  return move([{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }, { x: 0, y: 36, width: 18, height: 48 }]);
+  if (style !== 'line') return move(roundButton());
+  return move(edge === 'top' ? [{ x: 0, y: 0, width: 120, height: 5 }] : [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }]);
 }
 
 class DockPanel {
@@ -37,6 +48,7 @@ class DockPanel {
     this.pointerTimer = null;
     this.dragTimer = null;
     this.resizeTimer = null;
+    this.resizedAt = 0;
     this.lastShape = [];
   }
 
@@ -154,7 +166,7 @@ class DockPanel {
     let outsideSince = 0;
     this.pointerTimer = setInterval(() => {
       if (!this.isOpen() || !this.dock.expanded || this.dock.pinned) return this.watchPointer(false);
-      if (this.busy) { outsideSince = 0; return; }
+      if (this.busy || this.resizeTimer || Date.now() - this.resizedAt < 1500) { outsideSince = 0; return; }
       const point = screen.getCursorScreenPoint();
       const box = this.window.getBounds();
       const inside = point.x >= box.x - 6 && point.x <= box.x + box.width + 6 && point.y >= box.y - 6 && point.y <= box.y + box.height + 6;
@@ -177,7 +189,12 @@ class DockPanel {
     try { this.window.setShape(rects); } catch {}
   }
   // The tab style was changed in the settings: a folded tab takes the new shape at once.
-  refreshShape() { if (this.isOpen() && this.dock.enabled && !this.dock.expanded) this.shape(true, dockedPanelBounds(this.area(), this.dock, this.dock.size, false, this.options.min)); }
+  refreshShape() {
+    if (!this.isOpen() || !this.dock.enabled || this.dock.expanded) return;
+    const wanted = dockedPanelBounds(this.area(), this.dock, this.dock.size, false, this.options.min, tabSize(this.options.tabStyle?.()));
+    this.window.setBounds(wanted);
+    this.shape(true, wanted);
+  }
   setExpanded(expanded) {
     if (!this.isOpen() || !this.dock.enabled) return;
     const { min } = this.options;
@@ -196,7 +213,7 @@ class DockPanel {
       this.window.setMaximizable(false);
       this.window.setMinimizable(false);
       this.window.setMinimumSize(1, 1);
-      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, min);
+      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, min, tabSize(this.options.tabStyle?.()));
       this.window.setBounds(wanted);
       this.shape(true, wanted);
     }
@@ -238,6 +255,7 @@ class DockPanel {
   // pointer (the title bar moves the window, so the system's own resize border does not reach the top). Not while
   // folded or full screen. `grip` is n, s, e, w or a corner (ne, nw, se, sw); null lets go.
   resizeFrom(grip) {
+    if (this.resizeTimer) this.resizedAt = Date.now();
     clearInterval(this.resizeTimer);
     this.resizeTimer = null;
     if (!grip || !/^(n|s|e|w|ne|nw|se|sw)$/.test(grip) || !this.isOpen() || this.window.isMaximized() || (this.dock.enabled && !this.dock.expanded)) return;
@@ -275,7 +293,7 @@ class DockPanel {
       const edgeChanged = edge !== this.dock.edge;
       this.dock.edge = edge;
       this.dock.offset = offset;
-      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min);
+      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min, tabSize(this.options.tabStyle?.()));
       this.window.setBounds(wanted);
       this.shape(true, wanted);
       if (edgeChanged) this.sendDock();
@@ -283,4 +301,4 @@ class DockPanel {
   }
 }
 
-module.exports = { DockPanel, tabShape };
+module.exports = { DockPanel, FLOAT, tabShape };

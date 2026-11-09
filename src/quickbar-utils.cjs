@@ -164,12 +164,13 @@ function offsetForPointer(workArea, edge, point) {
 
 // The captures window hidden in a screen edge, like the top bar: folded it is the same small tab; open it stands
 // against that edge at its own size (kept inside the screen), centred where the tab is.
-function dockedPanelBounds(workArea, dock, size, expanded, min = { width: 420, height: 380 }) {
+// `tab`: the folded size (the small tab by default; the captures window uses a round floating button).
+function dockedPanelBounds(workArea, dock, size, expanded, min = { width: 420, height: 380 }, tab = TAB) {
   const edge = ['left', 'right', 'top'].includes(dock?.edge) ? dock.edge : 'right';
   const offset = Number.isFinite(Number(dock?.offset)) ? Number(dock.offset) : 0.5;
   if (!expanded) {
-    if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, TAB.length, offset), y: workArea.y, width: TAB.length, height: TAB.thickness };
-    return { x: edge === 'left' ? workArea.x : workArea.x + workArea.width - TAB.thickness, y: alongEdge(workArea.y, workArea.height, TAB.length, offset), width: TAB.thickness, height: TAB.length };
+    if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, tab.length, offset), y: workArea.y, width: tab.length, height: tab.thickness };
+    return { x: edge === 'left' ? workArea.x : workArea.x + workArea.width - tab.thickness, y: alongEdge(workArea.y, workArea.height, tab.length, offset), width: tab.thickness, height: tab.length };
   }
   const width = Math.round(Math.min(Math.max(min.width, Number(size?.width) || 736), workArea.width));
   const height = Math.round(Math.min(Math.max(min.height, Number(size?.height) || 612), workArea.height));

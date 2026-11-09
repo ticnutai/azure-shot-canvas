@@ -73,14 +73,14 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: false }));
     await expect.poll(docked).toBe('folded');
     state = await win();
-    // The tab starts 18 points from the right edge. Windows keeps the folded window ~40 wide at least; the part past
-    // the edge is cut away (the window is shaped to the tab), so only the tab shows and takes the pointer.
-    expect(await tabLeft()).toBe(state.area.x + state.area.width - 18);
+    // Folded it is a round button floating off the right edge: 38 across, 5 points from the edge (the window is
+    // shaped to it, so only the button shows and takes the pointer).
+    expect(await tabLeft()).toBe(state.area.x + state.area.width - 43);
     // Windows keeps a folded window at least ~41 device pixels wide (twice that in points on a double-density screen).
     expect(state.box.width).toBeLessThanOrEqual(90);
-    expect(state.box.height).toBeGreaterThanOrEqual(120);
-    // (Twice that on a double-density screen next to a normal one: Windows scales the window; the shape cuts it to the tab.)
-    expect(state.box.height).toBeLessThanOrEqual(260);
+    expect(state.box.height).toBeGreaterThanOrEqual(48);
+    // (Twice that on a double-density screen next to a normal one: Windows scales the window; the shape cuts it to the button.)
+    expect(state.box.height).toBeLessThanOrEqual(110);
     await expect(workspace.locator('#dock-tab')).toBeVisible();
     await expect(workspace.locator('#grid')).toBeHidden();
   });
@@ -145,7 +145,7 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('left');
     await workspace.evaluate(() => window.workspaceApi.dragDock(false));
     const state = await win();
-    expect(await tabLeft()).toBe(area.x);
+    expect(await tabLeft()).toBe(area.x + 5); // the round button floats 5 points off the left edge
     const saved = JSON.parse(await fs.readFile(path.join(outputDir, 'electron-user-data', 'workspace-window.json'), 'utf8'));
     expect(saved.dock).toMatchObject({ enabled: true, edge: 'left' });
     expect(saved.dock.offset).toBeGreaterThan(0.6);

@@ -2066,7 +2066,14 @@ function registerIpc() {
   ipcMain.handle('workspace:close', async (event) => { if (toolsPanel.owns(event.sender)) await setWorkspaceSplit(false); else workspacePanel.close(); return true; });
   ipcMain.handle('workspace:maximize', (event) => panelFor(event).toggleMaximize());
   ipcMain.handle('workspace:on-top', (event, onTop) => panelFor(event).setOnTop(onTop));
-  ipcMain.handle('workspace:open-studio', () => { showMainWindow(); mainWindow?.focus(); return true; });
+  // The studio comes out in front: the captures window, hidden in an edge (always above the others), folds away first.
+  ipcMain.handle('workspace:open-studio', () => {
+    if (workspacePanel.dock.enabled && workspacePanel.dock.expanded && !workspacePanel.dock.pinned) workspacePanel.setExpanded(false);
+    showMainWindow();
+    mainWindow?.moveTop();
+    mainWindow?.focus();
+    return true;
+  });
   ipcMain.handle('app:get-icon', () => ({ shape: chosenIcon?.shape || null, color: chosenIcon?.color || null }));
   ipcMain.handle('app:set-icon', (_event, choice) => setChosenIcon(choice));
   ipcMain.handle('workspace:state', (event) => { const panel = panelFor(event); return { onTop: Boolean(panel.normal.onTop), dock: panel.state(), split: Boolean(workspacePanel.extra.split) }; });
