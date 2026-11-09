@@ -2,7 +2,8 @@
 // fits the picture around it — good where the plain ways cannot help: photos, textures, people. Everything runs on this
 // computer. The engine (onnxruntime-web, copied into vendor/ort when the program is built) loads only when first needed.
 (() => {
-  const api = window.screenStudio;
+  // The studio page, or the frozen screen (which only uses a model already downloaded).
+  const api = window.screenStudio || window.regionApi;
   const MAX_SIDE = 1024; // bigger places are worked on smaller and the result is enlarged back
   let session = null;
   let loading = null;
@@ -107,7 +108,7 @@
 
   window.AurumAiErase = {
     status: () => api.aiModelStatus(),
-    download: (onProgress) => api.aiModelDownload(onProgress),
+    download: (onProgress) => (api.aiModelDownload ? api.aiModelDownload(onProgress) : Promise.reject(new Error('ההורדה נעשית מהעורך'))),
     inpaint,
     get loaded() { return Boolean(session); }
   };

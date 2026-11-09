@@ -40,8 +40,63 @@
     if (!result) return null;
     for (let index = 0; index < mask.length; index += 1) if (!mask[index]) image.data[index * 4 + 3] = 0;
     context.putImageData(image, 0, 0);
-    return { canvas, x: left, y: top, method: result.method };
+    const piece = { canvas, x: left, y: top, method: result.method };
+    // A busy background (a photo, a texture): when the model is here, it does better than the plain ways.
+    if (result.method === 'smooth' && window.AurumAiErase) improveWithAi(piece, frozen, rect, scale);
+    return piece;
   }
+
+  // The model needs more of the picture around the place than the plain ways do. The plain result shows at once;
+  // the better one replaces it when ready, and saving waits for it (see settled).
+  const pending = new Set();
+  function improveWithAi(piece, frozen, rect, scale) {
+    const job = (async () => {
+      const state = await window.AurumAiErase.status().catch(() => null);
+      if (!state?.ready) return;
+      const holeWidth = rect.width * scale;
+      const holeHeight = rect.height * scale;
+      const margin = Math.round(Math.min(400, Math.max(48, Math.max(holeWidth, holeHeight))));
+      const left = Math.max(0, Math.floor(rect.x * scale) - margin);
+      const top = Math.max(0, Math.floor(rect.y * scale) - margin);
+      const width = Math.min(frozen.width, Math.ceil((rect.x + rect.width) * scale) + margin) - left;
+      const height = Math.min(frozen.height, Math.ceil((rect.y + rect.height) * scale) + margin) - top;
+      const work = document.createElement('canvas');
+      work.width = width;
+      work.height = height;
+      const workContext = work.getContext('2d', { willReadFrequently: true });
+      workContext.drawImage(frozen, left, top, width, height, 0, 0, width, height);
+      const image = workContext.getImageData(0, 0, width, height);
+      const eraser = window.AurumSmartErase;
+      const box = { x: rect.x * scale - left, y: rect.y * scale - top, width: holeWidth, height: holeHeight };
+      const mask = eraser.growMask(eraser.rectMask(width, height, box), width, height, 3);
+      await window.AurumAiErase.inpaint(image, mask);
+      // Back into the piece: only the erased place, at the piece's own position.
+      const pieceContext = piece.canvas.getContext('2d', { willReadFrequently: true });
+      const target = pieceContext.getImageData(0, 0, piece.canvas.width, piece.canvas.height);
+      const dx = left - piece.x;
+      const dy = top - piece.y;
+      for (let y = 0; y < piece.canvas.height; y += 1) {
+        for (let x = 0; x < piece.canvas.width; x += 1) {
+          const at = (y * piece.canvas.width + x) * 4;
+          if (!target.data[at + 3]) continue;
+          const sx = x - dx;
+          const sy = y - dy;
+          if (sx < 0 || sy < 0 || sx >= width || sy >= height || !mask[sy * width + sx]) continue;
+          const from = (sy * width + sx) * 4;
+          target.data[at] = image.data[from];
+          target.data[at + 1] = image.data[from + 1];
+          target.data[at + 2] = image.data[from + 2];
+        }
+      }
+      pieceContext.putImageData(target, 0, 0);
+      piece.method = 'ai';
+      document.documentElement.dataset.lastErase = 'ai';
+      window.dispatchEvent(new Event('aurum-erase-improved'));
+    })().catch(() => {}).finally(() => pending.delete(job));
+    pending.add(job);
+  }
+  // Waits for erasing still being worked on (at most a while; the plain result is kept if it takes longer).
+  const settled = () => (pending.size ? Promise.race([Promise.all([...pending]), new Promise((resolve) => setTimeout(resolve, 20_000))]) : Promise.resolve());
   function drawErase(context, shape, frozen, scale, live) {
     const rect = boundsOf(shape);
     if (rect.width < 2 || rect.height < 2) return;
@@ -64,7 +119,7 @@
       if (erased.size > 24) erased.delete(erased.keys().next().value);
     }
     if (piece) context.drawImage(piece.canvas, piece.x / scale, piece.y / scale, piece.canvas.width / scale, piece.canvas.height / scale);
-    if (piece) document.documentElement.dataset.lastErase = piece.method;
+    if (piece && !pending.size) document.documentElement.dataset.lastErase = piece.method;
   }
   // Erasing changes the picture, not the marks drawn on it: erased places are drawn first.
   const inOrder = (shapes) => [...shapes.filter((shape) => shape.type === 'erase'), ...shapes.filter((shape) => shape.type !== 'erase')];
@@ -201,5 +256,5 @@
     return new Uint8Array(await blob.arrayBuffer());
   }
 
-  window.AurumMarkup = { COLORS, boundsOf, drawShape, inOrder, isMeaningful, renderSelection, textSize };
+  window.AurumMarkup = { COLORS, boundsOf, drawShape, inOrder, isMeaningful, renderSelection, settled, textSize };
 })();

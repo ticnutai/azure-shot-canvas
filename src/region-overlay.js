@@ -228,6 +228,7 @@
   }
 
   const schedule = () => { if (!frame) frame = requestAnimationFrame(drawMarks); };
+  window.addEventListener('aurum-erase-improved', schedule);
 
   // ---- Exact size and place, typed in real pixels ----------------------------------------------------------
   const dimInputs = [...toolbar.querySelectorAll('[data-dim]')];
@@ -343,6 +344,7 @@
     root.dataset.regionAfter = after;
     let png = null;
     if (shapes.length) {
+      await markup.settled?.();
       const pixels = geometry.toImagePixels(rect, session.scale, { width: frozen.width, height: frozen.height });
       png = await markup.renderSelection({ frozen, scale: session.scale, rect, pixels, shapes });
     }

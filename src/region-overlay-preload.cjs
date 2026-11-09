@@ -10,5 +10,8 @@ contextBridge.exposeInMainWorld('regionApi', {
   cancel: () => ipcRenderer.send('region:cancel'),
   journal: (lines) => ipcRenderer.send('region:journal', lines),
   saveArea: (displayId, rect) => ipcRenderer.invoke('region:save-area', displayId, rect),
-  copyText: (text) => ipcRenderer.invoke('region:copy-text', text)
+  copyText: (text) => ipcRenderer.invoke('region:copy-text', text),
+  // Erasing with artificial intelligence on the frozen screen (the model is downloaded from the editor).
+  aiModelStatus: () => ipcRenderer.invoke('ai-model:status'),
+  aiModel: () => ipcRenderer.invoke('ai-model:read')
 });
