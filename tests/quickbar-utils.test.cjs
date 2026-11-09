@@ -162,3 +162,26 @@ test('the captures window docked in an edge: a small tab folded, its own size ag
   // Never larger than the screen, never smaller than the window's minimum, and an unknown edge means the right one.
   assert.deepEqual(dockedPanelBounds({ x: 0, y: 0, width: 600, height: 500 }, { edge: 'sideways' }, { width: 5000, height: 100 }, true), { x: 0, y: 60, width: 600, height: 380 });
 });
+
+test('the panel keeps the size the user gave each view, within limits, and stays on its edge', () => {
+  const { cleanPanelSizes, panelFromBounds, quickbarBounds: bounds, normalizeQuickbarPreferences: normalize } = require('../src/quickbar-utils.cjs');
+  const area = { x: 0, y: 0, width: 1920, height: 1040 };
+  assert.deepEqual(cleanPanelSizes({ actions: { width: 100, height: 9999 }, history: { width: 'x', height: 3 }, other: { width: 400, height: 400 } }), { actions: { width: 260, height: 1400 } });
+  const left = normalize({ style: 'panel', edge: 'left', offset: 0.5, panelSizes: { actions: { width: 500, height: 420 } } });
+  const placed = bounds(area, left, true, { view: 'actions', hasRecent: true });
+  assert.equal(placed.width, 500);
+  assert.equal(placed.height, 420);
+  assert.ok(placed.x <= 6, 'still against the left edge');
+  // The history view keeps its own usual size until it is given one.
+  assert.equal(bounds(area, left, true, { view: 'history' }).width, 392);
+  // Dragging the bottom handle down by 100: the top stays where it was.
+  const grown = panelFromBounds(area, left, { x: placed.x, y: placed.y, width: 500, height: 520 });
+  const after = bounds(area, { ...left, panelSizes: { actions: grown.size }, offset: grown.offset }, true, { view: 'actions', hasRecent: true });
+  assert.ok(Math.abs(after.y - placed.y) <= 1, `top moved from ${placed.y} to ${after.y}`);
+  assert.equal(after.height, 520);
+  // On the top edge the place along the edge is across.
+  const top = normalize({ style: 'panel', edge: 'top', offset: 0.5 });
+  const across = panelFromBounds(area, top, { x: 100, y: 0, width: 400, height: 300 });
+  assert.equal(across.offset, Math.round(((100 + 200) / 1920) * 1000) / 1000);
+  assert.deepEqual(normalize({ panelSizes: null }, left).panelSizes, {});
+});

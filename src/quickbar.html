@@ -21,7 +21,7 @@
     <div id="strip-menu" role="menu" aria-label="אפשרויות"></div>
   </section>
   <section id="quickbar" aria-label="פעולות מהירות">
-    <header><b id="quickbar-title">אורום מהיר</b><span id="recording-state">מוכן</span><button id="show-history" title="הצילומים האחרונים">▤</button><button id="show-actions" title="חזרה לפעולות המהירות">▦</button><button id="pin" class="pin-toggle" title="הצמדה" aria-pressed="false">⌖</button><button id="collapse" title="הסתרה (Esc)">×</button></header>
+    <header><b id="quickbar-title">אורום מהיר</b><span id="recording-state">מוכן</span><button id="show-gallery" class="gallery-toggle" aria-pressed="false" title="הצילומים האחרונים כאן בלוח · לחיצה על תמונה מעתיקה אותה · לחיצה נוספת מחזירה את הכפתורים"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 6V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"/><path d="M3 17l4-4 3 3 2-2 5 5"/><circle cx="12.5" cy="10.5" r="1.3"/></svg></button><button id="show-history" title="חלון הצילומים">▤</button><button id="show-actions" title="חזרה לפעולות המהירות">▦</button><button id="pin" class="pin-toggle" title="הצמדה" aria-pressed="false">⌖</button><button id="collapse" title="הסתרה (Esc)">×</button></header>
     <nav id="quickbar-actions">
       <button data-action="screenshot"><i>▣</i><span>צילום מסך</span></button>
       <button data-action="region"><i>▱</i><span>צילום אזור</span></button>
@@ -48,8 +48,13 @@
     </section>
     <div id="recent-strip" class="recent-strip" aria-label="צילומים אחרונים"></div>
   </section>
+  <!-- Handles for a bigger or smaller panel: on every side except the one against the screen's edge. -->
+  <div class="resize-handle" data-side="n" title="גרירה לשינוי הגודל · לחיצה כפולה מחזירה לגודל הרגיל"></div>
+  <div class="resize-handle" data-side="s" title="גרירה לשינוי הגודל · לחיצה כפולה מחזירה לגודל הרגיל"></div>
+  <div class="resize-handle" data-side="e" title="גרירה לשינוי הגודל · לחיצה כפולה מחזירה לגודל הרגיל"></div>
+  <div class="resize-handle" data-side="w" title="גרירה לשינוי הגודל · לחיצה כפולה מחזירה לגודל הרגיל"></div>
   <section id="history" aria-label="הצילומים האחרונים">
-    <header><b>הצילומים האחרונים</b><span id="history-count"></span><button id="history-select-all" class="history-select-all" aria-pressed="false" title="בחירת הכל">☐</button><button id="history-library" title="פתיחת הספרייה המלאה">▥</button><button id="history-back" title="חזרה">×</button></header>
+    <header><b>הצילומים האחרונים</b><span id="history-count"></span><button id="history-select-all" class="history-select-all" aria-pressed="false" title="בחירת הכל">☐</button><button id="history-library" title="פתיחת הספרייה המלאה">▥</button><button id="history-gallery" class="gallery-toggle" aria-pressed="true" title="חזרה לכפתורים"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="2"/><path d="M7 6V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-2"/><path d="M3 17l4-4 3 3 2-2 5 5"/><circle cx="12.5" cy="10.5" r="1.3"/></svg></button><button id="history-back" title="חזרה">×</button></header>
     <div class="history-filters">
       <input id="history-search" type="search" placeholder="חיפוש לפי שם…" aria-label="חיפוש בצילומים" dir="rtl">
       <div class="history-chips" role="group" aria-label="סוג">
@@ -61,7 +66,7 @@
     </div>
     <div id="history-grid" role="list"></div>
     <div id="history-selection" hidden><span id="history-selected-count"></span><button id="history-select-clear">ביטול בחירה</button><button id="history-trash" class="danger">העברה לסל המיחזור</button></div>
-    <p class="history-tip">לחיצה פותחת את הכרטיס · קונטרול+לחיצה בוחרת כמה · ☐ בוחר הכל · לחיצה כפולה לעריכה · גרירה לתוכנה אחרת</p>
+    <p class="history-tip">לחיצה מעתיקה ללוח · לחיצה ימנית פותחת את הכרטיס · קונטרול+לחיצה בוחרת כמה · ☐ בוחר הכל · לחיצה כפולה לעריכה · גרירה לתוכנה אחרת</p>
   </section>
   <script src="app-icons.js"></script>
   <script src="selection-utils.js"></script>

@@ -25,6 +25,27 @@ body[data-has-recent="true"] .recent-strip{display:grid}
 .recent-item[data-kind="video"]::after{content:"▶";position:absolute;bottom:2px;left:4px;font-size:9px;color:#fff;text-shadow:0 0 3px #000}
 .capture-actions button:focus-visible,.recent-item:focus-visible{outline:2px solid #ffd36a;outline-offset:-3px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+/* The panel's size follows the user: buttons and pictures fill whatever room there is. */
+nav{grid-template-columns:repeat(auto-fill,minmax(72px,1fr))}
+#history-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+.gallery-toggle{display:grid;place-items:center;padding:0}
+.gallery-toggle svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.gallery-toggle[aria-pressed="true"]{border-color:#d39a2a;color:#ffd36a}
+body[data-look="office"] .gallery-toggle[aria-pressed="true"]{background:#e3eeff;border-color:#1f6fe5;color:#1f6fe5}
+.history-item.copied{border-color:#2fbf71;box-shadow:0 0 0 2px #2fbf71}
+.history-item.copied::before{content:"הועתק ✓";position:absolute;inset:auto 6px 22px;z-index:1;padding:2px 6px;border-radius:6px;background:#2fbf71;color:#fff;font-size:10px;text-align:center}
+.resize-handle{position:fixed;z-index:20;display:none}
+body[data-expanded="true"][data-style="panel"] .resize-handle,html:not([data-view="actions"]) body[data-expanded="true"] .resize-handle{display:block}
+.resize-handle[data-side="n"]{top:0;left:14px;right:14px;height:7px;cursor:ns-resize}
+.resize-handle[data-side="s"]{bottom:0;left:14px;right:14px;height:7px;cursor:ns-resize}
+.resize-handle[data-side="e"]{right:0;top:14px;bottom:14px;width:7px;cursor:ew-resize}
+.resize-handle[data-side="w"]{left:0;top:14px;bottom:14px;width:7px;cursor:ew-resize}
+.resize-handle::after{content:"";position:absolute;border-radius:3px;background:#d39a2a;opacity:0;transition:opacity .12s}
+.resize-handle[data-side="n"]::after,.resize-handle[data-side="s"]::after{left:50%;width:36px;margin-left:-18px;top:2px;height:3px}
+.resize-handle[data-side="e"]::after,.resize-handle[data-side="w"]::after{top:50%;height:36px;margin-top:-18px;left:2px;width:3px}
+.resize-handle:hover::after,body[data-resizing="true"] .resize-handle::after{opacity:.9}
+/* The side against the screen's edge has no handle. */
+body[data-edge="left"] .resize-handle[data-side="w"],body[data-edge="right"] .resize-handle[data-side="e"],body[data-edge="top"] .resize-handle[data-side="n"]{display:none!important}
 #show-actions{display:none}html[data-view="capture"] #show-actions{display:block}
 /* The bar is a set of buttons, not a page: clicking or dragging on it never selects its labels (that left grey boxes). */
 html,body{user-select:none}

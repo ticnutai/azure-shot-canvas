@@ -163,7 +163,10 @@ test.describe.serial('slim capture strip', () => {
     await expect(strip.locator('html')).toHaveAttribute('data-view', 'history');
     await expect.poll(async () => (await barBounds()).bounds).toMatchObject({ width: 392, height: 470 });
     await expect(strip.locator('.history-item')).toHaveCount(1);
+    // A click copies the picture; a right click opens its card.
     await strip.locator('.history-item').first().click();
+    await expect(strip.locator('html')).toHaveAttribute('data-last-copied', /.+/);
+    await strip.locator('.history-item').first().click({ button: 'right' });
     await expect(strip.locator('html')).toHaveAttribute('data-view', 'capture');
     await expect(strip.locator('#capture-name')).not.toHaveText('');
   });

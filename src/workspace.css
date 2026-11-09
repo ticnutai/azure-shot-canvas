@@ -337,3 +337,33 @@ html[data-docked="folded"] .grips{display:none}
 .select-all[aria-pressed="true"] i{background:var(--select);border-color:var(--select)}
 .select-all[aria-pressed="true"] i::after{content:"";width:7px;height:3.5px;border:solid #fff;border-width:0 0 2px 2px;transform:translateY(-1px) rotate(-45deg)}
 html[data-theme^="lines"] .select-all{border-radius:3px}
+
+/* A narrow window (in a screen edge, or made small): nothing is pushed out of it. The title gives way first, the
+   search box shrinks, the window's own buttons always stay inside, and rows go on to a second line. */
+.titlebar{min-width:0}
+.titlebar .title{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#search{flex:0 1 200px;min-width:70px;width:auto}
+.titlebar .count{flex:none;white-space:nowrap}
+.window-buttons{flex:none}
+.viewbar{flex-wrap:wrap;row-gap:8px}
+.actions{min-width:0}
+@media (max-width:620px){
+  .titlebar{gap:6px;padding:0 6px 0 8px}
+  .titlebar .count,.size-control{display:none}
+  .window-buttons button{width:34px;height:34px}
+  .viewbar{padding:8px 12px 0;gap:8px}
+  .viewbar .section-title{flex-basis:100%}
+  /* The tool ribbon becomes a few rows of icons only (each still names itself when pointed at). */
+  .ribbon{flex-wrap:wrap!important;overflow:visible!important;padding:4px 6px;row-gap:2px}
+  .ribbon-group{flex-direction:row;padding:0 3px}
+  .ribbon-buttons{flex-wrap:wrap}
+  .ribbon-label,.ribbon-buttons button>span:last-child,.ribbon-buttons button[data-key]::after{display:none}
+  .ribbon-buttons button{width:36px;padding:3px 0}
+  .ribbon-buttons .tile{width:28px;height:28px;border-radius:7px}
+  .ribbon-buttons .tile svg{width:18px;height:18px}
+  .actions{flex-basis:auto;flex-wrap:wrap;justify-content:center;padding:8px 6px}
+  .round-action{padding:2px 6px}
+  .round-action .ring{width:50px;height:50px;border-width:3px}
+  .round-action .ring svg{width:24px;height:24px}
+  .round-action .label{font-size:12px}
+}

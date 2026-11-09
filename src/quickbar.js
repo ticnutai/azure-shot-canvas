@@ -112,6 +112,8 @@
       if (item.kind === 'video') button.dataset.kind = 'video';
       button.addEventListener('click', async () => {
         selected = index;
+        // A click copies the picture at once (and opens its card, as before).
+        api.captureAction(item.path, 'copy').catch(() => {});
         setView('capture');
         await api.setView('capture');
         renderCard();
@@ -399,20 +401,80 @@
       const when = document.createElement('time');
       when.textContent = formatWhen(item.modified);
       tile.append(image, when);
-      tile.addEventListener('click', (event) => {
-        // Ctrl+click builds a selection; a plain click (with nothing selected) opens the card.
+      tile.addEventListener('click', async (event) => {
+        // Ctrl+click builds a selection; a plain click (with nothing selected) copies the picture to the clipboard.
         if (event.ctrlKey || chosen.size) {
           if (chosen.has(item.path)) chosen.delete(item.path); else chosen.add(item.path);
           return renderSelection();
         }
-        api.openCapture(item.path);
+        try {
+          await api.captureAction(item.path, 'copy');
+          root.dataset.lastCopied = item.name;
+          document.querySelectorAll('.history-item.copied').forEach((other) => other.classList.remove('copied'));
+          tile.classList.add('copied');
+          setTimeout(() => tile.classList.remove('copied'), 1400);
+        } catch {}
       });
+      // Right click: the card with all the actions (edit, pin, folder, delete).
+      tile.addEventListener('contextmenu', (event) => { event.preventDefault(); if (!chosen.size) api.openCapture(item.path); });
       tile.addEventListener('dblclick', () => { if (!chosen.size) api.captureAction(item.path, 'edit').then(() => setExpanded(false)); });
       image.addEventListener('dragstart', (event) => { event.preventDefault(); api.startDrag(item.path); });
       return tile;
     }));
     renderSelection();
   }
+  // The pictures right here in the panel, in place of the buttons; the same button brings the buttons back.
+  async function toggleGallery() {
+    if (root.dataset.view === 'history') { setView('actions'); await api.setView('actions'); renderStrip(); return; }
+    setView('history');
+    await api.setView('history');
+    chosen.clear();
+    document.querySelector('#history-grid').replaceChildren(emptyNote('טוען…'));
+    historyItems = await api.history().catch(() => []);
+    renderHistory();
+  }
+  document.querySelector('#show-gallery').addEventListener('click', toggleGallery);
+  document.querySelector('#history-gallery').addEventListener('click', toggleGallery);
+
+  // ---- Handles: a bigger or smaller panel. The main process keeps the size (for this view) and where it sits. ----
+  let resizing = null;
+  document.querySelectorAll('.resize-handle').forEach((handle) => {
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      try { handle.setPointerCapture(event.pointerId); } catch {}
+      resizing = { side: handle.dataset.side, x: event.screenX, y: event.screenY, start: { x: window.screenX, y: window.screenY, width: window.outerWidth, height: window.outerHeight }, frame: 0 };
+      document.body.dataset.resizing = 'true';
+      clearTimeout(collapseTimer);
+    });
+    handle.addEventListener('pointermove', (event) => {
+      if (!resizing) return;
+      if (!(event.buttons & 1)) { endResize(); return; }
+      const { side, start } = resizing;
+      const dx = event.screenX - resizing.x;
+      const dy = event.screenY - resizing.y;
+      const next = { ...start };
+      if (side === 'e') next.width = start.width + dx;
+      if (side === 'w') { next.width = start.width - dx; next.x = start.x + dx; }
+      if (side === 's') next.height = start.height + dy;
+      if (side === 'n') { next.height = start.height - dy; next.y = start.y + dy; }
+      resizing.next = next;
+      if (!resizing.frame) resizing.frame = requestAnimationFrame(() => { if (resizing) { resizing.frame = 0; api.resize(resizing.next, false); } });
+    });
+    const endResize = async () => {
+      if (!resizing) return;
+      const last = resizing.next;
+      cancelAnimationFrame(resizing.frame);
+      resizing = null;
+      document.body.dataset.resizing = 'false';
+      if (last) applyPreferences(await api.resize(last, true));
+    };
+    handle.addEventListener('pointerup', endResize);
+    handle.addEventListener('lostpointercapture', endResize);
+    // Double click: back to the usual size of this view.
+    handle.addEventListener('dblclick', async () => applyPreferences(await api.resize(null, true)));
+  });
+
   async function showHistory() {
     // Default: the captures window (large thumbnails, round buttons); the small grid stays as a choice.
     if (preferences.historyStyle !== 'panel' && api.openWorkspace) {

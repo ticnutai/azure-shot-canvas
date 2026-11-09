@@ -32,7 +32,7 @@ const { ACTION_DEFINITIONS, ACTION_LABELS, DEFAULT_SHORTCUTS, acceleratorForBind
 const { recordingAudioPath, recordingPaths, recordingSegmentPath, recoveryPathFor, storageLevel } = require('./recording-utils.cjs');
 const { encoderCandidates, parseVideoEncoders } = require('./encoder-utils.cjs');
 const { PrivateShareServer, analyzeMedia, discoverLocalEngines, runHidden, runOcr, runOcrWords, transcribeMedia } = require('./studio-tools.cjs');
-const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
+const { CAPTURE_CARD_KEYS, DEFAULT_QUICKBAR_PREFERENCES, addRecentCapture, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, panelFromBounds, quickbarBounds: calculateQuickbarBounds, shouldHideMainWindowOnClose } = require('./quickbar-utils.cjs');
 const { DockPanel } = require('./dock-panel.cjs');
 const featuresDefs = require('./features-defs.js');
 const { parseClickEvent } = require('./click-ripple.js');
@@ -2089,6 +2089,22 @@ function registerIpc() {
     return { opened: true };
   });
   // Dragging the bar along its edge: the main process follows the real pointer (the bar window cannot take focus).
+  // The handles on the panel: the size is kept for the view that is showing, and the panel stays on its edge.
+  // bounds null = back to the usual size of this view. done = the drag ended: then it is saved.
+  ipcMain.handle('quickbar:resize', async (_event, bounds, done) => {
+    const view = quickbarView === 'history' ? 'history' : quickbarView === 'capture' ? 'capture' : 'actions';
+    const sizes = { ...(quickbarPreferences.panelSizes || {}) };
+    let offset = quickbarPreferences.offset;
+    if (bounds && typeof bounds === 'object') {
+      const result = panelFromBounds(quickbarDisplay().workArea, quickbarPreferences, bounds);
+      sizes[view] = result.size;
+      offset = result.offset;
+    } else delete sizes[view];
+    quickbarPreferences = { ...quickbarPreferences, panelSizes: sizes, offset };
+    positionQuickbar(quickbarExpanded);
+    if (!done) return quickbarPreferences;
+    return saveQuickbarPreferences({ panelSizes: sizes, offset });
+  });
   ipcMain.handle('quickbar:drag', async (_event, active) => {
     clearInterval(quickbarDragTimer);
     quickbarDragTimer = null;

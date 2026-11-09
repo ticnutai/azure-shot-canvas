@@ -47,6 +47,25 @@ const seconds = (value, min, max, step) => (value === null || value === '' || !N
 const CAPTURE_DELAYS = [0, 3, 5, 10];
 const MAX_RECENT_CAPTURES = 6;
 
+// The size the user gave the panel, for each view; a missing view keeps its usual size.
+const PANEL_VIEWS = ['actions', 'history', 'capture'];
+const PANEL_LIMITS = Object.freeze({ minWidth: 260, minHeight: 170, maxWidth: 1600, maxHeight: 1400 });
+function cleanPanelSizes(value) {
+  const sizes = {};
+  if (!value || typeof value !== 'object') return sizes;
+  for (const view of PANEL_VIEWS) {
+    const size = value[view];
+    const width = Number(size?.width);
+    const height = Number(size?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) continue;
+    sizes[view] = {
+      width: Math.round(Math.min(PANEL_LIMITS.maxWidth, Math.max(PANEL_LIMITS.minWidth, width))),
+      height: Math.round(Math.min(PANEL_LIMITS.maxHeight, Math.max(PANEL_LIMITS.minHeight, height)))
+    };
+  }
+  return sizes;
+}
+
 function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR_PREFERENCES) {
   const next = { ...DEFAULT_QUICKBAR_PREFERENCES, ...current };
   if ('enabled' in candidate) next.enabled = Boolean(candidate.enabled);
@@ -69,6 +88,7 @@ function normalizeQuickbarPreferences(candidate = {}, current = DEFAULT_QUICKBAR
   if (TAB_STYLES.includes(candidate.tabStyle)) next.tabStyle = candidate.tabStyle;
   if (TAB_COLORS.includes(candidate.tabColor)) next.tabColor = candidate.tabColor;
   if (CAPTURE_DELAYS.includes(Number(candidate.captureDelay))) next.captureDelay = Number(candidate.captureDelay);
+  if ('panelSizes' in candidate) next.panelSizes = cleanPanelSizes(candidate.panelSizes);
   if (!next.enabled) next.pinned = false;
   return next;
 }
@@ -107,7 +127,9 @@ function quickbarBounds(workArea, preferences, expanded = false, { view = 'actio
   let width;
   let height;
   let margin = Math.min(6, Math.max(0, workArea.width - 356));
-  if (view === 'history') ({ width, height } = HISTORY_SIZE);
+  const chosen = preferences.panelSizes?.[view === 'history' ? 'history' : view === 'capture' ? 'capture' : 'actions'];
+  if (chosen && (view !== 'actions' || !strip)) ({ width, height } = chosen);
+  else if (view === 'history') ({ width, height } = HISTORY_SIZE);
   else if (view === 'capture' || !strip) { width = 356; height = view === 'capture' ? 382 : hasRecent ? 286 : 212; }
   else {
     // The strip sits flush against its edge; an open menu grows it inward.
@@ -175,4 +197,15 @@ function addRecentCapture(list, item, max = MAX_RECENT_CAPTURES) {
   return [item, ...list.filter((entry) => entry.path.toLowerCase() !== item.path.toLowerCase())].slice(0, max);
 }
 
-module.exports = { CAPTURE_CARD_KEYS, CAPTURE_DELAYS, MAX_CAPTURE_TIMEOUT, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, dockedPanelBounds, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };
+// The panel dragged to `bounds` on its edge: the size to keep for this view and the place along the edge that gives it.
+function panelFromBounds(workArea, preferences, bounds) {
+  const size = cleanPanelSizes({ actions: bounds }).actions || { width: PANEL_LIMITS.minWidth, height: PANEL_LIMITS.minHeight };
+  size.width = Math.min(size.width, workArea.width);
+  size.height = Math.min(size.height, workArea.height);
+  const centre = preferences.edge === 'top'
+    ? (bounds.x + size.width / 2 - workArea.x) / workArea.width
+    : (bounds.y + size.height / 2 - workArea.y) / workArea.height;
+  return { size, offset: Math.round(Math.min(1, Math.max(0, centre)) * 1000) / 1000 };
+}
+
+module.exports = { PANEL_LIMITS, cleanPanelSizes, panelFromBounds, CAPTURE_CARD_KEYS, CAPTURE_DELAYS, MAX_CAPTURE_TIMEOUT, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, dockedPanelBounds, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };

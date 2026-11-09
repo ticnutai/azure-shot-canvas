@@ -561,6 +561,8 @@
       button.title = `${button.querySelector('span:last-child')?.textContent || ''} (${index + 1})`;
     });
   });
+  // Every other button of the bar names itself too: in a narrow window only the icons show.
+  document.querySelectorAll('.ribbon-buttons button:not([title])').forEach((button) => { button.title = button.querySelector('span:last-child')?.textContent?.trim() || ''; });
 
   // The neighbour in the direction of an arrow, as the pictures sit on screen (right-to-left rows).
   function neighbour(key) {
