@@ -53,6 +53,7 @@ const { AppJournal } = require('./app-journal.cjs');
 const { AiModel, MODEL: AI_MODEL } = require('./ai-model.cjs');
 const { VideoTools, VIDEO_TOOLS } = require('./video-tools.cjs');
 const { LocalTranscriber } = require('./local-transcriber.cjs');
+const { cleanAudio } = require('./audio-clean.cjs');
 // Transcription with the engine already on this computer, when there is no transcription server (nothing is downloaded).
 let localTranscriber = null;
 const transcriber = () => localTranscriber || (localTranscriber = new LocalTranscriber({ run: runHidden, workDirectory: path.join(app.getPath('userData'), 'transcription') }));
@@ -1808,6 +1809,12 @@ function registerIpc() {
       await fs.writeFile(`${result.path}.cursor.json`, JSON.stringify(cursorSamples), 'utf8');
       result.cursorSamples = cursorSamples.length;
     }
+    // Cleaner sound (background noise out, one even level), before anything listens to the sound for silences.
+    if (details.cleanSound) {
+      const cleaned = await cleanAudio(result.path, { run: runHidden }).catch((error) => ({ cleaned: false, reason: error.message }));
+      result.soundCleaned = cleaned.cleaned;
+      if (!cleaned.cleaned) result.soundCleanNote = cleaned.reason;
+    }
     // Automatic edit: the same silence detection and mouse zoom the video editor buttons use, saved as its project.
     if (details.autoSilence || details.autoZoom) {
       const duration = result.quality?.durationSeconds || 0;
@@ -1880,6 +1887,17 @@ function registerIpc() {
     const resolved = await assertLibraryFile(filePath, IMAGE_FILE);
     const result = await runOcr(resolved, { tessdataDirectory: await ensureOcrLanguageData() });
     await updateMetadata(resolved, { ocrText: result.text, ocrLanguage: result.language, ocrAt: new Date().toISOString() });
+    return result;
+  });
+  // A copy of the recording with cleaner sound, beside the original (which is left as it is).
+  ipcMain.handle('library:clean-sound', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
+    const extension = path.extname(resolved);
+    const plain = `${resolved.slice(0, -extension.length)}_קול-נקי${extension}`;
+    // A second cleaning of the same recording gets the time in its name, so nothing is written over.
+    const output = await fs.access(plain).then(() => `${resolved.slice(0, -extension.length)}_קול-נקי_${new Date().toTimeString().slice(0, 8).replace(/:/g, '-')}${extension}`, () => plain);
+    const result = await cleanAudio(resolved, { run: runHidden, output });
+    if (!result.cleaned) throw new Error(result.reason);
     return result;
   });
   ipcMain.handle('library:transcribe', async (_event, filePath) => {

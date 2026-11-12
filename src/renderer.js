@@ -392,6 +392,7 @@ const AUTOMATIC_SWITCHES = {
   autoRedact: { control: '#auto-redact', key: 'aurum-auto-redact' },
   autoSilence: { control: '#auto-silence', key: 'aurum-auto-silence' },
   autoZoom: { control: '#auto-zoom', key: 'aurum-auto-zoom' },
+  cleanSound: { control: '#clean-sound', key: 'aurum-clean-sound' },
   showKeys: { control: '#show-keys', key: 'aurum-show-keys' }
 };
 
@@ -1898,7 +1899,7 @@ async function finalizeRecording() {
     // Even after a write error, close the session so the written segments are joined and kept.
     const chosenFormat = $('#format-select')?.value || 'mp4';
     const target = chosenFormat === 'mp4' ? ($('#convert-mp4').checked ? 'mp4' : 'webm') : chosenFormat;
-    const result = await api.finishRecordingFile(session.id, target, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples, autoSilence: Boolean(state.autoSilence), autoZoom: Boolean(state.autoZoom) });
+    const result = await api.finishRecordingFile(session.id, target, { chapters: state.chapterMarkers, cursorSamples: state.cursorSamples, autoSilence: Boolean(state.autoSilence), autoZoom: Boolean(state.autoZoom), cleanSound: Boolean(state.cleanSound) });
     if (result.timelinePrepared) showToast(`עריכה אוטומטית מוכנה: ${result.timelinePrepared.removedSilences} קטעים שקטים הוסרו, ${result.timelinePrepared.zooms} הגדלות — פתחו בעורך הווידאו לייצוא`, 9000);
     state.recordingSession = null;
     if (writeError) showToast(`חלק מההקלטה לא נכתב לדיסק (${writeError.message}). מה שנשמר נשמר כאן: ${result.path}`, 10000);
@@ -2287,7 +2288,7 @@ function renderLibrary() {
       const isImage = item.kind === 'image';
       const menuItem = (name, className, label) => `<button type="button" role="menuitem" class="${className}">${icon(name)}<span>${label}</span></button>`;
       const editButton = isImage ? `<button class="gold-button card-primary edit-image">${icon('edit')}<span>עריכה</span></button>` : item.kind === 'document' ? '' : `<button class="gold-button card-primary edit-video">${icon('edit')}<span>עריכה</span></button>`;
-      const kindMenu = isImage ? menuItem('text', 'ocr', 'זיהוי טקסט') + menuItem('pin', 'pin', 'הצמדה מעל החלונות') : item.kind === 'document' ? '' : menuItem('gauge', 'analyze', 'בדיקת איכות') + menuItem('captions', 'transcribe', 'תמלול לכתוביות');
+      const kindMenu = isImage ? menuItem('text', 'ocr', 'זיהוי טקסט') + menuItem('pin', 'pin', 'הצמדה מעל החלונות') : item.kind === 'document' ? '' : menuItem('gauge', 'analyze', 'בדיקת איכות') + menuItem('captions', 'transcribe', 'תמלול לכתוביות') + menuItem('mic', 'clean-sound', 'ניקוי רעשים וייצוב עוצמה');
       const kindIcon = isImage ? 'image' : item.kind === 'document' ? 'document' : 'video';
       const metadata = item.metadata || {};
       const metaBadges = [metadata.favorite ? '★ מועדף' : '', metadata.client ? `לקוח: ${escapeHtml(metadata.client)}` : '', ...(metadata.tags || []).map((tag) => `#${escapeHtml(tag)}`)].filter(Boolean).map((label) => `<span>${label}</span>`).join('');
@@ -2311,6 +2312,7 @@ function renderLibrary() {
         menu.querySelector('.pin')?.addEventListener('click', async () => { try { await api.pinImage(item.path); showToast('הצילום הוצמד מעל החלונות'); } catch (error) { showToast(`הצמדה נכשלה: ${error.message}`); } });
         menu.querySelector('.analyze')?.addEventListener('click', async () => { try { const result = await api.analyzeMedia(item.path); showToast(`ציון איכות ${result.score}/100 · ${result.fps} FPS · סנכרון ${result.avSyncOffsetMs ?? '—'}ms`, 9000); await loadLibrary(); } catch (error) { showToast(`ניתוח נכשל: ${error.message}`); } });
         menu.querySelector('.transcribe')?.addEventListener('click', async () => { try { showToast('מתמלל במנוע המקומי הקיים…', 9000); const result = await api.transcribeMedia(item.path); showToast(`התמלול הושלם: ${result.wordCount} מילים וקובץ SRT נוצר`, 9000); await loadLibrary(); } catch (error) { showToast(`התמלול נכשל: ${error.message}`, 9000); } });
+        menu.querySelector('.clean-sound')?.addEventListener('click', async () => { try { showToast('מנקה את הקול…', 9000); const result = await api.cleanSound(item.path); showToast(`נשמר עותק עם קול נקי: ${result.path.split(/[\/]/).pop()}`, 9000); await loadLibrary(); } catch (error) { showToast(error.message, 9000); } });
         menu.querySelector('.metadata').addEventListener('click', () => metadataEditor().classList.toggle('hidden'));
         menu.querySelector('.rename').addEventListener('click', () => {
           const editor = renameEditor();
