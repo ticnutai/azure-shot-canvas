@@ -43,6 +43,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   copyFiles: (paths) => ipcRenderer.invoke('captures:copy', paths),
   trashFiles: (paths) => ipcRenderer.invoke('captures:trash', paths),
   getLocalEngines: () => ipcRenderer.invoke('tools:engines'),
+  journalTail: (count) => ipcRenderer.invoke('journal:tail', count),
   editVideo: (filePath, options) => ipcRenderer.invoke('video:edit', filePath, options),
   loadVideoTimeline: (filePath) => ipcRenderer.invoke('video:timeline-load', filePath),
   saveVideoTimeline: (filePath, project) => ipcRenderer.invoke('video:timeline-save', filePath, project),

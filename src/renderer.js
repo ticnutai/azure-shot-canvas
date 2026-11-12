@@ -2541,6 +2541,15 @@ function showPage(page, navigationAction = null) {
   if (page === 'tools') refreshEngineStatus();
 }
 
+// The start-and-close journal, newest first; lines that tell of a problem stand out. Read when the panel is opened.
+async function refreshJournal() {
+  const list = $('#journal-list');
+  if (!list || !api.journalTail) return;
+  const entries = await api.journalTail(80).catch(() => []);
+  list.innerHTML = entries.length ? entries.map((entry) => `<li class="${entry.problem ? 'problem' : ''}"><time>${escapeHtml(new Date(entry.at).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }))}</time><span>${escapeHtml(entry.text)}</span></li>`).join('') : '<li><span>היומן ריק</span></li>';
+  list.dataset.entries = String(entries.length);
+}
+
 async function refreshEngineStatus() {
   const container = $('#engine-grid');
   if (!container) return;
@@ -2887,6 +2896,7 @@ async function initialize() {
   $('#quickbar-display').addEventListener('change', (event) => updateQuickbar({ display: event.target.value }));
   $('#quickbar-pinned').addEventListener('change', (event) => updateQuickbar({ pinned: event.target.checked }));
   $('#refresh-engines').addEventListener('click', refreshEngineStatus);
+  $('#journal-panel')?.addEventListener('toggle', (event) => { if (event.currentTarget.open) refreshJournal(); });
   $$('[data-smart-action]').forEach((button) => button.addEventListener('click', () => runSmartAction(button.dataset.smartAction, button).catch((error) => { $('#tool-result').textContent = `שגיאה: ${error.message}`; showToast(`הפעולה נכשלה: ${error.message}`, 9000); })));
   $('#microphone').addEventListener('change', async (event) => {
     try { if (event.target.checked) await ensureDevicePermission('audio'); else await refreshDevices(); }

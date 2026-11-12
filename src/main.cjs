@@ -1638,6 +1638,11 @@ async function trimVideo(filePath, start, end) {
 }
 
 // The newest captures only (for the bar's history grid): thumbnails just for those, not the whole library.
+// What the captures window searches in besides the name: what was said in a recording and its summary (always),
+// and the text read from a picture (when searching inside pictures is switched on).
+function searchableText(metadata) {
+  return [featureOn('textIndex') ? String(metadata?.ocrText || '').slice(0, 3000) : '', String(metadata?.transcriptText || '').slice(0, 6000), String(metadata?.summary || '')].filter(Boolean).join(' ');
+}
 async function recentLibrary(limit = 48) {
   const directory = await ensureOutputDirectory();
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -1648,7 +1653,7 @@ async function recentLibrary(limit = 48) {
   }));
   const newest = items.filter(Boolean).sort((a, b) => b.modified - a.modified).slice(0, limit);
   // Folder tag and the file's address (videos play from it; Space shows a picture full size), for the captures window.
-  return Promise.all(newest.map(async (item) => { const metadata = await readJson(`${item.path}.meta.json`); return { ...item, thumbnail: await thumbnailFor(item), folder: metadata?.folder || '', text: featureOn('textIndex') ? String(metadata?.ocrText || '').slice(0, 3000) : '', url: pathToFileURL(item.path).href }; }));
+  return Promise.all(newest.map(async (item) => { const metadata = await readJson(`${item.path}.meta.json`); return { ...item, thumbnail: await thumbnailFor(item), folder: metadata?.folder || '', text: searchableText(metadata), url: pathToFileURL(item.path).href }; }));
 }
 
 // Only the app's own pages may call the main process: a foreign page that slipped into a window
@@ -1831,6 +1836,7 @@ function registerIpc() {
     return result;
   });
   ipcMain.handle('storage:status', storageStatus);
+  ipcMain.handle('journal:tail', (event, count) => (isTrustedSender(event) ? appJournal.tail(count) : []));
   ipcMain.handle('tools:engines', async () => {
     const engines = await discoverLocalEngines({ localTranscriber: transcriber() });
     try { await ensureOcrLanguageData(); engines.ocr.languages = [...new Set([...(engines.ocr.languages || []), 'heb'])]; engines.ocr.hebrewBundled = true; } catch {}
@@ -2516,6 +2522,10 @@ function buildTrayMenu() {
 const singleInstance = process.env.SCREEN_STUDIO_QA === '1' || Boolean(process.env.SCREEN_STUDIO_DEV_URL) || app.requestSingleInstanceLock();
 // How the program starts and ends (see app-journal.cjs). Only the copy that holds the lock writes it.
 const appJournal = new AppJournal({ directory: app.getPath('userData'), version: app.getVersion() });
+// Started with --quit: a request to the copy already running to close in an orderly way (before installing a new
+// version by hand). With nothing running there is nothing to close, and this copy leaves at once.
+const quitRequest = process.argv.includes('--quit');
+if (quitRequest && singleInstance && process.env.SCREEN_STUDIO_QA !== '1') app.exit(0);
 if (singleInstance) {
   appJournal.begin({ hidden: process.argv.includes('--hidden') });
   setInterval(() => appJournal.beat(), 5 * 60 * 1000).unref();
@@ -2526,7 +2536,11 @@ if (singleInstance) {
   app.on('child-process-gone', (_event, details) => { if (details?.reason !== 'clean-exit') appJournal.write(`תהליך עזר נסגר: ${details?.type}, סיבה ${details?.reason}, קוד ${details?.exitCode}`); });
 }
 if (!singleInstance) app.quit();
-else app.on('second-instance', () => { showMainWindow(); mainWindow?.focus(); });
+else app.on('second-instance', (_event, argv = []) => {
+  if (argv.includes('--quit')) { appJournal.reason('סגירה מסודרת לקראת התקנה'); app.quit(); return; }
+  showMainWindow();
+  mainWindow?.focus();
+});
 
 app.whenReady().then(async () => {
   if (!singleInstance) return;

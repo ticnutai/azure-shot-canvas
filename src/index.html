@@ -198,12 +198,13 @@
           <section id="tools-page" class="page panel page-panel tools-page">
             <div class="section-heading"><div><h2>מרכז כלים חכמים</h2><p>מנועים מקומיים קיימים בלבד — ללא ענן וללא התקנות כפולות</p></div><button class="ghost" id="refresh-engines">↻ בדיקה מחדש</button></div>
             <div class="engine-grid" id="engine-grid"><article><small>סורק מנועים מקומיים…</small></article></div>
+            <details class="journal-panel" id="journal-panel"><summary>מה קרה לאחרונה — מתי התוכנה הופעלה, נסגרה, התעדכנה או נתקלה בתקלה</summary><ol id="journal-list"></ol></details>
             <div class="tool-action-grid">
               <article><span>¶</span><div><h3>זיהוי טקסט בעברית</h3><p>זיהוי טקסט בצילום האחרון והוספתו לחיפוש בספרייה.</p></div><button class="gold-button" data-smart-action="ocr">הפעל על הצילום האחרון</button></article>
-              <article><span>◫</span><div><h3>תמלול וכתוביות</h3><p>שימוש ב־Whisper המקומי שכבר מותקן, ויצירת JSON ו־SRT.</p></div><button class="gold-button" data-smart-action="transcribe">תמלל וידאו אחרון</button></article>
-              <article><span>◴</span><div><h3>דוח איכות מדעי</h3><p>רזולוציה, FPS, פריימים, סנכרון שמע־וידאו וציון מספרי.</p></div><button class="gold-button" data-smart-action="analyze">נתח וידאו אחרון</button></article>
+              <article><span>◫</span><div><h3>תמלול וכתוביות</h3><p>תמלול במנוע שכבר במחשב, ויצירת קובץ כתוביות.</p></div><button class="gold-button" data-smart-action="transcribe">תמלל וידאו אחרון</button></article>
+              <article><span>◴</span><div><h3>דוח איכות מדעי</h3><p>גודל התמונה, קצב התמונות, סנכרון קול ותמונה וציון מספרי.</p></div><button class="gold-button" data-smart-action="analyze">נתח וידאו אחרון</button></article>
               <article><span>⊼</span><div><h3>הצמדה למסך</h3><p>השארת צילום אחרון מעל חלונות אחרים לעבודה נוחה.</p></div><button class="gold-button" data-smart-action="pin">הצמד צילום אחרון</button></article>
-              <article><span>⇪</span><div><h3>שיתוף פרטי מקומי</h3><p>קישור ב־127.0.0.1 בלבד, תפוגה 30 דקות וללא ענן.</p></div><button class="gold-button" data-smart-action="share">צור קישור מקומי</button></article>
+              <article><span>⇪</span><div><h3>שיתוף פרטי מקומי</h3><p>קישור שפועל במחשב הזה בלבד, תפוגה 30 דקות וללא ענן.</p></div><button class="gold-button" data-smart-action="share">צור קישור מקומי</button></article>
             </div>
             <pre class="tool-result" id="tool-result">בחר פעולה לקבלת תוצאה מפורטת.</pre>
           </section>

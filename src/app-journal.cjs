@@ -20,6 +20,17 @@ class AppJournal {
     try { fs.mkdirSync(directory, { recursive: true }); } catch {}
   }
 
+  // The last lines, newest first, each with its time and whether it tells of a problem — for the screen that shows them.
+  tail(count = 60) {
+    let text = '';
+    for (const file of [`${this.file}.old`, this.file]) { try { text += fs.readFileSync(file, 'utf8'); } catch {} }
+    return text.split(/\r?\n/).filter(Boolean).slice(-Math.max(1, Math.min(500, Number(count) || 60))).reverse().map((line) => {
+      const space = line.indexOf(' ');
+      const entry = { at: line.slice(0, space), text: line.slice(space + 1) };
+      return { ...entry, problem: /קרס|לא נסגרה מסודר|שגיאה|נדחתה|נכשל/.test(entry.text) };
+    });
+  }
+
   write(line) {
     try {
       const size = fs.existsSync(this.file) ? fs.statSync(this.file).size : 0;
