@@ -106,7 +106,8 @@ class LocalTranscriber {
     const model = findModel();
     let python = null;
     for (const candidate of pythonCandidates()) {
-      if ((await this.run(candidate, ['-c', 'import faster_whisper'], { timeoutMs: 30_000 })).ok) { python = candidate; break; }
+      // Only whether the library is there — loading it takes many seconds, and this runs when the tools page opens.
+      if ((await this.run(candidate, ['-c', 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("faster_whisper") else 1)'], { timeoutMs: 15_000 })).ok) { python = candidate; break; }
     }
     this.found = { available: Boolean(model && python), python, model };
     return this.found;
