@@ -21,7 +21,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
-const { EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, captureFilePath, developerShortcut, extensionPattern, mediaKind } = require('./main-utils.cjs');
+const { EDITABLE_VIDEO_FILE, IMAGE_FILE, LIBRARY_FILE, captureFilePath, fileStamp, developerShortcut, extensionPattern, mediaKind } = require('./main-utils.cjs');
 const { pdfFromJpeg } = require('./pdf-utils.cjs');
 const { compareReports } = require('./qa-utils.cjs');
 const { renamedLibraryPath } = require('./library-utils.cjs');
@@ -55,6 +55,7 @@ const { VideoTools, VIDEO_TOOLS } = require('./video-tools.cjs');
 const { LocalTranscriber } = require('./local-transcriber.cjs');
 const { cleanAudio } = require('./audio-clean.cjs');
 const { transcriptInsights } = require('./transcript-insights.cjs');
+const { compareBitmaps } = require('./image-diff.cjs');
 // Transcription with the engine already on this computer, when there is no transcription server (nothing is downloaded).
 let localTranscriber = null;
 const transcriber = () => localTranscriber || (localTranscriber = new LocalTranscriber({ run: runHidden, workDirectory: path.join(app.getPath('userData'), 'transcription') }));
@@ -1638,6 +1639,23 @@ async function trimVideo(filePath, start, end) {
 }
 
 // The newest captures only (for the bar's history grid): thumbnails just for those, not the whole library.
+// Two captures compared: a new picture with the earlier one on the left and the later one on the right, the places
+// that changed framed in red. A capture of another size is brought to the size of the earlier one first.
+async function compareCaptures(paths) {
+  if (paths.length !== 2) throw new Error('בוחרים בדיוק שני צילומים להשוואה');
+  const files = await Promise.all(paths.map(async (file) => { const resolved = await assertLibraryFile(file, IMAGE_FILE); return { path: resolved, modified: (await fs.stat(resolved)).mtimeMs }; }));
+  files.sort((one, two) => one.modified - two.modified);
+  const [before, after] = await Promise.all(files.map((file) => clipboardImageFor(file.path)));
+  if (!before || !after || before.isEmpty() || after.isEmpty()) throw new Error('לא ניתן לקרוא את אחד הצילומים');
+  const { width, height } = before.getSize();
+  const sized = after.getSize().width === width && after.getSize().height === height ? after : after.resize({ width, height, quality: 'best' });
+  const result = compareBitmaps(before.toBitmap({ scaleFactor: 1 }), sized.toBitmap({ scaleFactor: 1 }), width, height);
+  if (!result.frames.length) return { same: true, frames: 0 };
+  const target = path.join(await ensureOutputDirectory(), `השוואה_${fileStamp()}.png`);
+  await fs.writeFile(target, nativeImage.createFromBitmap(result.bitmap, { width: result.width, height: result.height }).toPNG());
+  return { same: false, frames: result.frames.length, changedPercent: Math.round(result.changedShare * 100), path: target, resized: sized !== after };
+}
+
 // What the captures window searches in besides the name: what was said in a recording and its summary (always),
 // and the text read from a picture (when searching inside pictures is switched on).
 function searchableText(metadata) {
@@ -2141,6 +2159,7 @@ function registerIpc() {
     return result;
   });
   ipcMain.handle('workspace:guide', (_event, options) => createStepsGuide(options || {}));
+  ipcMain.handle('workspace:compare', (_event, paths) => compareCaptures(Array.isArray(paths) ? paths : []));
   ipcMain.handle('workspace:trim', (_event, filePath, start, end) => trimVideo(filePath, start, end));
   // Closing the tools window puts its buttons back into the list window (the split ends); closing the list closes both.
   ipcMain.handle('workspace:close', async (event) => { if (toolsPanel.owns(event.sender)) await setWorkspaceSplit(false); else workspacePanel.close(); return true; });

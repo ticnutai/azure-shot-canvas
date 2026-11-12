@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('workspaceApi', {
   fitHeight: (height) => ipcRenderer.send('workspace:fit', height),
   onRunItem: (callback) => ipcRenderer.on('workspace:run-item', (_event, action) => callback(action)),
   createGuide: (options) => ipcRenderer.invoke('workspace:guide', options),
+  compare: (paths) => ipcRenderer.invoke('workspace:compare', paths),
   trim: (filePath, start, end) => ipcRenderer.invoke('workspace:trim', filePath, start, end)
 });
 

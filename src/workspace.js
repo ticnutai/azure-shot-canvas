@@ -322,6 +322,16 @@
     if (!targets.length) return;
     if (action === 'folder') return folderDialog(targets);
     if (action === 'guide') return guideDialog(targets);
+    if (action === 'compare') {
+      if (targets.length !== 2 || !targets.every((item) => item.kind === 'image')) return flashNote('להשוואה בוחרים בדיוק שני צילומים');
+      try {
+        const result = await api.compare(targets.map((item) => item.path));
+        root.dataset.lastCompare = result.same ? 'same' : String(result.frames);
+        flashNote(result.same ? 'שני הצילומים זהים — לא נמצא הבדל' : `נמצאו ${result.frames} מקומות שהשתנו — נשמר צילום השוואה`);
+        if (!result.same) { chosen.clear(); await load(); }
+      } catch (failure) { flashNote(`ההשוואה נכשלה: ${failure.message}`); }
+      return;
+    }
     if (action === 'trim') return targets[0].kind === 'video' ? trimDialog(targets[0]) : undefined;
     if (action === 'edit') {
       const [first] = targets;
@@ -349,7 +359,7 @@
     capture: [['region', '▱', 'אזור או חלון'], ['repeatRegion', '↺', 'האזור הקודם'], ['ocrRegion', 'א', 'העתקת טקסט מאזור'], ['scrollCapture', '⇣', 'עמוד גלילה אוטומטי'], ['screenshot', '▣', 'מסך מלא']],
     record: [['recordRegion', '▱', 'הקלטת אזור או חלון'], ['record', '●', 'התחלה או עצירה של הקלטה'], ['pause', 'Ⅱ', 'השהיה או המשך']]
   };
-  const ITEM_MENU = [['edit', '✎', 'עריכה'], ['copy', '⧉', 'העתקה ללוח'], ['pin', '⌖', 'הצמדה מעל החלונות'], ['open-folder', '⌑', 'הצגה בתיקייה'], null, ['folder', '▣', 'העברה לתיקייה…'], ['guide', '☰', 'מדריך צעדים…'], ['trim', '✂', 'חיתוך וידאו…'], null, ['trash', '⌫', 'העברה לסל המיחזור']];
+  const ITEM_MENU = [['edit', '✎', 'עריכה'], ['copy', '⧉', 'העתקה ללוח'], ['pin', '⌖', 'הצמדה מעל החלונות'], ['open-folder', '⌑', 'הצגה בתיקייה'], null, ['folder', '▣', 'העברה לתיקייה…'], ['guide', '☰', 'מדריך צעדים…'], ['compare', '⇄', 'מה השתנה בין שני הצילומים'], ['trim', '✂', 'חיתוך וידאו…'], null, ['trash', '⌫', 'העברה לסל המיחזור']];
   function showMenu(entries, x, y, onPick) {
     menu.replaceChildren(...entries.map((entry) => {
       if (!entry) return document.createElement('hr');
@@ -372,7 +382,7 @@
   function openItemMenu(x, y) {
     const one = selectedItems();
     const oneImage = one.length === 1 && one[0].kind === 'image';
-    const allowed = { edit: oneImage, pin: oneImage, guide: one.some((item) => item.kind === 'image'), trim: one.length === 1 && one[0].kind === 'video' };
+    const allowed = { edit: oneImage, pin: oneImage, guide: one.some((item) => item.kind === 'image'), compare: one.length === 2 && one.every((item) => item.kind === 'image'), trim: one.length === 1 && one[0].kind === 'video' };
     const entries = ITEM_MENU.filter((entry) => !entry || allowed[entry[0]] !== false);
     showMenu(entries, x, y, (key) => run(key));
   }
