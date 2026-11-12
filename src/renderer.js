@@ -2806,6 +2806,25 @@ async function initialize() {
     const caption = { id: `caption-${Date.now()}`, text: 'כתובית חדשה', start, end: Math.min(editingVideoProject.duration, start + 2), x: .5, y: .84 };
     editingVideoProject.captions.push(caption); selectTimelineItem('caption', caption.id);
   });
+  // Captions for the whole recording from its speech. Captions typed by hand stay; earlier ones from speech are replaced.
+  $('#video-captions-from-speech').addEventListener('click', async () => {
+    if (!editingVideoItem || !editingVideoProject) return;
+    const button = $('#video-captions-from-speech');
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = 'מתמלל…';
+    try {
+      const words = await api.transcriptWords(editingVideoItem.path);
+      const fromSpeech = window.AurumTimeline.captionsFromWords(words);
+      if (!fromSpeech.length) { showToast('לא נמצא דיבור בהקלטה'); return; }
+      editingVideoProject.captions = [...editingVideoProject.captions.filter((caption) => !caption.fromTranscript), ...fromSpeech].slice(0, 500);
+      selectedTimelineItem = null;
+      renderVideoTimeline();
+      document.documentElement.dataset.speechCaptions = String(fromSpeech.length);
+      showToast(`${fromSpeech.length} כתוביות נוספו מהדיבור · לחיצה על כתובית מאפשרת לתקן אותה`, 8000);
+    } catch (error) { showToast(`הכתוביות לא נוצרו: ${error.message}`, 9000); }
+    finally { button.disabled = false; button.textContent = label; }
+  });
   $('#video-auto-zoom').addEventListener('click', () => {
     if (!editingVideoProject) return;
     const samples = editingVideoCursorSamples.length ? editingVideoCursorSamples : [{ at: $('#video-editor-preview').currentTime, x: .5, y: .5 }];

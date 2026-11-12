@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   transcribeMedia: (filePath) => ipcRenderer.invoke('library:transcribe', filePath),
   cleanSound: (filePath) => ipcRenderer.invoke('library:clean-sound', filePath),
   mediaInsights: (filePath) => ipcRenderer.invoke('library:insights', filePath),
+  transcriptWords: (filePath) => ipcRenderer.invoke('library:transcript-words', filePath),
   getWaveform: (filePath) => ipcRenderer.invoke('library:waveform', filePath),
   pinImage: (filePath) => ipcRenderer.invoke('library:pin', filePath),
   copyFiles: (paths) => ipcRenderer.invoke('captures:copy', paths),

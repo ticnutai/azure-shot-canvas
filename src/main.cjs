@@ -1909,6 +1909,17 @@ function registerIpc() {
   });
   // A name, a summary and chapters from the transcript, by the language engine already on this computer. A recording
   // not transcribed yet is transcribed first. Chapters marked by hand during the recording are never replaced.
+  // The words of a recording with their times (transcribed now when it was not yet), for captions on the timeline.
+  ipcMain.handle('library:transcript-words', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
+    let transcript = await readJson(`${resolved}.transcript.json`);
+    if (!transcript?.wordTimings?.length) {
+      const transcribed = await transcribeMedia(resolved, { language: 'he', localTranscriber: transcriber() });
+      await updateMetadata(resolved, { transcriptText: transcribed.text, transcriptPath: transcribed.transcriptPath, srtPath: transcribed.srtPath, transcribedAt: new Date().toISOString() });
+      transcript = await readJson(`${resolved}.transcript.json`);
+    }
+    return transcript?.wordTimings || [];
+  });
   ipcMain.handle('library:insights', async (_event, filePath) => {
     const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
     let transcript = await readJson(`${resolved}.transcript.json`);

@@ -20,7 +20,7 @@ function normalizeTimelineProject(candidate = {}, duration = 0) {
   const captions = (Array.isArray(candidate.captions) ? candidate.captions : []).slice(0, 500).map((caption) => ({
     id: String(caption.id || id('caption')), text: String(caption.text || '').trim().slice(0, 300),
     start: clamp(caption.start, 0, maximum), end: clamp(caption.end || Number(caption.start) + 2, Number(caption.start) + 0.1, maximum),
-    x: clamp(caption.x ?? 0.5, 0.05, 0.95), y: clamp(caption.y ?? 0.84, 0.05, 0.95)
+    x: clamp(caption.x ?? 0.5, 0.05, 0.95), y: clamp(caption.y ?? 0.84, 0.05, 0.95), ...(caption.fromTranscript ? { fromTranscript: true } : {})
   })).filter((caption) => caption.text && caption.end > caption.start);
   const zooms = (Array.isArray(candidate.zooms) ? candidate.zooms : []).slice(0, 200).map((zoom) => ({
     id: String(zoom.id || id('zoom')), start: clamp(zoom.start, 0, maximum), end: clamp(zoom.end || Number(zoom.start) + 1.5, Number(zoom.start) + 0.1, maximum),
@@ -68,5 +68,37 @@ function cursorZooms(samples = [], duration = 0) {
   return result.slice(0, 80);
 }
 
-return { clipsWithoutSilence, cursorZooms, normalizeTimelineProject, splitClip };
+// Captions from the transcript's words: short lines that are easy to read — a few words each, never long on the
+// screen, and a new one after a pause in the speech or the end of a sentence. Each stays until the next one starts
+// (but not long after its last word), so the text does not flicker.
+function captionsFromWords(words = [], { maxWords = 7, maxSeconds = 4.5, pause = 0.7, linger = 0.6 } = {}) {
+  const groups = [];
+  let current = null;
+  for (const item of words) {
+    const text = String(item?.word || '').trim();
+    const start = Number(item?.start);
+    const end = Number(item?.end);
+    if (!text || !Number.isFinite(start) || !Number.isFinite(end)) continue;
+    const startNew = !current || current.words.length >= maxWords || end - current.start > maxSeconds || start - current.end > pause || /[.!?…]$/.test(current.words.at(-1));
+    if (startNew) { current = { start, end, words: [] }; groups.push(current); }
+    current.words.push(text);
+    current.end = Math.max(current.end, end);
+  }
+  // The last word or two of a sentence are not left alone on the screen: they join the line before them.
+  for (let index = groups.length - 1; index > 0; index -= 1) {
+    const group = groups[index];
+    const before = groups[index - 1];
+    if (group.words.length > 2 || /[.!?…]$/.test(before.words.at(-1)) || group.start - before.end > pause || before.words.length + group.words.length > maxWords + 2) continue;
+    before.words.push(...group.words);
+    before.end = group.end;
+    groups.splice(index, 1);
+  }
+  return groups.slice(0, 500).map((group, index) => {
+    const next = groups[index + 1];
+    const end = Math.max(group.start + 0.4, Math.min(group.end + linger, next ? next.start - 0.02 : group.end + linger));
+    return { id: id('caption'), text: group.words.join(' '), start: group.start, end, x: 0.5, y: 0.84, fromTranscript: true };
+  });
+}
+
+return { captionsFromWords, clipsWithoutSilence, cursorZooms, normalizeTimelineProject, splitClip };
 });
