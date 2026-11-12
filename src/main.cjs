@@ -54,6 +54,7 @@ const { AiModel, MODEL: AI_MODEL } = require('./ai-model.cjs');
 const { VideoTools, VIDEO_TOOLS } = require('./video-tools.cjs');
 const { LocalTranscriber } = require('./local-transcriber.cjs');
 const { cleanAudio } = require('./audio-clean.cjs');
+const { transcriptInsights } = require('./transcript-insights.cjs');
 // Transcription with the engine already on this computer, when there is no transcription server (nothing is downloaded).
 let localTranscriber = null;
 const transcriber = () => localTranscriber || (localTranscriber = new LocalTranscriber({ run: runHidden, workDirectory: path.join(app.getPath('userData'), 'transcription') }));
@@ -1667,7 +1668,7 @@ async function renameLibraryFile(filePath, requestedName) {
     const project = await readJson(newProjectPath);
     if (project) await fs.writeFile(newProjectPath, JSON.stringify({ ...project, sourcePath: targetPath, outputPath: targetPath }, null, 2), 'utf8');
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  for (const suffix of ['.meta.json', '.quality.json', '.transcript.json', '.srt', '.chapters.json', '.cursor.json', '.timeline.json']) {
+  for (const suffix of ['.meta.json', '.quality.json', '.transcript.json', '.srt', '.chapters.json', '.summary.json', '.cursor.json', '.timeline.json']) {
     await fs.rename(`${filePath}${suffix}`, `${targetPath}${suffix}`).catch((error) => { if (error.code !== 'ENOENT') throw error; });
   }
   return { path: targetPath, name: path.basename(targetPath) };
@@ -1905,6 +1906,27 @@ function registerIpc() {
     const result = await transcribeMedia(resolved, { language: 'he', localTranscriber: transcriber() });
     await updateMetadata(resolved, { transcriptText: result.text, transcriptPath: result.transcriptPath, srtPath: result.srtPath, transcribedAt: new Date().toISOString() });
     return result;
+  });
+  // A name, a summary and chapters from the transcript, by the language engine already on this computer. A recording
+  // not transcribed yet is transcribed first. Chapters marked by hand during the recording are never replaced.
+  ipcMain.handle('library:insights', async (_event, filePath) => {
+    const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);
+    let transcript = await readJson(`${resolved}.transcript.json`);
+    if (!transcript?.wordTimings?.length) {
+      const transcribed = await transcribeMedia(resolved, { language: 'he', localTranscriber: transcriber() });
+      await updateMetadata(resolved, { transcriptText: transcribed.text, transcriptPath: transcribed.transcriptPath, srtPath: transcribed.srtPath, transcribedAt: new Date().toISOString() });
+      transcript = await readJson(`${resolved}.transcript.json`);
+    }
+    const insights = await transcriptInsights(transcript, {
+      address: featureValue('translate', 'address'),
+      start: (program) => { spawn(program, ['serve'], { windowsHide: true, detached: true, stdio: 'ignore' }).unref(); appJournal.write('מנוע השפה המקומי הופעל לצורך סיכום'); }
+    });
+    await fs.writeFile(`${resolved}.summary.json`, JSON.stringify({ ...insights, createdAt: new Date().toISOString() }, null, 2), 'utf8');
+    const marked = await readJson(`${resolved}.chapters.json`);
+    const chaptersSaved = !marked?.length && insights.chapters.length > 0;
+    if (chaptersSaved) await fs.writeFile(`${resolved}.chapters.json`, JSON.stringify(insights.chapters, null, 2), 'utf8');
+    await updateMetadata(resolved, { summary: insights.summary, suggestedTitle: insights.title, summarizedAt: new Date().toISOString() });
+    return { ...insights, chaptersSaved, path: resolved };
   });
   ipcMain.handle('library:waveform', async (_event, filePath) => {
     const resolved = await assertLibraryFile(filePath, EDITABLE_VIDEO_FILE);

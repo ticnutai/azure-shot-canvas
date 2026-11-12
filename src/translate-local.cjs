@@ -50,4 +50,4 @@ async function translateText(text, { address, model = '', target = 'עברית',
   return { text: translated, model: chosen };
 }
 
-module.exports = { EngineError, LANGUAGE_NAMES, listModels, translateText };
+module.exports = { EngineError, LANGUAGE_NAMES, baseAddress, listModels, request, translateText };

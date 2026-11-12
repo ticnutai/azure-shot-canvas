@@ -2288,10 +2288,10 @@ function renderLibrary() {
       const isImage = item.kind === 'image';
       const menuItem = (name, className, label) => `<button type="button" role="menuitem" class="${className}">${icon(name)}<span>${label}</span></button>`;
       const editButton = isImage ? `<button class="gold-button card-primary edit-image">${icon('edit')}<span>עריכה</span></button>` : item.kind === 'document' ? '' : `<button class="gold-button card-primary edit-video">${icon('edit')}<span>עריכה</span></button>`;
-      const kindMenu = isImage ? menuItem('text', 'ocr', 'זיהוי טקסט') + menuItem('pin', 'pin', 'הצמדה מעל החלונות') : item.kind === 'document' ? '' : menuItem('gauge', 'analyze', 'בדיקת איכות') + menuItem('captions', 'transcribe', 'תמלול לכתוביות') + menuItem('mic', 'clean-sound', 'ניקוי רעשים וייצוב עוצמה');
+      const kindMenu = isImage ? menuItem('text', 'ocr', 'זיהוי טקסט') + menuItem('pin', 'pin', 'הצמדה מעל החלונות') : item.kind === 'document' ? '' : menuItem('gauge', 'analyze', 'בדיקת איכות') + menuItem('captions', 'transcribe', 'תמלול לכתוביות') + menuItem('text', 'insights', 'סיכום, כותרת ופרקים') + menuItem('mic', 'clean-sound', 'ניקוי רעשים וייצוב עוצמה');
       const kindIcon = isImage ? 'image' : item.kind === 'document' ? 'document' : 'video';
       const metadata = item.metadata || {};
-      const metaBadges = [metadata.favorite ? '★ מועדף' : '', metadata.client ? `לקוח: ${escapeHtml(metadata.client)}` : '', ...(metadata.tags || []).map((tag) => `#${escapeHtml(tag)}`)].filter(Boolean).map((label) => `<span>${label}</span>`).join('');
+      const metaBadges = [metadata.favorite ? '★ מועדף' : '', metadata.client ? `לקוח: ${escapeHtml(metadata.client)}` : '', metadata.summary ? `<i title="${escapeHtml(metadata.summary)}">יש סיכום</i>` : '', ...(metadata.tags || []).map((tag) => `#${escapeHtml(tag)}`)].filter(Boolean).map((label) => `<span>${label}</span>`).join('');
       row.classList.toggle('favorite', Boolean(metadata.favorite));
       row.dataset.kind = item.kind;
       const modified = new Date(item.modified).toLocaleString('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -2312,6 +2312,18 @@ function renderLibrary() {
         menu.querySelector('.pin')?.addEventListener('click', async () => { try { await api.pinImage(item.path); showToast('הצילום הוצמד מעל החלונות'); } catch (error) { showToast(`הצמדה נכשלה: ${error.message}`); } });
         menu.querySelector('.analyze')?.addEventListener('click', async () => { try { const result = await api.analyzeMedia(item.path); showToast(`ציון איכות ${result.score}/100 · ${result.fps} FPS · סנכרון ${result.avSyncOffsetMs ?? '—'}ms`, 9000); await loadLibrary(); } catch (error) { showToast(`ניתוח נכשל: ${error.message}`); } });
         menu.querySelector('.transcribe')?.addEventListener('click', async () => { try { showToast('מתמלל במנוע המקומי הקיים…', 9000); const result = await api.transcribeMedia(item.path); showToast(`התמלול הושלם: ${result.wordCount} מילים וקובץ SRT נוצר`, 9000); await loadLibrary(); } catch (error) { showToast(`התמלול נכשל: ${error.message}`, 9000); } });
+        menu.querySelector('.insights')?.addEventListener('click', async () => {
+          try {
+            showToast('מסכם במנוע השפה שבמחשב… בפעם הראשונה זה לוקח כדקה', 20_000);
+            const result = await api.mediaInsights(item.path);
+            const time = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+            const chapterLines = result.chapters.map((chapter) => `${time(chapter.at)}  ${chapter.label}`).join('\n');
+            const rename = result.title && window.confirm(`הסיכום:\n${result.summary}\n\n${chapterLines ? `הפרקים:\n${chapterLines}\n\n` : ''}לשנות את שם הסרטון ל:\n"${result.title}"?`);
+            if (rename) await api.renameFile(item.path, result.title);
+            showToast(rename ? 'הסיכום והפרקים נשמרו, והשם הוחלף' : 'הסיכום והפרקים נשמרו', 7000);
+            await loadLibrary();
+          } catch (error) { showToast(`הסיכום לא בוצע: ${error.message}`, 9000); }
+        });
         menu.querySelector('.clean-sound')?.addEventListener('click', async () => { try { showToast('מנקה את הקול…', 9000); const result = await api.cleanSound(item.path); showToast(`נשמר עותק עם קול נקי: ${result.path.split(/[\/]/).pop()}`, 9000); await loadLibrary(); } catch (error) { showToast(error.message, 9000); } });
         menu.querySelector('.metadata').addEventListener('click', () => metadataEditor().classList.toggle('hidden'));
         menu.querySelector('.rename').addEventListener('click', () => {
