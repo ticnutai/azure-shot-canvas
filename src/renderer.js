@@ -1925,12 +1925,30 @@ async function finalizeRecording() {
   }
 }
 
+// A strip at the top of the window while the disk is nearly full: recording is refused under 1 GB, and Windows itself
+// slows down. Hidden by its ✕ until the level changes; checked again every minute (a cheap file-system call).
+let dismissedDiskLevel = '';
+function showDiskWarning(status) {
+  const strip = $('#disk-warning');
+  if (!strip) return;
+  // Test runs share this computer's disk: there the strip shows only when a test simulates a full disk.
+  const level = ['critical', 'warning'].includes(status.level) && (!api.qaEnabled || status.simulated) ? status.level : '';
+  if (dismissedDiskLevel && level !== dismissedDiskLevel) dismissedDiskLevel = '';
+  strip.hidden = !level || dismissedDiskLevel === level;
+  if (!level) return;
+  const free = (status.freeBytes / 1024 ** 3).toFixed(1);
+  strip.dataset.level = level;
+  $('#disk-warning-title').textContent = level === 'critical' ? `הדיסק כמעט מלא — נשארו ${free} ג׳יגה` : `המקום בדיסק מתמעט — נשארו ${free} ג׳יגה`;
+  $('#disk-warning-text').textContent = level === 'critical' ? 'הקלטה חדשה לא תתחיל עד שיתפנה מקום (צילומי מסך עדיין נשמרים).' : 'הקלטה ארוכה עלולה למלא את הדיסק. כדאי לפנות מקום.';
+}
+
 async function refreshStorageStatus() {
   const status = await api.getStorageStatus();
-  const freeLabel = Number.isFinite(status.freeBytes) ? `${(status.freeBytes / 1024 ** 3).toFixed(1)} GB פנויים` : 'לא ניתן למדוד';
+  const freeLabel = Number.isFinite(status.freeBytes) ? `${(status.freeBytes / 1024 ** 3).toFixed(1)} ג׳יגה פנויים` : 'לא ניתן למדוד';
   if ($('#storage-status')) $('#storage-status').textContent = freeLabel;
   if ($('#recovery-status')) $('#recovery-status').textContent = status.recovered ? `${status.recovered} שוחזרו` : 'אין הקלטות לשחזור';
   document.documentElement.dataset.storageLevel = status.level;
+  showDiskWarning(status);
   document.documentElement.dataset.recoveredRecordings = String(status.recovered || 0);
   return status;
 }
@@ -2886,6 +2904,9 @@ async function initialize() {
   $('#edit-latest-image').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   $('#quick-edit-latest').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   $('#choose-output').addEventListener('click', async () => { $('#output-path').textContent = await api.chooseOutput(); });
+  $('#disk-warning-close')?.addEventListener('click', () => { dismissedDiskLevel = $('#disk-warning').dataset.level || ''; $('#disk-warning').hidden = true; });
+  $('#disk-warning-clean')?.addEventListener('click', () => api.openStorageSettings?.());
+  setInterval(() => { if (!document.hidden) refreshStorageStatus().catch(() => {}); }, 60_000);
   // The mail program for "שליחה במייל" everywhere in the studio; the choice is kept by the main process.
   const renderMailSettings = (mail) => {
     const select = $('#mail-client');

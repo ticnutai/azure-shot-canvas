@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('screenStudio', {
   recordingHeartbeat: (id, health) => ipcRenderer.invoke('recording:heartbeat', id, health),
   finishRecordingFile: (id, convertToMp4, details) => ipcRenderer.invoke('recording:finish', id, convertToMp4, details),
   getStorageStatus: () => ipcRenderer.invoke('storage:status'),
+  openStorageSettings: () => ipcRenderer.invoke('storage:open-settings'),
   getCursorPosition: () => ipcRenderer.invoke('cursor:position'),
   listLibrary: () => ipcRenderer.invoke('library:list'),
   openFile: (filePath) => ipcRenderer.invoke('library:open', filePath),

@@ -194,3 +194,12 @@ html[data-layout="canvas"][data-theme="canvas-dark"] { --tab-capture: #ff7a7a; -
 .layout-mini[data-layout-preview="canvas"]::before { right: 0; }
 .layout-mini[data-layout-preview="canvas"] :is(em, u) { top: calc(var(--m-top-h) + 15px); }
 .layout-mini[data-layout-preview="canvas"] u { right: 7px; }
+
+/* Disk nearly full: a strip under the title bar, in every layout */
+.disk-warning{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 16px 0;padding:10px 14px;border:1px solid color-mix(in srgb,var(--danger) 55%,var(--line));border-radius:10px;background:color-mix(in srgb,var(--danger) 12%,var(--panel));color:var(--text)}
+.disk-warning[hidden]{display:none}
+.disk-warning[data-level="warning"]{border-color:color-mix(in srgb,var(--gold) 55%,var(--line));background:color-mix(in srgb,var(--gold) 12%,var(--panel))}
+.disk-warning b{font-size:13px}
+.disk-warning span{flex:1;min-width:200px;color:var(--muted);font-size:12px}
+.disk-warning .disk-warning-close{border:0;background:transparent;color:var(--muted);font-size:14px;cursor:pointer;padding:4px 8px}
+.disk-warning .disk-warning-close:hover{color:var(--text)}

@@ -1045,9 +1045,11 @@ async function storageStatus() {
   const directory = await ensureOutputDirectory();
   try {
     const stats = await fs.statfs(directory);
-    const freeBytes = Number(stats.bavail) * Number(stats.bsize);
+    // Test runs may simulate a nearly full disk (the warning strip's test); otherwise the real free space.
+    const simulated = process.env.SCREEN_STUDIO_QA === '1' && process.env.SCREEN_STUDIO_FREE_BYTES ? Number(process.env.SCREEN_STUDIO_FREE_BYTES) : null;
+    const freeBytes = simulated ?? Number(stats.bavail) * Number(stats.bsize);
     const totalBytes = Number(stats.blocks) * Number(stats.bsize);
-    return { directory, freeBytes, totalBytes, level: storageLevel(freeBytes), recovered: recoveredRecordings.length };
+    return { directory, freeBytes, totalBytes, level: storageLevel(freeBytes), recovered: recoveredRecordings.length, simulated: simulated !== null };
   } catch {
     return { directory, freeBytes: null, totalBytes: null, level: 'unknown', recovered: recoveredRecordings.length };
   }
@@ -1395,7 +1397,7 @@ async function exportTimeline(inputPath, outputPath, candidate) {
 
 function runThumbnailFfmpeg(inputPath, outputPath) {
   return new Promise((resolve) => {
-    const child = spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-ss', '0.2', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '3', outputPath], { windowsHide: true });
+    const child = spawn('ffmpeg', ['-y', '-hide_banner', '-loglevel', 'error', '-ss', '0.2', '-i', inputPath, '-frames:v', '1', '-vf', `scale='min(${VIDEO_FRAME_WIDTH},iw)':-2`, '-q:v', '3', outputPath], { windowsHide: true });
     child.on('error', () => resolve(false));
     child.on('close', (code) => resolve(code === 0));
   });
@@ -1403,6 +1405,7 @@ function runThumbnailFfmpeg(inputPath, outputPath) {
 
 // Library reloads are frequent; without this every screenshot was decoded at full size on each load.
 const thumbnailMemory = new Map();
+const VIDEO_FRAME_WIDTH = 960;
 // The pages get a thumbnail as a short address of its cached file, served by this scheme (registered before the app is
 // ready); writing the whole picture into the list made every library load several megabytes.
 const THUMBNAIL_SCHEME = 'aurum-thumb';
@@ -1432,7 +1435,10 @@ async function createThumbnail(item) {
   try {
     const cacheDirectory = thumbnailDirectory();
     await fs.mkdir(cacheDirectory, { recursive: true });
-    const cacheKey = crypto.createHash('sha1').update(`${item.path}|${item.modified}|${item.size}`).digest('hex');
+    // Video frames are taken 960 wide (they have no original picture to swap to when enlarged); the size is part of
+    // the key, so frames cached at the old 480 are taken again.
+    const frameSize = ['png', 'jpg'].includes(item.extension) ? '' : `|${VIDEO_FRAME_WIDTH}`;
+    const cacheKey = crypto.createHash('sha1').update(`${item.path}|${item.modified}|${item.size}${frameSize}`).digest('hex');
     const thumbnailPath = path.join(cacheDirectory, `${cacheKey}.jpg`);
     if (item.extension === 'pdf') return null;
     if (['png', 'jpg'].includes(item.extension)) {
@@ -1896,6 +1902,8 @@ function registerIpc() {
     return result;
   });
   ipcMain.handle('storage:status', storageStatus);
+  // Windows' own storage page (temporary files, recycle bin, storage sense): the person chooses what to free.
+  ipcMain.handle('storage:open-settings', () => shell.openExternal('ms-settings:storagesense'));
   ipcMain.handle('journal:tail', (event, count) => (isTrustedSender(event) ? appJournal.tail(count) : []));
   ipcMain.handle('tools:engines', async () => {
     const engines = await discoverLocalEngines({ localTranscriber: transcriber() });
