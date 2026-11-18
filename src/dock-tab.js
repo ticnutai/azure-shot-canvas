@@ -11,6 +11,11 @@
     body.style.setProperty('--dark', state.dark || '#1f6fe5');
     tab.setAttribute('aria-label', state.label || 'פתיחת לוח הצילומים');
   });
+  // Where in the window the tab is drawn (its exact size; the window may be a little bigger).
+  api.onBox?.((box) => {
+    if (!box) return;
+    Object.assign(tab.style, { left: `${box.x}px`, top: `${box.y}px`, width: `${box.width}px`, height: `${box.height}px`, right: 'auto', bottom: 'auto' });
+  });
   let timer = 0;
   let pressedAt = null;
   let dragging = false;

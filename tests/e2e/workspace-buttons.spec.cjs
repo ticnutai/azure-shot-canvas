@@ -81,6 +81,8 @@ test.describe.serial('the captures window in the edge: buttons and handles', () 
     const tab = app.windows().find((candidate) => candidate.url().includes('dock-tab.html'));
     expect(tab).toBeTruthy();
     await expect(tab.locator('body')).toHaveAttribute('data-edge', 'right');
+    // Drawn at exactly the tab's own size, even when Windows keeps the window itself a little bigger.
+    await expect.poll(() => tab.locator('#tab').evaluate((node) => [node.offsetWidth, node.offsetHeight].join('x'))).toBe('18x120');
     await expect(tab.locator('body')).toHaveAttribute('data-tab-style', 'tab');
     // The style and the colour chosen in the settings reach the tab at once.
     await app.evaluate(() => globalThis.__aurumQa.setTabLook?.('glass', 'green'));

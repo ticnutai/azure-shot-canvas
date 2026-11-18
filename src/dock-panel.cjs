@@ -271,6 +271,8 @@ class DockPanel {
     const bigger = actual.width > wanted.width || actual.height > wanted.height;
     this.lastShape = [{ x: Math.max(0, wanted.x - actual.x), y: Math.max(0, wanted.y - actual.y), width: wanted.width, height: wanted.height }];
     if (typeof this.tab.setShape === 'function') { try { this.tab.setShape(bigger ? this.lastShape : []); } catch {} }
+    // The page draws the tab in exactly that part of its window (Windows may keep the window itself bigger).
+    this.tab.webContents.send('dock-tab:box', this.lastShape[0]);
   }
   async showTab() {
     const area = this.area();

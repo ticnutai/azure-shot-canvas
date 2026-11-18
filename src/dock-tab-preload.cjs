@@ -3,5 +3,6 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('dockTabApi', {
   setDock: (patch) => ipcRenderer.invoke('workspace:dock', patch),
   dragDock: (active) => ipcRenderer.invoke('workspace:dock-drag', active),
-  onState: (callback) => ipcRenderer.on('dock-tab:state', (_event, state) => callback(state))
+  onState: (callback) => ipcRenderer.on('dock-tab:state', (_event, state) => callback(state)),
+  onBox: (callback) => ipcRenderer.on('dock-tab:box', (_event, box) => callback(box))
 });
