@@ -197,6 +197,17 @@ test('a whole-edge panel let go in the middle: a usual-size window under the poi
   // Held far to the left of a wide panel near the left edge: pushed back inside the screen.
   assert.equal(freeBoundsAt(area, { x: -900, y: 0, width: 1440, height: 852 }, { x: 10, y: 400 }, { width: 736, height: 612 }).x, 0);
 });
+test('two tabs on the same edge never cover each other', () => {
+  const { clearOf } = require('../src/dock-panel.cjs');
+  const area = { x: 0, y: 0, width: 1440, height: 852 };
+  const bar = { x: 0, y: 438, width: 18, height: 120 }; // the top bar's tab on the left edge
+  // The captures tab wanted at the middle of the left edge (366–486): moved just below the bar's tab.
+  assert.deepEqual(clearOf({ x: 0, y: 366, width: 18, height: 120 }, [bar], area, 'left'), { x: 0, y: 566, width: 18, height: 120 });
+  // No room below: just above it.
+  assert.deepEqual(clearOf({ x: 0, y: 700, width: 18, height: 120 }, [{ x: 0, y: 690, width: 18, height: 120 }], area, 'left'), { x: 0, y: 562, width: 18, height: 120 });
+  // Not touching: stays where it was.
+  assert.deepEqual(clearOf({ x: 0, y: 100, width: 18, height: 120 }, [bar], area, 'left'), { x: 0, y: 100, width: 18, height: 120 });
+});
 test('open against an edge, the captures panel runs the whole edge; only its depth is the user own size', () => {
   const { dockedPanelBounds } = require('../src/quickbar-utils.cjs');
   const area = { x: 0, y: 0, width: 1440, height: 852 };

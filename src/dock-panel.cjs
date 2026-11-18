@@ -46,6 +46,27 @@ function freeBoundsAt(area, box, point, size) {
   };
 }
 
+// Two tabs on the same edge never cover each other: a tab that would sit over another one (the top bar's tab, the
+// other panel's tab) moves along the edge just past it — or just before it when there is no room after it.
+function clearOf(tab, others, area, edge) {
+  const across = edge === 'top' || edge === 'bottom';
+  const gap = 8;
+  const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  let place = { ...tab };
+  for (let round = 0; round < 3; round += 1) {
+    const hit = others.find((other) => other && overlaps(place, other));
+    if (!hit) return place;
+    if (across) {
+      const after = hit.x + hit.width + gap;
+      place.x = after + place.width <= area.x + area.width ? after : Math.max(area.x, hit.x - gap - place.width);
+    } else {
+      const after = hit.y + hit.height + gap;
+      place.y = after + place.height <= area.y + area.height ? after : Math.max(area.y, hit.y - gap - place.height);
+    }
+  }
+  return place;
+}
+
 class DockPanel {
   // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock ·
   // tabStyle() · tabColors() ({ light, dark }) · hideFromCaptures() · fill (open against an edge it runs the edge's whole length) ·
@@ -244,7 +265,7 @@ class DockPanel {
   // The tab where it belongs on its edge, cut to exactly that size (Windows may keep a window a little bigger).
   placeTab(area = this.area()) {
     if (!this.tabOpen()) return;
-    const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min, TAB);
+    const wanted = clearOf(dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min, TAB), this.options.avoid?.() || [], area, this.dock.edge);
     this.tab.setBounds(wanted);
     const actual = this.tab.getBounds();
     const bigger = actual.width > wanted.width || actual.height > wanted.height;
@@ -389,4 +410,4 @@ class DockPanel {
   }
 }
 
-module.exports = { DockPanel, TAB, snapEdge, freeBoundsAt };
+module.exports = { DockPanel, TAB, snapEdge, freeBoundsAt, clearOf };

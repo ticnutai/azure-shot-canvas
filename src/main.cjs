@@ -1492,12 +1492,19 @@ function dockTabColors() {
   const color = require('./app-icons.js').COLORS.find((item) => item.id === quickbarPreferences.tabColor);
   return color ? { light: color.light, dark: color.dark } : { light: '#64b0ff', dark: '#1f6fe5' };
 }
+// What a folded tab must not cover: the top bar's own folded tab, and the other panel's tab.
+function dockTabObstacles(self) {
+  const list = [];
+  if (quickbarWindow && !quickbarWindow.isDestroyed() && !quickbarExpanded && quickbarWindow.isVisible()) list.push(quickbarWindow.getBounds());
+  for (const panel of workspacePanels()) if (panel !== self && panel.tabOpen() && panel.tab.isVisible()) list.push(panel.tab.getBounds());
+  return list;
+}
 const workspacePanel = new DockPanel({
   statePath: () => path.join(app.getPath('userData'), 'workspace-window.json'),
   page: path.join(__dirname, 'workspace.html'), preload: path.join(__dirname, 'workspace-preload.cjs'),
   title: 'לוח הצילומים', icon: () => windowIcon(), size: { width: 736, height: 612 }, min: { width: 420, height: 380 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 }),
-  defaultDock: { edge: 'right', offset: 0.5 }, fill: true, tabStyle: () => quickbarPreferences.tabStyle, tabColors: () => dockTabColors(), hideFromCaptures: () => hideFromCaptures, hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null),
+  defaultDock: { edge: 'right', offset: 0.5 }, fill: true, avoid: () => dockTabObstacles(workspacePanel), tabStyle: () => quickbarPreferences.tabStyle, tabColors: () => dockTabColors(), hideFromCaptures: () => hideFromCaptures, hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null),
   // The buttons belong to the list: closing the list closes them too (the split is kept for next time).
   onClosed: () => toolsPanel.close()
 });
@@ -1507,7 +1514,7 @@ const toolsPanel = new DockPanel({
   title: 'כלי הצילום', icon: () => windowIcon(), size: { width: 760, height: 190 }, min: { width: 280, height: 70 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + 12 }),
   // Its tab sits higher on the same edge, so the two tabs never cover each other.
-  defaultDock: { edge: 'right', offset: 0.22 }, tabStyle: () => quickbarPreferences.tabStyle, tabColors: () => dockTabColors(), hideFromCaptures: () => hideFromCaptures,
+  defaultDock: { edge: 'right', offset: 0.22 }, avoid: () => dockTabObstacles(toolsPanel), tabStyle: () => quickbarPreferences.tabStyle, tabColors: () => dockTabColors(), hideFromCaptures: () => hideFromCaptures,
   hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null)
 });
 const workspacePanels = () => [workspacePanel, toolsPanel];
