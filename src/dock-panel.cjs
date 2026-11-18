@@ -1,11 +1,18 @@
-// A frameless window that is either free (moved, sized, optionally above the others) or hidden in a screen edge like
-// the top bar: folded it is a small tab; pointing at it opens the window against that edge; it folds again once the
-// pointer has been away for a moment (not while the page reports it is busy — a dialog, a menu, a drop-down list).
-// Pinned, it stays open. The tab can be dragged anywhere along the left, right or top edge, of any screen.
+// A frameless window that is either free (moved, sized, optionally above the others) or a side panel against any of
+// the four screen edges, like the top bar: folded it is a small tab; pointing at it opens the panel against that
+// edge; it folds again once the pointer has been away for a moment (not while the page reports it is busy — a dialog,
+// a menu, a drop-down list). Pinned, it stays open.
+// Moving: the tab is dragged to any place on any edge of any screen. The open panel or the free window, dragged by its
+// title bar and let go near an edge, stands against that edge; the panel let go far from every edge becomes a free
+// window again.
+// The folded tab is a small see-through window of its own (dock-tab.html), drawn exactly like the top bar's tab in the
+// tab style and colour chosen in the settings; the panel itself is hidden meanwhile. (Cutting the panel's own window
+// to the tab's shape did not hold on every computer: the whole window showed as a grey box.)
 // Place, size, edge and pin are kept in a small file of its own. The captures window and its separate tools window
 // are both made of this.
 const { BrowserWindow, screen } = require('electron');
 const fs = require('node:fs/promises');
+const path = require('node:path');
 const { dockedPanelBounds, panelEdgeForPointer, offsetForPointer } = require('./quickbar-utils.cjs');
 
 const quietRun = () => process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1';
@@ -13,51 +20,26 @@ async function readJson(filePath) {
   try { return JSON.parse(await fs.readFile(filePath, 'utf8')); } catch { return null; }
 }
 
-// The folded window is cut to the tab's own shape, so nothing else of the (non-transparent) window shows. It is the
-// same tab as the top bar's, in the tab style chosen in the settings: a thin line along the edge with a small tab in
-// its middle ("tab"), only the line ("line"), a small pill, a dot or a glass pill. An empty list gives the whole
-// window back. `shift` moves the shape inside the window (how far Windows left the window from where it was asked).
 const EDGES = ['left', 'right', 'top', 'bottom'];
 const TAB = Object.freeze({ thickness: 18, length: 120 });
-const tabSize = () => TAB;
-// For each point along the tab: from how deep to how deep (counted from the screen edge) the tab is solid.
-function tabProfile(style, along) {
-  const fromCentre = Math.abs(along + 0.5 - TAB.length / 2);
-  if (style === 'line') return [0, 5];
-  if (style === 'pill') return fromCentre <= 30 ? [3, 15] : null;
-  if (style === 'glass') return fromCentre <= 26 ? [2, 14] : null;
-  if (style === 'dot') {
-    if (fromCentre >= 8) return null;
-    const half = Math.sqrt(64 - fromCentre * fromCentre);
-    return [Math.round(8 - half), Math.round(8 + half)];
-  }
-  if (fromCentre <= 18) return [0, 18];
-  if (fromCentre < 24) return [0, Math.round(12 + (24 - fromCentre))];
-  return [0, 5];
-}
-function tabShape(edge, style = 'tab', shift = { x: 0, y: 0 }) {
-  const across = edge === 'top' || edge === 'bottom';
-  const rects = [];
-  for (let along = 0; along < TAB.length; along += 1) {
-    const span = tabProfile(style, along);
-    if (!span) continue;
-    // Flush with the screen edge: counted from the far side of the window on the right and at the bottom.
-    const [start, end] = edge === 'right' || edge === 'bottom' ? [TAB.thickness - span[1], TAB.thickness - span[0]] : span;
-    const last = rects.at(-1);
-    const spot = across ? { x: along, y: start, width: 1, height: end - start } : { x: start, y: along, width: end - start, height: 1 };
-    // Neighbouring lines of the same reach are one rectangle.
-    if (last && (across ? last.y === spot.y && last.height === spot.height && last.x + last.width === along : last.x === spot.x && last.width === spot.width && last.y + last.height === along)) {
-      if (across) last.width += 1; else last.height += 1;
-    } else rects.push(spot);
-  }
-  return rects.map((rect) => ({ ...rect, x: rect.x + shift.x, y: rect.y + shift.y }));
+// Let go this close to a screen edge (in points), a dragged window stands against it.
+const SNAP = 24;
+
+// Which edge a window let go at `point` belongs to: the nearest one when the point is that close to it, else none.
+function snapEdge(area, point, reach = SNAP) {
+  const edge = panelEdgeForPointer(area, point);
+  const distance = { left: point.x - area.x, right: area.x + area.width - point.x, top: point.y - area.y, bottom: area.y + area.height - point.y }[edge];
+  return distance <= reach ? edge : null;
 }
 
 class DockPanel {
-  // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock · tabStyle() · hideDelay() (milliseconds, or null) · onClosed()
+  // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock ·
+  // tabStyle() · tabColors() ({ light, dark }) · hideFromCaptures() · fill (open against an edge it runs the edge's whole length) ·
+  // hideDelay() (milliseconds, or null) · onClosed()
   constructor(options) {
     this.options = options;
     this.window = null;
+    this.tab = null;
     this.dock = this.readDock({});
     this.normal = { bounds: null, onTop: false };
     // Anything else the owner keeps in the same file (the captures window: whether it is split in two).
@@ -67,6 +49,7 @@ class DockPanel {
     this.dragTimer = null;
     this.resizeTimer = null;
     this.resizedAt = 0;
+    this.userMoving = false;
     this.lastShape = [];
   }
 
@@ -79,9 +62,15 @@ class DockPanel {
     };
   }
   isOpen() { return Boolean(this.window && !this.window.isDestroyed()); }
-  owns(webContents) { return this.isOpen() && this.window.webContents === webContents; }
+  tabOpen() { return Boolean(this.tab && !this.tab.isDestroyed()); }
+  owns(webContents) { return (this.isOpen() && this.window.webContents === webContents) || (this.tabOpen() && this.tab.webContents === webContents); }
   send(channel, ...values) { if (this.isOpen()) this.window.webContents.send(channel, ...values); }
-  state() { const { enabled, expanded, edge, pinned } = this.dock; return { enabled, expanded, edge, pinned, tabStyle: this.options.tabStyle?.() || 'tab' }; }
+  state() {
+    const { enabled, expanded, edge, pinned } = this.dock;
+    return { enabled, expanded, edge, pinned, fill: Boolean(this.options.fill), tabStyle: this.options.tabStyle?.() || 'tab' };
+  }
+  // Where the folded tab is, and the part of its window that takes the pointer (for the tests).
+  tabState() { return { bounds: this.tabOpen() ? this.tab.getBounds() : null, visible: this.tabOpen() && this.tab.isVisible(), shape: this.lastShape }; }
 
   async open() {
     if (this.isOpen()) {
@@ -116,20 +105,35 @@ class DockPanel {
     const remember = () => {
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
-        if (!this.isOpen() || this.window.isMaximized()) return;
+        if (!this.isOpen() || this.window.isMaximized() || !this.window.isVisible() && !quietRun()) return;
         const box = this.window.getBounds();
-        // In an edge only the open size is kept (resized by the user); a free window keeps its place and size.
-        if (this.dock.enabled) { if (this.dock.expanded && box.width >= min.width) this.dock.size = { width: box.width, height: box.height }; }
+        // Against an edge only the open size is kept (resized by the user); a free window keeps its place and size.
+        // (A side panel running the whole edge keeps only its depth: its width on a side, its height on top or bottom.)
+        if (this.dock.enabled) {
+          if (this.dock.expanded && box.width >= min.width) {
+            const along = this.dock.edge === 'top' || this.dock.edge === 'bottom';
+            const before = this.dock.size || { width: box.width, height: box.height };
+            this.dock.size = !this.options.fill ? { width: box.width, height: box.height } : along ? { width: before.width, height: box.height } : { width: box.width, height: before.height };
+          }
+        }
         else this.normal = { bounds: box, onTop: this.window.isAlwaysOnTop() };
         this.save();
       }, 400);
     };
     win.on('move', remember);
     win.on('resize', remember);
-    win.on('closed', () => { this.window = null; this.busy = false; this.watchPointer(false); this.dragTab(false); this.resizeFrom(null); this.options.onClosed?.(); });
+    // Moved by hand (its title bar): let go near an edge it stands there; the panel let go far from the edges is free.
+    win.on('will-move', () => { this.userMoving = true; });
+    win.on('moved', () => { if (this.userMoving) { this.userMoving = false; this.dropped(screen.getCursorScreenPoint()); } });
+    win.on('closed', () => {
+      this.window = null; this.busy = false; this.watchPointer(false); this.dragTab(false); this.resizeFrom(null);
+      if (this.tabOpen()) this.tab.destroy();
+      this.tab = null;
+      this.options.onClosed?.();
+    });
     await win.loadFile(this.options.page, this.options.query ? { query: this.options.query } : undefined);
     if (!this.isOpen()) return { opened: false };
-    // Hidden in an edge last time: back in its edge, open for a moment so it is clear where it went.
+    // Against an edge last time: back there, open for a moment so it is clear where it went.
     if (this.dock.enabled) {
       this.dock.size = this.dock.size || { width: bounds.width, height: bounds.height };
       win.setAlwaysOnTop(true, 'floating');
@@ -150,11 +154,19 @@ class DockPanel {
     const { enabled, edge, offset, pinned, size } = this.dock;
     fs.writeFile(this.options.statePath(), JSON.stringify({ ...this.extra, bounds: this.normal.bounds, onTop: this.normal.onTop, dock: { enabled, edge, offset, pinned, size } }), 'utf8').catch(() => {});
   }
-  sendDock() { this.send('workspace:dock', this.state()); }
+  sendDock() {
+    const state = this.state();
+    this.send('workspace:dock', state);
+    if (this.tabOpen()) {
+      const colors = this.options.tabColors?.() || {};
+      this.tab.webContents.send('dock-tab:state', { edge: state.edge, tabStyle: state.tabStyle, light: colors.light, dark: colors.dark, label: `פתיחת ${this.options.title}` });
+    }
+  }
+  openBounds(area = this.area()) { return dockedPanelBounds(area, this.dock, this.dock.size, true, this.options.min, TAB, Boolean(this.options.fill)); }
 
   setOnTop(onTop) {
     this.normal.onTop = Boolean(onTop);
-    // In an edge the window is always above the others; the choice applies again once it is a free window.
+    // Against an edge the window is always above the others; the choice applies again once it is a free window.
     if (!this.dock.enabled && this.isOpen()) this.window.setAlwaysOnTop(this.normal.onTop);
     this.save();
     return this.normal.onTop;
@@ -168,7 +180,7 @@ class DockPanel {
     if (height === box.height) return;
     if (this.dock.enabled) {
       this.dock.size = { width: box.width, height };
-      this.window.setBounds(dockedPanelBounds(this.area(), this.dock, this.dock.size, true, this.options.min));
+      this.window.setBounds(this.openBounds());
     } else this.window.setBounds({ ...box, height });
   }
   toggleMaximize() {
@@ -184,7 +196,7 @@ class DockPanel {
     let outsideSince = 0;
     this.pointerTimer = setInterval(() => {
       if (!this.isOpen() || !this.dock.expanded || this.dock.pinned) return this.watchPointer(false);
-      if (this.busy || this.resizeTimer || Date.now() - this.resizedAt < 1500) { outsideSince = 0; return; }
+      if (this.busy || this.resizeTimer || this.userMoving || Date.now() - this.resizedAt < 1500) { outsideSince = 0; return; }
       const point = screen.getCursorScreenPoint();
       const box = this.window.getBounds();
       const inside = point.x >= box.x - 6 && point.x <= box.x + box.width + 6 && point.y >= box.y - 6 && point.y <= box.y + box.height + 6;
@@ -194,47 +206,66 @@ class DockPanel {
     }, 120);
     this.pointerTimer.unref?.();
   }
-  shape(folded, wanted = null) {
-    if (typeof this.window?.setShape !== 'function') return;
-    let shift = { x: 0, y: 0 };
-    if (folded && wanted) {
-      const actual = this.window.getBounds();
-      shift = { x: Math.max(0, wanted.x - actual.x), y: Math.max(0, wanted.y - actual.y) };
-    }
-    const rects = folded ? tabShape(this.dock.edge, this.options.tabStyle?.(), shift) : [];
-    // Kept so a test can see where the tab really sits (the shape cannot be read back from the window).
-    this.lastShape = rects;
-    try { this.window.setShape(rects); } catch {}
+
+  // ---- The folded tab: a see-through window of its own ----
+  async ensureTab() {
+    if (this.tabOpen()) return this.tab;
+    const tab = new BrowserWindow({
+      width: TAB.thickness, height: TAB.length, show: false, frame: false, transparent: true, resizable: false, movable: false,
+      minimizable: false, maximizable: false, fullscreenable: false, skipTaskbar: true, focusable: false, alwaysOnTop: true, hasShadow: false,
+      type: 'toolbar', backgroundColor: '#00000000', title: this.options.title,
+      webPreferences: { preload: path.join(__dirname, 'dock-tab-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+    });
+    this.tab = tab;
+    tab.setMenuBarVisibility(false);
+    tab.setAlwaysOnTop(true, 'floating');
+    // Like the top bar's tab: not part of the user's own screenshots and recordings (unless chosen otherwise).
+    tab.setContentProtection(this.options.hideFromCaptures?.() ?? true);
+    tab.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    tab.webContents.on('will-navigate', (event) => event.preventDefault());
+    tab.on('closed', () => { if (this.tab === tab) this.tab = null; });
+    await tab.loadFile(path.join(__dirname, 'dock-tab.html'));
+    return tab;
   }
-  // The tab style was changed in the settings: a folded tab takes the new shape at once.
-  refreshShape() {
+  // The tab where it belongs on its edge, cut to exactly that size (Windows may keep a window a little bigger).
+  placeTab(area = this.area()) {
+    if (!this.tabOpen()) return;
+    const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min, TAB);
+    this.tab.setBounds(wanted);
+    const actual = this.tab.getBounds();
+    const bigger = actual.width > wanted.width || actual.height > wanted.height;
+    this.lastShape = [{ x: Math.max(0, wanted.x - actual.x), y: Math.max(0, wanted.y - actual.y), width: wanted.width, height: wanted.height }];
+    if (typeof this.tab.setShape === 'function') { try { this.tab.setShape(bigger ? this.lastShape : []); } catch {} }
+  }
+  async showTab() {
+    const area = this.area();
+    await this.ensureTab();
+    if (!this.tabOpen() || !this.dock.enabled || this.dock.expanded) return;
+    this.placeTab(area);
     this.sendDock();
-    if (!this.isOpen() || !this.dock.enabled || this.dock.expanded) return;
-    const wanted = dockedPanelBounds(this.area(), this.dock, this.dock.size, false, this.options.min, tabSize(this.options.tabStyle?.()));
-    this.window.setBounds(wanted);
-    this.shape(true, wanted);
+    if (!quietRun()) this.tab.showInactive();
   }
+  hideTab() { if (this.tabOpen()) this.tab.hide(); }
+  protectTab(hidden) { if (this.tabOpen()) this.tab.setContentProtection(Boolean(hidden)); }
+  // The tab style or colour was changed in the settings: a folded tab takes it at once.
+  refreshShape() { this.sendDock(); if (this.isOpen() && this.dock.enabled && !this.dock.expanded) this.placeTab(); }
+
   setExpanded(expanded) {
     if (!this.isOpen() || !this.dock.enabled) return;
     const { min } = this.options;
     this.dock.expanded = Boolean(expanded);
-    const area = this.area();
     if (this.dock.expanded) {
-      this.shape(false);
-      this.window.setResizable(true);
-      this.window.setMaximizable(true);
-      this.window.setMinimizable(true);
+      const area = this.tabOpen() && this.tab.isVisible() ? this.area(this.tab.getBounds()) : this.area();
+      this.hideTab();
       this.window.setMinimumSize(min.width, min.height);
-      this.window.setBounds(dockedPanelBounds(area, this.dock, this.dock.size, true, min));
+      this.window.setBounds(this.openBounds(area));
+      if (!quietRun() && !this.window.isVisible()) this.window.showInactive();
     } else {
-      // A resizable window is kept at least ~40 wide by Windows: the folded tab is not resizable.
-      this.window.setResizable(false);
-      this.window.setMaximizable(false);
-      this.window.setMinimizable(false);
-      this.window.setMinimumSize(1, 1);
-      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, min, tabSize(this.options.tabStyle?.()));
-      this.window.setBounds(wanted);
-      this.shape(true, wanted);
+      // The panel steps away; only its tab stays on the edge.
+      const area = this.area();
+      this.window.setBounds(this.openBounds(area));
+      if (!quietRun()) this.window.hide();
+      this.showTab();
     }
     this.sendDock();
     this.watchPointer(this.dock.expanded && !this.dock.pinned);
@@ -243,9 +274,11 @@ class DockPanel {
     if (!this.isOpen()) return this.state();
     const { min } = this.options;
     if ('pinned' in patch) this.dock.pinned = Boolean(patch.pinned);
+    if (EDGES.includes(patch.edge)) this.dock.edge = patch.edge;
+    if (Number.isFinite(Number(patch.offset)) && 'offset' in patch) this.dock.offset = Math.min(1, Math.max(0, Number(patch.offset)));
     if ('enabled' in patch && Boolean(patch.enabled) !== this.dock.enabled) {
       if (patch.enabled) {
-        // Into the edge: remember where the free window was, keep its size for the open state, stay above other windows.
+        // Against the edge: remember where the free window was, keep its size for the open state, stay above other windows.
         if (!this.window.isMaximized()) this.normal.bounds = this.window.getBounds();
         if (this.window.isMaximized()) this.window.unmaximize();
         this.dock.size = this.dock.size || { width: this.window.getBounds().width, height: this.window.getBounds().height };
@@ -256,19 +289,42 @@ class DockPanel {
         this.dock.enabled = false;
         this.dock.expanded = false;
         this.watchPointer(false);
-        this.shape(false);
-        this.window.setResizable(true);
-        this.window.setMaximizable(true);
-        this.window.setMinimizable(true);
+        this.hideTab();
         this.window.setMinimumSize(min.width, min.height);
+        if (patch.bounds) this.normal.bounds = patch.bounds;
         if (this.normal.bounds) this.window.setBounds(this.normal.bounds);
         this.window.setAlwaysOnTop(Boolean(this.normal.onTop));
+        if (!quietRun() && !this.window.isVisible()) this.window.show();
         this.sendDock();
       }
     } else if ('expanded' in patch) this.setExpanded(patch.expanded);
+    else if (this.dock.enabled && ('edge' in patch || 'offset' in patch)) this.setExpanded(this.dock.expanded);
     else if ('pinned' in patch) { this.sendDock(); this.watchPointer(this.dock.expanded && !this.dock.pinned); }
     this.save();
     return this.state();
+  }
+  // The window was let go after being moved by its title bar, the pointer at `point`.
+  dropped(point) {
+    if (!this.isOpen()) return;
+    const area = this.area(point);
+    const edge = snapEdge(area, point);
+    // Windows makes a window dragged to the top of the screen full screen: here it means "stand along the top".
+    if (this.window.isMaximized()) { if (edge !== 'top') return; this.window.unmaximize(); }
+    if (edge) {
+      // Near an edge: stand against it, centred where it was let go along that edge.
+      const box = this.window.getBounds();
+      const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      const offset = offsetForPointer(area, edge, centre);
+      if (!this.dock.enabled) {
+        this.dock.size = { width: box.width, height: box.height };
+        this.setDock({ enabled: true, edge, offset });
+      } else this.setDock({ edge, offset });
+    } else if (this.dock.enabled && this.dock.expanded) {
+      // The panel let go far from every edge: a free window where it was let go.
+      const box = this.window.getBounds();
+      const bounds = { ...box, width: Math.min(box.width, this.options.size.width), height: Math.min(box.height, this.options.size.height) };
+      this.setDock({ enabled: false, bounds });
+    }
   }
   // A handle on a side or a corner is being dragged: the window grows or shrinks from that side, following the
   // pointer (the title bar moves the window, so the system's own resize border does not reach the top). Not while
@@ -281,16 +337,17 @@ class DockPanel {
     const start = this.window.getBounds();
     const from = screen.getCursorScreenPoint();
     const { min } = this.options;
+    const area = this.area();
     this.resizeTimer = setInterval(() => {
       if (!this.isOpen()) return this.resizeFrom(null);
       const point = screen.getCursorScreenPoint();
       const dx = point.x - from.x;
       const dy = point.y - from.y;
       let { x, y, width, height } = start;
-      if (grip.includes('e')) width = Math.max(min.width, start.width + dx);
-      if (grip.includes('w')) { width = Math.max(min.width, start.width - dx); x = start.x + start.width - width; }
-      if (grip.includes('s')) height = Math.max(min.height, start.height + dy);
-      if (grip.includes('n')) { height = Math.max(min.height, start.height - dy); y = start.y + start.height - height; }
+      if (grip.includes('e')) width = Math.min(area.x + area.width - start.x, Math.max(min.width, start.width + dx));
+      if (grip.includes('w')) { width = Math.min(start.x + start.width - area.x, Math.max(min.width, start.width - dx)); x = start.x + start.width - width; }
+      if (grip.includes('s')) height = Math.min(area.y + area.height - start.y, Math.max(min.height, start.height + dy));
+      if (grip.includes('n')) { height = Math.min(start.y + start.height - area.y, Math.max(min.height, start.height - dy)); y = start.y + start.height - height; }
       const now = this.window.getBounds();
       if (now.x !== x || now.y !== y || now.width !== width || now.height !== height) this.window.setBounds({ x, y, width, height });
     }, 16);
@@ -312,12 +369,12 @@ class DockPanel {
       const edgeChanged = edge !== this.dock.edge;
       this.dock.edge = edge;
       this.dock.offset = offset;
-      const wanted = dockedPanelBounds(area, this.dock, this.dock.size, false, this.options.min, tabSize(this.options.tabStyle?.()));
-      this.window.setBounds(wanted);
-      this.shape(true, wanted);
+      this.placeTab(area);
+      // Where the panel opens follows the tab (to the same screen too).
+      this.window.setBounds(this.openBounds(area));
       if (edgeChanged) this.sendDock();
     }, 16);
   }
 }
 
-module.exports = { DockPanel, TAB, tabShape };
+module.exports = { DockPanel, TAB, snapEdge };

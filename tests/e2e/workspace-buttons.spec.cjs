@@ -6,7 +6,7 @@ const { closeStudio, launchStudio } = require('../helpers/electron-app.cjs');
 //   2  a handle being pulled never lets the window fold away, even when the pointer is outside it for a while
 //   3  no handle on the side against the screen edge
 //   4  the studio button folds the window away so the studio comes out in front
-//   5  folded, it is a round button floating off the edge
+//   5  folded, it is the top bar's own tab, in a window of its own
 test.describe.serial('the captures window in the edge: buttons and handles', () => {
   let app;
   let workspace;
@@ -46,14 +46,15 @@ test.describe.serial('the captures window in the edge: buttons and handles', () 
 
   test('2 · pulling a handle: the window stays open, even with the pointer outside it', async () => {
     const box = await bounds();
-    await pointer({ x: box.x + 10, y: box.y + box.height - 2 });
-    await workspace.evaluate(() => window.workspaceApi.resizeFrom('s'));
+    // The side panel runs the whole height: its inner side (left, on the right edge) is the one pulled.
+    await pointer({ x: box.x + 2, y: box.y + 200 });
+    await workspace.evaluate(() => window.workspaceApi.resizeFrom('w'));
     // The pointer runs ahead of the window, far outside it, for longer than the window waits before folding.
     await pointer({ x: box.x - 300, y: box.y + box.height + 120 });
     await new Promise((resolve) => setTimeout(resolve, 1800));
     expect(await docked()).toBe('open');
     await workspace.evaluate(() => window.workspaceApi.resizeFrom(null));
-    expect((await bounds()).height).toBeGreaterThan(box.height + 60);
+    expect((await bounds()).width).toBeGreaterThan(box.width + 60);
     // Right after letting go it still waits a moment before folding.
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(await docked()).toBe('open');
@@ -63,7 +64,8 @@ test.describe.serial('the captures window in the edge: buttons and handles', () 
 
   test('3 · no handle on the side against the screen edge', async () => {
     const shown = await workspace.evaluate(() => [...document.querySelectorAll('[data-grip]')].filter((grip) => getComputedStyle(grip).display !== 'none').map((grip) => grip.dataset.grip).sort());
-    expect(shown).toEqual(['n', 'nw', 's', 'sw', 'w']);
+    // A side panel running the whole height: only its inner side.
+    expect(shown).toEqual(['w']);
   });
 
   test('4 · the studio button folds the window away and shows the studio', async () => {
@@ -72,13 +74,20 @@ test.describe.serial('the captures window in the edge: buttons and handles', () 
     expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().endsWith('index.html')).isVisible())).toBe(true);
   });
 
-  test('5 · folded: the top bar own tab — a thin line with a small tab in its middle', async () => {
-    const shape = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape);
-    const widths = shape.map((rect) => rect.width);
-    expect(Math.max(...widths)).toBe(18); // the tab in the middle
-    expect(widths[0]).toBe(5); // the thin line above and below it
-    expect(widths.at(-1)).toBe(5);
-    expect(shape.reduce((sum, rect) => sum + rect.height, 0)).toBe(120);
-    await expect(workspace.locator('html')).toHaveAttribute('data-tab-style', 'tab');
+  test('5 · folded: the top bar own tab, in a see-through window of its own, in the chosen style', async () => {
+    await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape.length)).toBe(1);
+    const info = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools));
+    expect(info.shape[0]).toMatchObject({ width: 18, height: 120 });
+    const tab = app.windows().find((candidate) => candidate.url().includes('dock-tab.html'));
+    expect(tab).toBeTruthy();
+    await expect(tab.locator('body')).toHaveAttribute('data-edge', 'right');
+    await expect(tab.locator('body')).toHaveAttribute('data-tab-style', 'tab');
+    // The style and the colour chosen in the settings reach the tab at once.
+    await app.evaluate(() => globalThis.__aurumQa.setTabLook?.('glass', 'green'));
+    await expect(tab.locator('body')).toHaveAttribute('data-tab-style', 'glass');
+    expect(await tab.evaluate(() => document.body.style.getPropertyValue('--dark'))).not.toBe('#1f6fe5');
+    // Pointing at the tab opens the panel.
+    await tab.locator('#tab').dispatchEvent('mouseenter');
+    await expect.poll(docked, { timeout: 5000 }).toBe('open');
   });
 });

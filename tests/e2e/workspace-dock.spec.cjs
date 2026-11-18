@@ -30,7 +30,12 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     return { box, area: screen.getDisplayNearestPoint({ x: box.x + 2, y: box.y + Math.round(box.height / 2) }).workArea, onTop: target.isAlwaysOnTop(), min: target.getMinimumSize() };
   });
   // Where the folded tab really sits: the window may be pushed back by Windows, the tab then moves inside it.
-  const tabLeft = async () => (await win()).box.x + Math.min(...(await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape)).map((rect) => rect.x));
+  // The folded tab is a small window of its own; its pointer-taking part is `shape` inside it.
+  const tabInfo = async () => {
+    await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape.length)).toBe(1);
+    return app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools));
+  };
+  const tabLeft = async () => { const info = await tabInfo(); return info.bounds.x + info.shape[0].x; };
   const docked = () => workspace.evaluate(() => document.documentElement.dataset.docked);
 
   test.beforeAll(async () => {
@@ -69,24 +74,24 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await expect.poll(docked).toBe('open');
     let state = await win();
     expect(state.box.x + state.box.width).toBe(state.area.x + state.area.width);
+    // A side panel: the whole height of the screen's work area.
+    expect(state.box.y).toBe(state.area.y);
+    expect(state.box.height).toBe(state.area.height);
     expect(state.onTop).toBe(true);
     await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: false }));
     await expect.poll(docked).toBe('folded');
     state = await win();
-    // Folded it is the top bar's own tab: flush with the right edge, 18 deep at its middle (the window is shaped to
-    // it, so only the tab shows and takes the pointer).
+    // Folded it is the top bar's own tab, in a see-through window of its own: flush with the right edge, 18 deep,
+    // 120 long, in the middle of the edge.
+    const info = await tabInfo();
     expect(await tabLeft()).toBe(state.area.x + state.area.width - 18);
-    // Windows keeps a folded window at least ~41 device pixels wide (twice that in points on a double-density screen).
-    expect(state.box.width).toBeLessThanOrEqual(90);
-    expect(state.box.height).toBeGreaterThanOrEqual(120);
-    // (Twice that on a double-density screen next to a normal one: Windows scales the window; the shape cuts it to the tab.)
-    expect(state.box.height).toBeLessThanOrEqual(250);
-    await expect(workspace.locator('#dock-tab')).toBeVisible();
+    expect(info.shape[0]).toMatchObject({ width: 18, height: 120 });
+    expect(info.bounds.y + info.shape[0].y).toBe(state.area.y + Math.round(state.area.height / 2 - 60));
     await expect(workspace.locator('#grid')).toBeHidden();
   });
 
   test('4 · pointing at the tab opens the window', async () => {
-    await workspace.locator('#dock-tab').dispatchEvent('mouseenter');
+    await app.windows().find((candidate) => candidate.url().includes('dock-tab.html')).locator('#tab').dispatchEvent('mouseenter');
     await expect.poll(docked, { timeout: 5000 }).toBe('open');
     expect((await win()).box.width).toBeGreaterThanOrEqual(420);
   });
@@ -157,24 +162,44 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await workspace.evaluate(() => window.workspaceApi.dragDock(true));
     await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('bottom');
     await workspace.evaluate(() => window.workspaceApi.dragDock(false));
-    const shape = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape);
-    const folded = await win();
-    // Lying along the bottom edge: wide, not tall, flush with the bottom of the work area.
-    expect(Math.max(...shape.map((rect) => rect.y + rect.height)) + folded.box.y).toBe(area.y + area.height);
+    const info = await tabInfo();
+    // Lying along the bottom edge: 120 wide, 18 tall, flush with the bottom of the work area.
+    expect(info.shape[0]).toMatchObject({ width: 120, height: 18 });
+    expect(info.bounds.y + info.shape[0].y + 18).toBe(area.y + area.height);
     await pointer({ x: area.x + Math.round(area.width * 0.3), y: area.y + area.height - 40 });
     await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: true }));
     await expect.poll(docked).toBe('open');
     const open = await win();
+    // Open along the bottom: the whole width, standing on the bottom edge.
     expect(open.box.y + open.box.height).toBe(area.y + area.height);
-    // No handle on the side against the bottom edge.
+    expect(open.box.width).toBe(area.width);
+    // Only the inner side (the top) has a handle.
     const shown = await workspace.evaluate(() => [...document.querySelectorAll('[data-grip]')].filter((grip) => getComputedStyle(grip).display !== 'none').map((grip) => grip.dataset.grip));
-    expect(shown).not.toContain('s');
-    expect(shown).toContain('n');
+    expect(shown).toEqual(['n']);
     // Back to the left edge for the next step.
     await pointer({ x: area.x + 3, y: area.y + Math.round(area.height * 0.7) });
     await workspace.evaluate(() => window.workspaceApi.dragDock(true));
     await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('left');
     await workspace.evaluate(() => window.workspaceApi.dragDock(false));
+  });
+
+  test('6c · moved by its title bar: let go far from the edges it is a free window, near an edge it stands there', async () => {
+    const area = (await win()).area;
+    await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: true }));
+    await expect.poll(docked).toBe('open');
+    // Let go in the middle of the screen: a free window.
+    await app.evaluate((_electron, point) => globalThis.__aurumQa.dropWorkspace(point), { x: area.x + Math.round(area.width / 2), y: area.y + Math.round(area.height / 2) });
+    await expect.poll(docked).toBe('off');
+    // Let go against the top edge: a panel along the top.
+    await app.evaluate((_electron, point) => globalThis.__aurumQa.dropWorkspace(point), { x: area.x + Math.round(area.width / 2), y: area.y + 4 });
+    await expect.poll(docked).toBe('open');
+    expect(await workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('top');
+    const state = await win();
+    expect(state.box.y).toBe(area.y);
+    expect(state.box.width).toBe(area.width);
+    // Back to the left edge for the next step.
+    await app.evaluate((_electron, point) => globalThis.__aurumQa.dropWorkspace(point), { x: area.x + 3, y: area.y + Math.round(area.height * 0.7) });
+    await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('left');
   });
 
   test('7 · Escape folds it; leaving the edge gives the free window back with its size and place', async () => {

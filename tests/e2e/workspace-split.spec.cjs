@@ -117,9 +117,10 @@ test.describe.serial('captures window split in two', () => {
       return { box: target.getBounds(), area: screen.getDisplayNearestPoint({ x: target.getBounds().x + 2, y: target.getBounds().y + Math.round(target.getBounds().height / 2) }).workArea };
     });
     // Its tab is flush with the right edge, 18 deep at its middle (the rest of the window is cut away).
-    const toolsShape = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => item.tools).shape);
-    expect(box.box.x + Math.min(...toolsShape.map((rect) => rect.x))).toBe(box.area.x + box.area.width - 18);
-    expect(box.box.y).toBeLessThan(box.area.y + box.area.height * 0.4);
+    await expect.poll(() => app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => item.tools).shape.length)).toBe(1);
+    const toolsTab = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => item.tools));
+    expect(toolsTab.bounds.x + toolsTab.shape[0].x).toBe(box.area.x + box.area.width - 18);
+    expect(toolsTab.bounds.y).toBeLessThan(box.area.y + box.area.height * 0.4);
     await win.evaluate(() => window.workspaceApi.setDock({ enabled: false }));
     await expect(win.locator('html')).toHaveAttribute('data-docked', 'off');
   });

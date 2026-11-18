@@ -197,7 +197,7 @@ let lastNotice = null;
 let lastTranslation = '';
 let lastOcrText = '';
 let printScreenNoticeShown = false;
-Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ liveDraw, recordSchedule, appJournal, expiredNow, runAutoClean, setWatermarkLogo, lastPickedColor, lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), quickbarShape: () => quickbarShape, ...(process.env.SCREEN_STUDIO_QA === '1' ? { clipboard: clip, exportSettings, importSettings, deliverCapture, restoreAutostart, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, shape: panel.lastShape })), setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
+Object.defineProperty(globalThis, '__aurumQa', { get: () => ({ liveDraw, recordSchedule, appJournal, expiredNow, runAutoClean, setWatermarkLogo, lastPickedColor, lastNotice, lastOcrText, regionTimings: regionCapture?.timings || {}, recordingControls: recordingControls?.snapshot() || null, keyEcho: { active: keyEchoActive, open: Boolean(keyOverlay.window), shown: [...keyOverlay.shown] }, quickbarDragging: Boolean(quickbarDragTimer), quickbarShape: () => quickbarShape, ...(process.env.SCREEN_STUDIO_QA === '1' ? { clipboard: clip, exportSettings, importSettings, deliverCapture, restoreAutostart, openShortcutEditor, changeShortcut, shortcutLabels, lastShortcutMenu: () => lastShortcutMenu, shortcutEditorOpen: () => Boolean(shortcutEditor?.window && !shortcutEditor.window.isDestroyed()), activeShortcut: (action) => activeShortcuts[action] || null, textIndexState: () => ({ active: textIndexer.active, done: textIndexer.done, skipped: textIndexer.skipped.size }), setClickEcho, clickEchoActive: () => clickEchoActive, featureAction, pinClipboard, intervalCapture, lastTranslation: () => lastTranslation, copyTextFromImage, pressKey: (event) => windowList.onEvent?.(event), tabShapes: () => workspacePanels().map((panel) => ({ tools: panel === toolsPanel, ...panel.tabState() })), dropWorkspace: (point) => workspacePanel.dropped(point), setTabLook: (tabStyle, tabColor) => { quickbarPreferences = normalizeQuickbarPreferences({ tabStyle, tabColor }, quickbarPreferences); workspacePanels().forEach((panel) => panel.refreshShape()); }, setHideDelay: (seconds) => { quickbarPreferences = normalizeQuickbarPreferences({ hideDelay: seconds }, quickbarPreferences); } } : {}) }), configurable: true });
 const windowList = new WindowList();
 const privateShareServer = new PrivateShareServer();
 
@@ -546,7 +546,7 @@ async function applyQuickbarPreferences(patch = {}) {
   const wasEnabled = quickbarPreferences.enabled;
   await saveQuickbarPreferences(patch);
   if ('laptopCaptureKey' in patch) applyLaptopCaptureKey();
-  if ('tabStyle' in patch) workspacePanels().forEach((panel) => panel.refreshShape());
+  if ('tabStyle' in patch || 'tabColor' in patch) workspacePanels().forEach((panel) => panel.refreshShape());
   // The settings screen shows the same values the bar's toggles change.
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:quickbar-preferences', quickbarPreferences);
   // Switching the bar off closes its window; other setting changes while it is off keep the capture card's window.
@@ -1487,12 +1487,17 @@ async function listLibrary() {
 // It can also be split in two: the list of captures in one window and its action buttons in a second, small one.
 // Each of the two moves, hides in a screen edge and is pinned on its own (both are a DockPanel).
 const quietWindows = () => process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1';
+// The folded tabs take the colour chosen for the top bar's tab (or the program's blue).
+function dockTabColors() {
+  const color = require('./app-icons.js').COLORS.find((item) => item.id === quickbarPreferences.tabColor);
+  return color ? { light: color.light, dark: color.dark } : { light: '#64b0ff', dark: '#1f6fe5' };
+}
 const workspacePanel = new DockPanel({
   statePath: () => path.join(app.getPath('userData'), 'workspace-window.json'),
   page: path.join(__dirname, 'workspace.html'), preload: path.join(__dirname, 'workspace-preload.cjs'),
   title: 'לוח הצילומים', icon: () => windowIcon(), size: { width: 736, height: 612 }, min: { width: 420, height: 380 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + area.height - size.height - 12 }),
-  defaultDock: { edge: 'right', offset: 0.5 }, tabStyle: () => quickbarPreferences.tabStyle, hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null),
+  defaultDock: { edge: 'right', offset: 0.5 }, fill: true, tabStyle: () => quickbarPreferences.tabStyle, tabColors: () => dockTabColors(), hideFromCaptures: () => hideFromCaptures, hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null),
   // The buttons belong to the list: closing the list closes them too (the split is kept for next time).
   onClosed: () => toolsPanel.close()
 });
@@ -1502,7 +1507,7 @@ const toolsPanel = new DockPanel({
   title: 'כלי הצילום', icon: () => windowIcon(), size: { width: 760, height: 190 }, min: { width: 280, height: 70 },
   place: (area, size) => ({ x: area.x + area.width - size.width - 12, y: area.y + 12 }),
   // Its tab sits higher on the same edge, so the two tabs never cover each other.
-  defaultDock: { edge: 'right', offset: 0.22 }, tabStyle: () => quickbarPreferences.tabStyle,
+  defaultDock: { edge: 'right', offset: 0.22 }, tabStyle: () => quickbarPreferences.tabStyle, tabColors: () => dockTabColors(), hideFromCaptures: () => hideFromCaptures,
   hideDelay: () => (quickbarPreferences.hideDelay ? Math.round(quickbarPreferences.hideDelay * 1000) : null)
 });
 const workspacePanels = () => [workspacePanel, toolsPanel];
@@ -1775,6 +1780,7 @@ function registerIpc() {
     hideFromCaptures = Boolean(enabled);
     mainWindow?.setContentProtection(hideFromCaptures);
     if (quickbarWindow && !quickbarWindow.isDestroyed()) quickbarWindow.setContentProtection(hideFromCaptures);
+    workspacePanels().forEach((panel) => panel.protectTab(hideFromCaptures));
     return hideFromCaptures;
   });
   ipcMain.handle('capture:capabilities', () => getEncoderCapabilities());

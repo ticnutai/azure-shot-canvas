@@ -177,7 +177,15 @@ function offsetForPointer(workArea, edge, point) {
 // The captures window hidden in a screen edge, like the top bar: folded it is the same small tab; open it stands
 // against that edge at its own size (kept inside the screen), centred where the tab is.
 // `tab`: the folded size (the same small tab as the top bar's). Any of the four edges.
-function dockedPanelBounds(workArea, dock, size, expanded, min = { width: 420, height: 380 }, tab = TAB) {
+// `fill`: open, it is a side panel running the edge's whole length (only its depth is the user's own size).
+function dockedPanelBounds(workArea, dock, size, expanded, min = { width: 420, height: 380 }, tab = TAB, fill = false) {
+  if (expanded && fill) {
+    const along = dock?.edge === 'top' || dock?.edge === 'bottom';
+    const full = along
+      ? { width: workArea.width, height: Math.max(min.height, Math.min(Number(size?.height) || 380, Math.round(workArea.height * 0.75))) }
+      : { width: Math.max(min.width, Math.min(Number(size?.width) || 460, Math.round(workArea.width * 0.75))), height: workArea.height };
+    return dockedPanelBounds(workArea, { ...dock, offset: 0.5 }, full, true, min, tab, false);
+  }
   const edge = ['left', 'right', 'top', 'bottom'].includes(dock?.edge) ? dock.edge : 'right';
   const offset = Number.isFinite(Number(dock?.offset)) ? Number(dock.offset) : 0.5;
   if (!expanded) {

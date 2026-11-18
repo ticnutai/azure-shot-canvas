@@ -488,6 +488,7 @@
     root.dataset.docked = dockState.enabled ? (dockState.expanded ? 'open' : 'folded') : 'off';
     root.dataset.dockEdge = dockState.edge;
     root.dataset.tabStyle = dockState.tabStyle || 'tab';
+    root.dataset.dockFill = String(Boolean(dockState.fill));
     // Opening the side panel again starts from the five newest.
     if (root.dataset.docked === 'open' && wasDocked !== 'open') { showAllDocked = false; render(); }
     else if (root.dataset.docked === 'off' && wasDocked === 'open') render();
@@ -514,37 +515,7 @@
     grip.addEventListener('lostpointercapture', letGo);
   });
 
-  // The folded tab: pointing opens (after a breath, so a drag can start), a click opens, pressing and moving drags.
-  const tab = $('#dock-tab');
-  let tabTimer = 0;
-  let pressedAt = null;
-  let dragging = false;
-  tab.addEventListener('mouseenter', () => { tabTimer = setTimeout(() => { if (!pressedAt) api.setDock?.({ expanded: true }); }, 140); });
-  tab.addEventListener('mouseleave', () => clearTimeout(tabTimer));
-  tab.addEventListener('pointerdown', (event) => {
-    if (event.button !== 0) return;
-    clearTimeout(tabTimer);
-    pressedAt = { x: event.screenX, y: event.screenY };
-    tab.setPointerCapture(event.pointerId);
-  });
-  tab.addEventListener('pointermove', (event) => {
-    if (!pressedAt || dragging) return;
-    if (Math.hypot(event.screenX - pressedAt.x, event.screenY - pressedAt.y) < 5) return;
-    dragging = true;
-    root.dataset.dragging = 'true';
-    api.dragDock?.(true);
-  });
-  const release = () => {
-    if (!pressedAt) return;
-    const wasDragging = dragging;
-    pressedAt = null;
-    dragging = false;
-    delete root.dataset.dragging;
-    if (wasDragging) api.dragDock?.(false);
-    else api.setDock?.({ expanded: true });
-  };
-  tab.addEventListener('pointerup', release);
-  tab.addEventListener('pointercancel', release);
+  // Folded, the panel itself is hidden: its tab is a small window of its own (dock-tab.html).
 
   // While a dialog, a menu or a drop-down list is open, or a capture is being dragged out, the window must not fold.
   let draggingOut = false;

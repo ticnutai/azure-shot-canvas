@@ -175,24 +175,26 @@ test('the captures window can be dragged to any of the four edges: the nearest o
   assert.equal(panelEdgeForPointer(area, { x: 900, y: 1030 }), 'bottom');
 });
 
-test('the folded captures tab has the top bar tab shape, flush with any edge', () => {
-  const { tabShape } = require('../src/dock-panel.cjs');
-  const depth = (rects, key, size) => Math.max(...rects.map((rect) => rect[key] + rect[size]));
-  const left = tabShape('left');
-  assert.equal(Math.min(...left.map((rect) => rect.x)), 0);
-  assert.equal(depth(left, 'x', 'width'), 18);
-  assert.equal(left.reduce((sum, rect) => sum + rect.height, 0), 120);
-  const right = tabShape('right');
-  assert.equal(depth(right, 'x', 'width'), 18); // flush with the right side of the window
-  assert.equal(Math.min(...right.map((rect) => rect.x)), 0);
-  const bottom = tabShape('bottom');
-  assert.equal(depth(bottom, 'y', 'height'), 18);
-  assert.equal(bottom.reduce((sum, rect) => sum + rect.width, 0), 120);
-  // Only the thin line, for the "line" tab style.
-  assert.deepEqual(tabShape('top', 'line'), [{ x: 0, y: 0, width: 120, height: 5 }]);
-  assert.deepEqual(tabShape('right', 'line'), [{ x: 13, y: 0, width: 5, height: 120 }]);
+test('a window let go near a screen edge stands against it; far from the edges it stays free', () => {
+  const { snapEdge } = require('../src/dock-panel.cjs');
+  const area = { x: 0, y: 0, width: 1440, height: 852 };
+  assert.equal(snapEdge(area, { x: 1435, y: 400 }), 'right');
+  assert.equal(snapEdge(area, { x: 4, y: 400 }), 'left');
+  assert.equal(snapEdge(area, { x: 700, y: 3 }), 'top');
+  assert.equal(snapEdge(area, { x: 700, y: 845 }), 'bottom');
+  assert.equal(snapEdge(area, { x: 700, y: 400 }), null);
 });
 
+test('open against an edge, the captures panel runs the whole edge; only its depth is the user own size', () => {
+  const { dockedPanelBounds } = require('../src/quickbar-utils.cjs');
+  const area = { x: 0, y: 0, width: 1440, height: 852 };
+  const min = { width: 420, height: 380 };
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'right', offset: 0.9 }, { width: 500, height: 381 }, true, min, undefined, true), { x: 940, y: 0, width: 500, height: 852 });
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'left', offset: 0.1 }, { width: 300, height: 381 }, true, min, undefined, true), { x: 0, y: 0, width: 420, height: 852 });
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'bottom' }, { width: 500, height: 400 }, true, min, undefined, true), { x: 0, y: 452, width: 1440, height: 400 });
+  // Never deeper than three quarters of the screen (a side panel moved to the top keeps the screen usable).
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'top' }, { width: 500, height: 852 }, true, min, undefined, true), { x: 0, y: 0, width: 1440, height: 639 });
+});
 test('the panel keeps the size the user gave each view, within limits, and stays on its edge', () => {
   const { cleanPanelSizes, panelFromBounds, quickbarBounds: bounds, normalizeQuickbarPreferences: normalize } = require('../src/quickbar-utils.cjs');
   const area = { x: 0, y: 0, width: 1920, height: 1040 };
