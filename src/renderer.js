@@ -1027,7 +1027,40 @@ async function refreshDevices() {
   const videoInputs = devices.filter((device) => device.kind === 'videoinput');
   container.innerHTML = '';
   if ($('#microphone').checked) container.append(createDeviceSelect('microphone-device', 'בחר מיקרופון', audioInputs));
-  if ($('#camera').checked) container.append(createDeviceSelect('camera-device', 'בחר מצלמה', videoInputs));
+  if ($('#camera').checked) {
+    const select = createDeviceSelect('camera-device', 'בחר מצלמה', videoInputs);
+    container.append(select);
+    offerCameraBlur(container, select, videoInputs);
+  }
+}
+
+// Background blur without a model of our own: when a program on the computer already offers a blurring camera
+// (the graphics card maker's broadcast program, or Windows' studio effects), one switch picks that camera. Remembered.
+const BLURRING_CAMERA = /NVIDIA Broadcast|Studio Effects/i;
+function offerCameraBlur(container, select, videoInputs) {
+  const blurCamera = videoInputs.find((device) => BLURRING_CAMERA.test(device.label));
+  document.documentElement.dataset.cameraBlurAvailable = String(Boolean(blurCamera));
+  if (!blurCamera) return;
+  const plainCamera = videoInputs.find((device) => device !== blurCamera && !BLURRING_CAMERA.test(device.label));
+  const label = document.createElement('label');
+  label.className = 'check-line camera-blur';
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.id = 'camera-blur';
+  let wanted = false;
+  try { wanted = localStorage.getItem('aurum-camera-blur') === 'on'; } catch {}
+  if (wanted) select.value = blurCamera.deviceId;
+  box.checked = select.value === blurCamera.deviceId;
+  box.addEventListener('change', () => {
+    if (box.checked) select.value = blurCamera.deviceId;
+    else if (select.value === blurCamera.deviceId) select.value = plainCamera?.deviceId || '';
+    try { localStorage.setItem('aurum-camera-blur', box.checked ? 'on' : 'off'); } catch {}
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  select.addEventListener('change', () => { box.checked = select.value === blurCamera.deviceId; });
+  const program = /NVIDIA/i.test(blurCamera.label) ? 'תוכנת השידור של אנבידיה' : 'אפקטי הסטודיו של חלונות';
+  label.append(box, ` טשטוש רקע במצלמה — בעזרת ${program} שכבר במחשב`);
+  container.append(label);
 }
 
 function createDeviceSelect(id, placeholder, devices) {
