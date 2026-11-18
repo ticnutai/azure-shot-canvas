@@ -185,6 +185,18 @@ test('a window let go near a screen edge stands against it; far from the edges i
   assert.equal(snapEdge(area, { x: 700, y: 400 }), null);
 });
 
+test('a whole-edge panel let go in the middle: a usual-size window under the pointer, whole on the screen', () => {
+  const { freeBoundsAt } = require('../src/dock-panel.cjs');
+  const area = { x: 0, y: 0, width: 1440, height: 852 };
+  // The bottom panel (the whole width) held near its right end and let go in the middle of the screen.
+  const box = { x: -550, y: 326, width: 1440, height: 381 };
+  const bounds = freeBoundsAt(area, box, { x: 750, y: 350 }, { width: 736, height: 612 });
+  assert.equal(bounds.width, 736);
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 1440);
+  assert.ok(bounds.x <= 750 && bounds.x + bounds.width >= 750); // still under the pointer
+  // Held far to the left of a wide panel near the left edge: pushed back inside the screen.
+  assert.equal(freeBoundsAt(area, { x: -900, y: 0, width: 1440, height: 852 }, { x: 10, y: 400 }, { width: 736, height: 612 }).x, 0);
+});
 test('open against an edge, the captures panel runs the whole edge; only its depth is the user own size', () => {
   const { dockedPanelBounds } = require('../src/quickbar-utils.cjs');
   const area = { x: 0, y: 0, width: 1440, height: 852 };

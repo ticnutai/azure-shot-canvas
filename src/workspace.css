@@ -374,7 +374,7 @@ html[data-theme^="lines"] .select-all{border-radius:3px}
 /* In a narrow window (a side panel) a card is narrower than the chosen size: its picture frame follows the card's own
    width, so the picture fills it instead of sitting at the bottom of a tall empty frame. */
 html:not([data-view="list"]):not([data-view="table"]) .item{grid-template-rows:auto auto}
-html:not([data-view="list"]):not([data-view="table"]) .item .thumb{height:auto;aspect-ratio:100/68;max-height:calc(var(--thumb) * .68)}
+html:not([data-view="list"]):not([data-view="table"]) .item .thumb{height:auto;aspect-ratio:100/68;max-height:calc(var(--thumb) * .68);place-items:center}
 html[data-view="grid"] .item .thumb{aspect-ratio:62/45;max-height:calc(var(--thumb) * .45)}
 html[data-view="grid"] #grid{grid-template-columns:repeat(auto-fill,minmax(min(calc(var(--thumb) * .62),100%),1fr))}
 .item{min-width:0}

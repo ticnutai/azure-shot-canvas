@@ -32,6 +32,20 @@ function snapEdge(area, point, reach = SNAP) {
   return distance <= reach ? edge : null;
 }
 
+// A side panel (as long as the whole edge) let go in the middle of the screen becomes a window of the usual size: the
+// spot that was held stays under the pointer, and the window stays whole on the screen.
+function freeBoundsAt(area, box, point, size) {
+  const width = Math.min(box.width, size.width, area.width);
+  const height = Math.min(box.height, size.height, area.height);
+  const x = Math.round(point.x - (point.x - box.x) * (width / box.width));
+  const y = Math.round(point.y - (point.y - box.y) * (height / box.height));
+  return {
+    x: Math.min(Math.max(area.x, x), area.x + area.width - width),
+    y: Math.min(Math.max(area.y, y), area.y + area.height - height),
+    width, height
+  };
+}
+
 class DockPanel {
   // options: statePath() · page · query · preload · title · icon() · size · min · place(area, size) · defaultDock ·
   // tabStyle() · tabColors() ({ light, dark }) · hideFromCaptures() · fill (open against an edge it runs the edge's whole length) ·
@@ -321,9 +335,7 @@ class DockPanel {
       } else this.setDock({ edge, offset });
     } else if (this.dock.enabled && this.dock.expanded) {
       // The panel let go far from every edge: a free window where it was let go.
-      const box = this.window.getBounds();
-      const bounds = { ...box, width: Math.min(box.width, this.options.size.width), height: Math.min(box.height, this.options.size.height) };
-      this.setDock({ enabled: false, bounds });
+      this.setDock({ enabled: false, bounds: freeBoundsAt(area, this.window.getBounds(), point, this.options.size) });
     }
   }
   // A handle on a side or a corner is being dragged: the window grows or shrinks from that side, following the
@@ -377,4 +389,4 @@ class DockPanel {
   }
 }
 
-module.exports = { DockPanel, TAB, snapEdge };
+module.exports = { DockPanel, TAB, snapEdge, freeBoundsAt };
