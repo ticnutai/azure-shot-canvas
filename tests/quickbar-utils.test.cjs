@@ -161,6 +161,36 @@ test('the captures window docked in an edge: a small tab folded, its own size ag
   assert.deepEqual(dockedPanelBounds(area, { edge: 'top', offset: 1 }, { width: 800, height: 600 }, true), { x: 1120, y: 40, width: 800, height: 600 });
   // Never larger than the screen, never smaller than the window's minimum, and an unknown edge means the right one.
   assert.deepEqual(dockedPanelBounds({ x: 0, y: 0, width: 600, height: 500 }, { edge: 'sideways' }, { width: 5000, height: 100 }, true), { x: 0, y: 60, width: 600, height: 380 });
+  // The bottom edge too: folded flush with the bottom of the work area, open standing on it.
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'bottom', offset: 0.25 }, null, false), { x: 420, y: 1022, width: 120, height: 18 });
+  assert.deepEqual(dockedPanelBounds(area, { edge: 'bottom', offset: 0.5 }, { width: 800, height: 600 }, true), { x: 560, y: 440, width: 800, height: 600 });
+});
+
+test('the captures window can be dragged to any of the four edges: the nearest one', () => {
+  const { panelEdgeForPointer } = require('../src/quickbar-utils.cjs');
+  const area = { x: 0, y: 0, width: 1920, height: 1040 };
+  assert.equal(panelEdgeForPointer(area, { x: 5, y: 500 }), 'left');
+  assert.equal(panelEdgeForPointer(area, { x: 1910, y: 500 }), 'right');
+  assert.equal(panelEdgeForPointer(area, { x: 900, y: 8 }), 'top');
+  assert.equal(panelEdgeForPointer(area, { x: 900, y: 1030 }), 'bottom');
+});
+
+test('the folded captures tab has the top bar tab shape, flush with any edge', () => {
+  const { tabShape } = require('../src/dock-panel.cjs');
+  const depth = (rects, key, size) => Math.max(...rects.map((rect) => rect[key] + rect[size]));
+  const left = tabShape('left');
+  assert.equal(Math.min(...left.map((rect) => rect.x)), 0);
+  assert.equal(depth(left, 'x', 'width'), 18);
+  assert.equal(left.reduce((sum, rect) => sum + rect.height, 0), 120);
+  const right = tabShape('right');
+  assert.equal(depth(right, 'x', 'width'), 18); // flush with the right side of the window
+  assert.equal(Math.min(...right.map((rect) => rect.x)), 0);
+  const bottom = tabShape('bottom');
+  assert.equal(depth(bottom, 'y', 'height'), 18);
+  assert.equal(bottom.reduce((sum, rect) => sum + rect.width, 0), 120);
+  // Only the thin line, for the "line" tab style.
+  assert.deepEqual(tabShape('top', 'line'), [{ x: 0, y: 0, width: 120, height: 5 }]);
+  assert.deepEqual(tabShape('right', 'line'), [{ x: 13, y: 0, width: 5, height: 120 }]);
 });
 
 test('the panel keeps the size the user gave each view, within limits, and stays on its edge', () => {

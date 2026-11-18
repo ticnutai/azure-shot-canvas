@@ -73,14 +73,14 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: false }));
     await expect.poll(docked).toBe('folded');
     state = await win();
-    // Folded it is a round button floating off the right edge: 38 across, 5 points from the edge (the window is
-    // shaped to it, so only the button shows and takes the pointer).
-    expect(await tabLeft()).toBe(state.area.x + state.area.width - 43);
+    // Folded it is the top bar's own tab: flush with the right edge, 18 deep at its middle (the window is shaped to
+    // it, so only the tab shows and takes the pointer).
+    expect(await tabLeft()).toBe(state.area.x + state.area.width - 18);
     // Windows keeps a folded window at least ~41 device pixels wide (twice that in points on a double-density screen).
     expect(state.box.width).toBeLessThanOrEqual(90);
-    expect(state.box.height).toBeGreaterThanOrEqual(48);
-    // (Twice that on a double-density screen next to a normal one: Windows scales the window; the shape cuts it to the button.)
-    expect(state.box.height).toBeLessThanOrEqual(110);
+    expect(state.box.height).toBeGreaterThanOrEqual(120);
+    // (Twice that on a double-density screen next to a normal one: Windows scales the window; the shape cuts it to the tab.)
+    expect(state.box.height).toBeLessThanOrEqual(250);
     await expect(workspace.locator('#dock-tab')).toBeVisible();
     await expect(workspace.locator('#grid')).toBeHidden();
   });
@@ -145,10 +145,36 @@ test.describe.serial('captures window: copy many, hide in the screen edge', () =
     await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('left');
     await workspace.evaluate(() => window.workspaceApi.dragDock(false));
     const state = await win();
-    expect(await tabLeft()).toBe(area.x + 5); // the round button floats 5 points off the left edge
+    expect(await tabLeft()).toBe(area.x); // the tab is flush with the left edge
     const saved = JSON.parse(await fs.readFile(path.join(outputDir, 'electron-user-data', 'workspace-window.json'), 'utf8'));
     expect(saved.dock).toMatchObject({ enabled: true, edge: 'left' });
     expect(saved.dock.offset).toBeGreaterThan(0.6);
+  });
+
+  test('6b · all four edges: dragged to the bottom it stands there, open against the bottom edge', async () => {
+    const area = (await win()).area;
+    await pointer({ x: area.x + Math.round(area.width * 0.3), y: area.y + area.height - 3 });
+    await workspace.evaluate(() => window.workspaceApi.dragDock(true));
+    await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('bottom');
+    await workspace.evaluate(() => window.workspaceApi.dragDock(false));
+    const shape = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape);
+    const folded = await win();
+    // Lying along the bottom edge: wide, not tall, flush with the bottom of the work area.
+    expect(Math.max(...shape.map((rect) => rect.y + rect.height)) + folded.box.y).toBe(area.y + area.height);
+    await pointer({ x: area.x + Math.round(area.width * 0.3), y: area.y + area.height - 40 });
+    await workspace.evaluate(() => window.workspaceApi.setDock({ expanded: true }));
+    await expect.poll(docked).toBe('open');
+    const open = await win();
+    expect(open.box.y + open.box.height).toBe(area.y + area.height);
+    // No handle on the side against the bottom edge.
+    const shown = await workspace.evaluate(() => [...document.querySelectorAll('[data-grip]')].filter((grip) => getComputedStyle(grip).display !== 'none').map((grip) => grip.dataset.grip));
+    expect(shown).not.toContain('s');
+    expect(shown).toContain('n');
+    // Back to the left edge for the next step.
+    await pointer({ x: area.x + 3, y: area.y + Math.round(area.height * 0.7) });
+    await workspace.evaluate(() => window.workspaceApi.dragDock(true));
+    await expect.poll(() => workspace.evaluate(() => document.documentElement.dataset.dockEdge)).toBe('left');
+    await workspace.evaluate(() => window.workspaceApi.dragDock(false));
   });
 
   test('7 · Escape folds it; leaving the edge gives the free window back with its size and place', async () => {

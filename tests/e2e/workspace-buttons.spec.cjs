@@ -72,12 +72,13 @@ test.describe.serial('the captures window in the edge: buttons and handles', () 
     expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().endsWith('index.html')).isVisible())).toBe(true);
   });
 
-  test('5 · folded: a round button floating off the edge', async () => {
+  test('5 · folded: the top bar own tab — a thin line with a small tab in its middle', async () => {
     const shape = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => !item.tools).shape);
     const widths = shape.map((rect) => rect.width);
-    expect(shape.length).toBeGreaterThan(30);
-    expect(Math.max(...widths)).toBe(38);
-    expect(widths[0]).toBeLessThan(16); // round: narrow at the top and the bottom
-    expect(widths.at(-1)).toBeLessThan(16);
+    expect(Math.max(...widths)).toBe(18); // the tab in the middle
+    expect(widths[0]).toBe(5); // the thin line above and below it
+    expect(widths.at(-1)).toBe(5);
+    expect(shape.reduce((sum, rect) => sum + rect.height, 0)).toBe(120);
+    await expect(workspace.locator('html')).toHaveAttribute('data-tab-style', 'tab');
   });
 });

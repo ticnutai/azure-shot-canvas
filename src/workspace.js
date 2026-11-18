@@ -487,6 +487,7 @@
     const wasDocked = root.dataset.docked;
     root.dataset.docked = dockState.enabled ? (dockState.expanded ? 'open' : 'folded') : 'off';
     root.dataset.dockEdge = dockState.edge;
+    root.dataset.tabStyle = dockState.tabStyle || 'tab';
     // Opening the side panel again starts from the five newest.
     if (root.dataset.docked === 'open' && wasDocked !== 'open') { showAllDocked = false; render(); }
     else if (root.dataset.docked === 'off' && wasDocked === 'open') render();

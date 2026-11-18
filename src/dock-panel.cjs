@@ -6,33 +6,51 @@
 // are both made of this.
 const { BrowserWindow, screen } = require('electron');
 const fs = require('node:fs/promises');
-const { dockedPanelBounds, edgeForPointer, offsetForPointer } = require('./quickbar-utils.cjs');
+const { dockedPanelBounds, panelEdgeForPointer, offsetForPointer } = require('./quickbar-utils.cjs');
 
 const quietRun = () => process.env.SCREEN_STUDIO_QA === '1' || process.env.SCREEN_STUDIO_HEADLESS === '1';
 async function readJson(filePath) {
   try { return JSON.parse(await fs.readFile(filePath, 'utf8')); } catch { return null; }
 }
 
-// The folded window is cut to the tab's own shape, so nothing else of the (non-transparent) window shows: a round
-// button floating a little off the edge (FLOAT, one strip per row), or, with the "line" tab style chosen for the top
-// bar in the settings, a thin line along the edge. An empty list gives the whole window back.
-// `shift` moves the shape inside the window (how far Windows left the window from where it was asked to be).
-const FLOAT = Object.freeze({ thickness: 48, length: 48, diameter: 38 });
-const tabSize = (style) => (style === 'line' ? undefined : FLOAT);
-function roundButton() {
-  const radius = FLOAT.diameter / 2;
-  const centre = FLOAT.thickness / 2;
-  const rows = [];
-  for (let row = 0; row < FLOAT.diameter; row += 1) {
-    const half = Math.round(Math.sqrt(Math.max(0, radius * radius - (row + 0.5 - radius) ** 2)));
-    if (half > 0) rows.push({ x: Math.round(centre - half), y: Math.round(centre - radius) + row, width: half * 2, height: 1 });
+// The folded window is cut to the tab's own shape, so nothing else of the (non-transparent) window shows. It is the
+// same tab as the top bar's, in the tab style chosen in the settings: a thin line along the edge with a small tab in
+// its middle ("tab"), only the line ("line"), a small pill, a dot or a glass pill. An empty list gives the whole
+// window back. `shift` moves the shape inside the window (how far Windows left the window from where it was asked).
+const EDGES = ['left', 'right', 'top', 'bottom'];
+const TAB = Object.freeze({ thickness: 18, length: 120 });
+const tabSize = () => TAB;
+// For each point along the tab: from how deep to how deep (counted from the screen edge) the tab is solid.
+function tabProfile(style, along) {
+  const fromCentre = Math.abs(along + 0.5 - TAB.length / 2);
+  if (style === 'line') return [0, 5];
+  if (style === 'pill') return fromCentre <= 30 ? [3, 15] : null;
+  if (style === 'glass') return fromCentre <= 26 ? [2, 14] : null;
+  if (style === 'dot') {
+    if (fromCentre >= 8) return null;
+    const half = Math.sqrt(64 - fromCentre * fromCentre);
+    return [Math.round(8 - half), Math.round(8 + half)];
   }
-  return rows;
+  if (fromCentre <= 18) return [0, 18];
+  if (fromCentre < 24) return [0, Math.round(12 + (24 - fromCentre))];
+  return [0, 5];
 }
 function tabShape(edge, style = 'tab', shift = { x: 0, y: 0 }) {
-  const move = (rects) => rects.map((rect) => ({ ...rect, x: rect.x + shift.x, y: rect.y + shift.y }));
-  if (style !== 'line') return move(roundButton());
-  return move(edge === 'top' ? [{ x: 0, y: 0, width: 120, height: 5 }] : [{ x: edge === 'left' ? 0 : 13, y: 0, width: 5, height: 120 }]);
+  const across = edge === 'top' || edge === 'bottom';
+  const rects = [];
+  for (let along = 0; along < TAB.length; along += 1) {
+    const span = tabProfile(style, along);
+    if (!span) continue;
+    // Flush with the screen edge: counted from the far side of the window on the right and at the bottom.
+    const [start, end] = edge === 'right' || edge === 'bottom' ? [TAB.thickness - span[1], TAB.thickness - span[0]] : span;
+    const last = rects.at(-1);
+    const spot = across ? { x: along, y: start, width: 1, height: end - start } : { x: start, y: along, width: end - start, height: 1 };
+    // Neighbouring lines of the same reach are one rectangle.
+    if (last && (across ? last.y === spot.y && last.height === spot.height && last.x + last.width === along : last.x === spot.x && last.width === spot.width && last.y + last.height === along)) {
+      if (across) last.width += 1; else last.height += 1;
+    } else rects.push(spot);
+  }
+  return rects.map((rect) => ({ ...rect, x: rect.x + shift.x, y: rect.y + shift.y }));
 }
 
 class DockPanel {
@@ -55,7 +73,7 @@ class DockPanel {
   readDock(saved) {
     const fallback = this.options.defaultDock || {};
     return {
-      enabled: Boolean(saved.enabled), edge: ['left', 'right', 'top'].includes(saved.edge) ? saved.edge : (fallback.edge || 'right'),
+      enabled: Boolean(saved.enabled), edge: EDGES.includes(saved.edge) ? saved.edge : (fallback.edge || 'right'),
       offset: Number.isFinite(Number(saved.offset)) ? Number(saved.offset) : (fallback.offset ?? 0.5), pinned: Boolean(saved.pinned),
       expanded: false, size: saved.size && saved.size.width ? saved.size : null
     };
@@ -63,7 +81,7 @@ class DockPanel {
   isOpen() { return Boolean(this.window && !this.window.isDestroyed()); }
   owns(webContents) { return this.isOpen() && this.window.webContents === webContents; }
   send(channel, ...values) { if (this.isOpen()) this.window.webContents.send(channel, ...values); }
-  state() { const { enabled, expanded, edge, pinned } = this.dock; return { enabled, expanded, edge, pinned }; }
+  state() { const { enabled, expanded, edge, pinned } = this.dock; return { enabled, expanded, edge, pinned, tabStyle: this.options.tabStyle?.() || 'tab' }; }
 
   async open() {
     if (this.isOpen()) {
@@ -190,6 +208,7 @@ class DockPanel {
   }
   // The tab style was changed in the settings: a folded tab takes the new shape at once.
   refreshShape() {
+    this.sendDock();
     if (!this.isOpen() || !this.dock.enabled || this.dock.expanded) return;
     const wanted = dockedPanelBounds(this.area(), this.dock, this.dock.size, false, this.options.min, tabSize(this.options.tabStyle?.()));
     this.window.setBounds(wanted);
@@ -276,7 +295,7 @@ class DockPanel {
       if (now.x !== x || now.y !== y || now.width !== width || now.height !== height) this.window.setBounds({ x, y, width, height });
     }, 16);
   }
-  // Dragging the folded tab: it follows the pointer along the nearest edge (left, right or top) of any screen.
+  // Dragging the folded tab: it follows the pointer along the nearest of the four edges of any screen.
   dragTab(active) {
     clearInterval(this.dragTimer);
     this.dragTimer = null;
@@ -287,7 +306,7 @@ class DockPanel {
       if (!this.isOpen()) return this.dragTab(false);
       const point = screen.getCursorScreenPoint();
       const area = this.area(point);
-      const edge = edgeForPointer(area, point);
+      const edge = panelEdgeForPointer(area, point);
       const offset = offsetForPointer(area, edge, point);
       if (edge === this.dock.edge && offset === this.dock.offset) return;
       const edgeChanged = edge !== this.dock.edge;
@@ -301,4 +320,4 @@ class DockPanel {
   }
 }
 
-module.exports = { DockPanel, FLOAT, tabShape };
+module.exports = { DockPanel, TAB, tabShape };

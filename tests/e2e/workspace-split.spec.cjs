@@ -116,9 +116,9 @@ test.describe.serial('captures window split in two', () => {
       const target = BrowserWindow.getAllWindows().find((candidate) => candidate.webContents.getURL().includes('part=tools'));
       return { box: target.getBounds(), area: screen.getDisplayNearestPoint({ x: target.getBounds().x + 2, y: target.getBounds().y + Math.round(target.getBounds().height / 2) }).workArea };
     });
-    // Its round button floats 5 points off the right edge, 38 across (the rest of the window is cut away).
+    // Its tab is flush with the right edge, 18 deep at its middle (the rest of the window is cut away).
     const toolsShape = await app.evaluate(() => globalThis.__aurumQa.tabShapes().find((item) => item.tools).shape);
-    expect(box.box.x + Math.min(...toolsShape.map((rect) => rect.x))).toBe(box.area.x + box.area.width - 43);
+    expect(box.box.x + Math.min(...toolsShape.map((rect) => rect.x))).toBe(box.area.x + box.area.width - 18);
     expect(box.box.y).toBeLessThan(box.area.y + box.area.height * 0.4);
     await win.evaluate(() => window.workspaceApi.setDock({ enabled: false }));
     await expect(win.locator('html')).toHaveAttribute('data-docked', 'off');

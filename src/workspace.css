@@ -280,8 +280,26 @@ html[data-docked="folded"],html[data-docked="folded"] body{background:transparen
 html[data-docked="folded"] body>*:not(#dock-tab){display:none!important}
 html[data-docked="folded"] #dock-tab{display:block;position:fixed;inset:0;border:0;padding:0;cursor:grab;background:linear-gradient(135deg,var(--select),color-mix(in srgb,var(--select) 70%,#000))}
 html[data-docked="folded"][data-dragging="true"] #dock-tab{cursor:grabbing;background:#ffd36a}
-/* The folded window is cut to a round button floating off the edge (dock-panel.cjs): a lens in its middle. */
-#dock-tab span{position:absolute;left:calc(50% - 8px);top:calc(50% - 8px);width:16px;height:16px;border:3px solid #fff;border-radius:50%;box-sizing:border-box;pointer-events:none}
+/* The folded window is cut (dock-panel.cjs) to the same tab as the top bar's: a thin line along the edge with a small
+   tab in its middle carrying a white lens — or the tab style chosen in the settings (line, pill, dot, glass). */
+#dock-tab span{position:absolute;width:10px;height:10px;border:2px solid #fff;border-radius:50%;box-sizing:border-box;pointer-events:none}
+html[data-dock-edge="left"] #dock-tab span{top:calc(50% - 5px);left:6px}
+html[data-dock-edge="right"] #dock-tab span{top:calc(50% - 5px);right:6px}
+html[data-dock-edge="top"] #dock-tab span{left:calc(50% - 5px);top:6px}
+html[data-dock-edge="bottom"] #dock-tab span{left:calc(50% - 5px);bottom:6px}
+html[data-tab-style="line"] #dock-tab span{display:none}
+html[data-tab-style="pill"] #dock-tab span{width:6px;height:6px;border:0;background:#fff}
+html[data-tab-style="pill"]:is([data-dock-edge="left"],[data-dock-edge="right"]) #dock-tab span{top:calc(50% - 3px)}
+html[data-tab-style="pill"]:is([data-dock-edge="top"],[data-dock-edge="bottom"]) #dock-tab span{left:calc(50% - 3px)}
+html[data-tab-style="dot"] #dock-tab span{width:8px;height:8px;border-width:1.5px}
+html[data-tab-style="dot"][data-dock-edge="left"] #dock-tab span{top:calc(50% - 4px);left:4px}
+html[data-tab-style="dot"][data-dock-edge="right"] #dock-tab span{top:calc(50% - 4px);right:4px}
+html[data-tab-style="dot"][data-dock-edge="top"] #dock-tab span{left:calc(50% - 4px);top:4px}
+html[data-tab-style="dot"][data-dock-edge="bottom"] #dock-tab span{left:calc(50% - 4px);bottom:4px}
+html[data-docked="folded"][data-tab-style="glass"]:not([data-dragging="true"]) #dock-tab{background:#ffffffe6}
+html[data-tab-style="glass"] #dock-tab span{width:7px;height:7px;border:0;background:var(--select)}
+html[data-tab-style="glass"]:is([data-dock-edge="left"],[data-dock-edge="right"]) #dock-tab span{top:calc(50% - 3.5px)}
+html[data-tab-style="glass"]:is([data-dock-edge="top"],[data-dock-edge="bottom"]) #dock-tab span{left:calc(50% - 3.5px)}
 
 /* Hundreds of captures stay fast: cards off screen are not laid out or painted until they come near (their place is
    kept, so scrolling and the arrow keys behave the same). */
@@ -328,7 +346,8 @@ html[data-docked="folded"] .grips{display:none}
 /* Against the screen edge there is nothing to pull: no handle on that side. */
 html[data-docked="open"][data-dock-edge="right"] .grips :is([data-grip="e"],[data-grip="ne"],[data-grip="se"]),
 html[data-docked="open"][data-dock-edge="left"] .grips :is([data-grip="w"],[data-grip="nw"],[data-grip="sw"]),
-html[data-docked="open"][data-dock-edge="top"] .grips :is([data-grip="n"],[data-grip="ne"],[data-grip="nw"]){display:none}
+html[data-docked="open"][data-dock-edge="top"] .grips :is([data-grip="n"],[data-grip="ne"],[data-grip="nw"]),
+html[data-docked="open"][data-dock-edge="bottom"] .grips :is([data-grip="s"],[data-grip="se"],[data-grip="sw"]){display:none}
 
 /* ---- "Choose all" (pressed again: clear) ---- */
 .select-all{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}

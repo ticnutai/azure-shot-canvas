@@ -156,25 +156,38 @@ function edgeForPointer(workArea, point) {
   return point.x - workArea.x < workArea.width / 2 ? 'left' : 'right';
 }
 
+// The captures window can stand against any of the four edges: the one nearest the pointer (on an equal distance
+// the sides win, then the top).
+function panelEdgeForPointer(workArea, point) {
+  const distance = {
+    left: point.x - workArea.x,
+    right: workArea.x + workArea.width - point.x,
+    top: point.y - workArea.y,
+    bottom: workArea.y + workArea.height - point.y
+  };
+  return ['left', 'right', 'top', 'bottom'].reduce((best, edge) => (distance[edge] < distance[best] ? edge : best));
+}
+
 // Where a dragged bar lands: the pointer's position along the bar's edge, as 0–1.
 function offsetForPointer(workArea, edge, point) {
-  const ratio = edge === 'top' ? (point.x - workArea.x) / workArea.width : (point.y - workArea.y) / workArea.height;
+  const ratio = edge === 'top' || edge === 'bottom' ? (point.x - workArea.x) / workArea.width : (point.y - workArea.y) / workArea.height;
   return Math.round(Math.min(1, Math.max(0, ratio)) * 1000) / 1000;
 }
 
 // The captures window hidden in a screen edge, like the top bar: folded it is the same small tab; open it stands
 // against that edge at its own size (kept inside the screen), centred where the tab is.
-// `tab`: the folded size (the small tab by default; the captures window uses a round floating button).
+// `tab`: the folded size (the same small tab as the top bar's). Any of the four edges.
 function dockedPanelBounds(workArea, dock, size, expanded, min = { width: 420, height: 380 }, tab = TAB) {
-  const edge = ['left', 'right', 'top'].includes(dock?.edge) ? dock.edge : 'right';
+  const edge = ['left', 'right', 'top', 'bottom'].includes(dock?.edge) ? dock.edge : 'right';
   const offset = Number.isFinite(Number(dock?.offset)) ? Number(dock.offset) : 0.5;
   if (!expanded) {
-    if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, tab.length, offset), y: workArea.y, width: tab.length, height: tab.thickness };
+    if (edge === 'top' || edge === 'bottom') return { x: alongEdge(workArea.x, workArea.width, tab.length, offset), y: edge === 'top' ? workArea.y : workArea.y + workArea.height - tab.thickness, width: tab.length, height: tab.thickness };
     return { x: edge === 'left' ? workArea.x : workArea.x + workArea.width - tab.thickness, y: alongEdge(workArea.y, workArea.height, tab.length, offset), width: tab.thickness, height: tab.length };
   }
   const width = Math.round(Math.min(Math.max(min.width, Number(size?.width) || 736), workArea.width));
   const height = Math.round(Math.min(Math.max(min.height, Number(size?.height) || 612), workArea.height));
   if (edge === 'top') return { x: alongEdge(workArea.x, workArea.width, width, offset), y: workArea.y, width, height };
+  if (edge === 'bottom') return { x: alongEdge(workArea.x, workArea.width, width, offset), y: workArea.y + workArea.height - height, width, height };
   return { x: edge === 'left' ? workArea.x : workArea.x + workArea.width - width, y: alongEdge(workArea.y, workArea.height, height, offset), width, height };
 }
 
@@ -209,4 +222,4 @@ function panelFromBounds(workArea, preferences, bounds) {
   return { size, offset: Math.round(Math.min(1, Math.max(0, centre)) * 1000) / 1000 };
 }
 
-module.exports = { PANEL_LIMITS, cleanPanelSizes, panelFromBounds, CAPTURE_CARD_KEYS, CAPTURE_DELAYS, MAX_CAPTURE_TIMEOUT, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, dockedPanelBounds, edgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };
+module.exports = { PANEL_LIMITS, cleanPanelSizes, panelFromBounds, CAPTURE_CARD_KEYS, CAPTURE_DELAYS, MAX_CAPTURE_TIMEOUT, DEFAULT_QUICKBAR_PREFERENCES, MAX_RECENT_CAPTURES, TAB_COLORS, TAB_STYLES, addRecentCapture, dockedPanelBounds, edgeForPointer, panelEdgeForPointer, normalizeQuickbarPreferences, offsetForPointer, quickbarBounds, shouldHideMainWindowOnClose };
