@@ -50,6 +50,7 @@ const { WindowList } = require('./window-list.cjs');
 const { Updater } = require('./updater.cjs');
 const { RecordingControls } = require('./recording-controls.cjs');
 const { AppJournal } = require('./app-journal.cjs');
+const mailer = require('./mailer.cjs');
 const { AiModel, MODEL: AI_MODEL } = require('./ai-model.cjs');
 const { VideoTools, VIDEO_TOOLS } = require('./video-tools.cjs');
 const { LocalTranscriber } = require('./local-transcriber.cjs');
@@ -1661,6 +1662,47 @@ async function compareCaptures(paths) {
 function searchableText(metadata) {
   return [featureOn('textIndex') ? String(metadata?.ocrText || '').slice(0, 3000) : '', String(metadata?.transcriptText || '').slice(0, 6000), String(metadata?.summary || '')].filter(Boolean).join(' ');
 }
+// Sending by e-mail (mailer.cjs). The chosen program is remembered in mail-settings.json; the default is "שיחה".
+const mailSettingsPath = () => path.join(app.getPath('userData'), 'mail-settings.json');
+async function readMailSettings() { return mailer.normalizeMailSettings((await readJson(mailSettingsPath())) || {}); }
+async function mailState() {
+  const settings = await readMailSettings();
+  const sicha = await mailer.readSichaCompose();
+  return { ...settings, customName: settings.customPath ? path.basename(settings.customPath, path.extname(settings.customPath)) : '', sichaReady: Boolean(sicha.ComposeExe) };
+}
+// Choosing "another program" asks for it once (or again with browse); the choice stays for every later send.
+async function setMailClient(client, browse = false) {
+  let settings = await readMailSettings();
+  if (client === 'custom' && (browse || !settings.customPath)) {
+    const picked = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow() || mainWindow, { title: 'בחירת תוכנת הדואר', properties: ['openFile'], filters: [{ name: 'תוכנות', extensions: ['exe'] }] });
+    if (picked.canceled || !picked.filePaths[0]) return mailState();
+    settings = { ...settings, customPath: picked.filePaths[0] };
+  }
+  settings = mailer.normalizeMailSettings({ ...settings, client });
+  await fs.writeFile(mailSettingsPath(), JSON.stringify(settings, null, 2), 'utf8');
+  return mailState();
+}
+// A new message with the captures attached (never sent by itself). When the program is not ready, the files are
+// shown selected in their folder so they can be attached by hand. The message for the person comes back in Hebrew.
+async function mailCaptures(paths) {
+  const files = [];
+  for (const filePath of Array.isArray(paths) ? paths.slice(0, 50) : []) files.push(await assertLibraryFile(filePath));
+  if (!files.length) throw new Error('לא נבחרו קבצים לשליחה');
+  const settings = await readMailSettings();
+  const command = mailer.composeCommand(settings, settings.client === 'sicha' ? await mailer.readSichaCompose() : {}, files);
+  const program = settings.client === 'custom' ? path.basename(settings.customPath, path.extname(settings.customPath)) : 'שיחה';
+  const what = files.length === 1 ? 'הקובץ מצורף' : `${files.length} הקבצים מצורפים`;
+  if (command) {
+    try {
+      await mailer.launch(command);
+      return { opened: true, client: command.client, count: files.length, message: `נפתחה הודעה חדשה ב״${program}״ — ${what}` };
+    } catch {}
+  }
+  shell.showItemInFolder(files[0]);
+  const reason = !command && settings.client === 'sicha' ? 'תוכנת ״שיחה״ עוד לא מוכנה לשליחה מהאולפן' : `לא הצלחתי לפתוח את ״${program}״`;
+  return { opened: false, client: settings.client, count: files.length, message: `${reason} — ${files.length === 1 ? 'הקובץ מסומן' : 'הקבצים מסומנים'} בתיקייה כדי לצרף ${files.length === 1 ? 'אותו' : 'אותם'} ידנית` };
+}
+
 async function recentLibrary(limit = 48) {
   const directory = await ensureOutputDirectory();
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -2144,6 +2186,9 @@ function registerIpc() {
   ipcMain.handle('workspace:folder', (_event, paths, folder) => setCaptureFolder(Array.isArray(paths) ? paths : [], folder));
   // Several captures at once, from any window.
   ipcMain.handle('captures:copy', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return copyCapturesToClipboard(paths); });
+  ipcMain.handle('captures:mail', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return mailCaptures(paths); });
+  ipcMain.handle('mail:state', (event) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return mailState(); });
+  ipcMain.handle('mail:set-client', (event, client, browse) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return setMailClient(String(client), Boolean(browse)); });
   ipcMain.handle('captures:trash', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return trashCaptures(paths); });
   ipcMain.handle('workspace:dock', (event, patch) => panelFor(event).setDock(patch && typeof patch === 'object' ? patch : {}));
   ipcMain.on('workspace:resize', (event, grip) => { const panel = workspacePanels().find((candidate) => candidate.owns(event.sender)); panel?.resizeFrom(typeof grip === 'string' ? grip : null); });

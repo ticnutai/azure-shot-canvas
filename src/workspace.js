@@ -18,6 +18,7 @@
       preview: true,
       list: async () => list,
       action: async (path, action) => { if (action === 'trash') list = list.filter((item) => item.path !== path); },
+      mail: async (paths) => ({ opened: false, message: `תצוגה מקדימה — בתוכנה נפתחת הודעה עם ${paths.length} קבצים` }),
       trashMany: async (paths) => { list = list.filter((item) => !paths.includes(item.path)); return { trashed: paths.length }; },
       runAction: async () => {}, startDrag: () => {}, close: async () => {}, toggleMaximize: async () => {},
       setOnTop: async (value) => value, openStudio: async () => {}, getState: async () => ({ onTop: false }), onChanged: () => {},
@@ -72,6 +73,10 @@
   const store = (key, value) => { try { localStorage.setItem(key, value); } catch {} };
   const THEMES = [['graphite', 'גרפיט כהה', '#3a3a3a'], ['office', 'משרדי בהיר', '#1f6fe5'], ['cards', 'כרטיסים צבעוניים', '#e0472b'], ['tiles', 'אריחים רכים', '#7a4ddb'], ['lines', 'קווים נקיים', '#ffffff'], ['lines-dark', 'קווים נקיים כהה', '#16181c']];
   const VIEWS = ['large', 'grid', 'list', 'table'];
+  // The biggest picture size: the list's width less its padding, never under the old 420.
+  const largestThumb = () => Math.max(420, Math.floor(((document.querySelector('#grid')?.clientWidth || 0) - 64) / 10) * 10);
+  const syncThumbRange = () => { const slider = document.querySelector('#thumb-size'); if (slider) slider.max = String(largestThumb()); };
+  window.addEventListener('resize', syncThumbRange);
   function applyLook({ theme, view, size } = {}) {
     if (theme && THEMES.some(([key]) => key === theme)) { root.dataset.theme = theme; store('aurum-ws-theme', theme); }
     if (view && VIEWS.includes(view)) {
@@ -80,13 +85,17 @@
       document.querySelectorAll('[data-view-choice]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.viewChoice === view)));
     }
     if (size) {
-      const value = Math.min(420, Math.max(120, Math.round(Number(size) / 10) * 10));
+      // Up to full size: one picture across the whole list (the slider's end follows the window's width).
+      const value = Math.min(largestThumb(), Math.max(120, Math.round(Number(size) / 10) * 10));
       root.style.setProperty('--thumb', `${value}px`);
       $('#thumb-size').value = String(value);
       store('aurum-ws-thumb', String(value));
     }
   }
-  applyLook({ theme: stored('aurum-ws-theme', 'graphite'), view: stored('aurum-ws-view', 'large'), size: stored('aurum-ws-thumb', '220') });
+  applyLook({ theme: stored('aurum-ws-theme', 'graphite'), view: stored('aurum-ws-view', 'large') });
+  root.style.setProperty('--thumb', `${Math.max(120, Number(stored('aurum-ws-thumb', '220')) || 220)}px`);
+  // The window's width is known only after the first layout: then the slider's end and a saved large size apply.
+  requestAnimationFrame(() => { syncThumbRange(); applyLook({ size: stored('aurum-ws-thumb', '220') }); });
 
   function syncSelection() {
     grid.querySelectorAll('.item').forEach((tile) => tile.setAttribute('aria-selected', String(chosen.has(tile.dataset.path))));
@@ -143,6 +152,8 @@
       image.alt = '';
       image.draggable = true;
       frame.append(image);
+      // Enlarged past the thumbnail, the picture switches to the original file and stays sharp up to full size.
+      if (item.kind === 'image' && item.url) window.aurumSharp?.watch(image, item.url);
       const text = document.createElement('div');
       text.className = 'text';
       text.append(cell(item.name, 'name'), cell(`${KIND_LABELS[item.kind] || ''} · ${formatDate(item.modified)} · ${formatSize(item.size)}`, 'meta'));
@@ -338,6 +349,10 @@
       if (first.kind === 'image') await api.action(first.path, 'edit');
       return;
     }
+    if (action === 'mail') {
+      try { flashNote((await api.mail(targets.map((item) => item.path))).message); } catch (failure) { flashNote(`השליחה במייל לא נפתחה: ${failure.message}`); }
+      return;
+    }
     if (action === 'copy') {
       // All the chosen captures in one copy (one at a time left only the last on the clipboard).
       try {
@@ -359,7 +374,7 @@
     capture: [['region', '▱', 'אזור או חלון'], ['repeatRegion', '↺', 'האזור הקודם'], ['ocrRegion', 'א', 'העתקת טקסט מאזור'], ['scrollCapture', '⇣', 'עמוד גלילה אוטומטי'], ['screenshot', '▣', 'מסך מלא']],
     record: [['recordRegion', '▱', 'הקלטת אזור או חלון'], ['record', '●', 'התחלה או עצירה של הקלטה'], ['pause', 'Ⅱ', 'השהיה או המשך']]
   };
-  const ITEM_MENU = [['edit', '✎', 'עריכה'], ['copy', '⧉', 'העתקה ללוח'], ['pin', '⌖', 'הצמדה מעל החלונות'], ['open-folder', '⌑', 'הצגה בתיקייה'], null, ['folder', '▣', 'העברה לתיקייה…'], ['guide', '☰', 'מדריך צעדים…'], ['compare', '⇄', 'מה השתנה בין שני הצילומים'], ['trim', '✂', 'חיתוך וידאו…'], null, ['trash', '⌫', 'העברה לסל המיחזור']];
+  const ITEM_MENU = [['edit', '✎', 'עריכה'], ['copy', '⧉', 'העתקה ללוח'], ['mail', '✉', 'שליחה במייל'], ['pin', '⌖', 'הצמדה מעל החלונות'], ['open-folder', '⌑', 'הצגה בתיקייה'], null, ['folder', '▣', 'העברה לתיקייה…'], ['guide', '☰', 'מדריך צעדים…'], ['compare', '⇄', 'מה השתנה בין שני הצילומים'], ['trim', '✂', 'חיתוך וידאו…'], null, ['trash', '⌫', 'העברה לסל המיחזור']];
   function showMenu(entries, x, y, onPick) {
     menu.replaceChildren(...entries.map((entry) => {
       if (!entry) return document.createElement('hr');

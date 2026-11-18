@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('workspaceApi', {
   rename: (filePath, name) => ipcRenderer.invoke('workspace:rename', filePath, name),
   copy: (paths) => ipcRenderer.invoke('captures:copy', paths),
   trashMany: (paths) => ipcRenderer.invoke('captures:trash', paths),
+  mail: (paths) => ipcRenderer.invoke('captures:mail', paths),
   setDock: (patch) => ipcRenderer.invoke('workspace:dock', patch),
   dragDock: (active) => ipcRenderer.invoke('workspace:dock-drag', active),
   resizeFrom: (grip) => ipcRenderer.send('workspace:resize', grip),

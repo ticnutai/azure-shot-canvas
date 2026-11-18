@@ -42,6 +42,7 @@
         <button data-capture-action="edit" title="פתיחה בעורך (E / Enter)"><i>✎</i><span>עריכה</span></button>
         <button data-capture-action="copy" title="העתקה ללוח (Ctrl+C)"><i>⧉</i><span>העתקה</span></button>
         <button data-capture-action="pin" title="הצמדה מעל החלונות (P)"><i>⌖</i><span>הצמדה</span></button>
+        <button data-capture-action="mail" title="הודעה חדשה בתוכנת הדואר עם הצילום מצורף"><i>✉</i><span>מייל</span></button>
         <button data-capture-action="open-folder" title="הצגה בתיקייה (O)"><i>⌑</i><span>תיקייה</span></button>
         <button data-capture-action="trash" class="danger" title="העברה לסל המיחזור (Delete)"><i>⌫</i><span>מחיקה</span></button>
       </div>
@@ -65,11 +66,12 @@
       </div>
     </div>
     <div id="history-grid" role="list"></div>
-    <div id="history-selection" hidden><span id="history-selected-count"></span><button id="history-select-clear">ביטול בחירה</button><button id="history-trash" class="danger">העברה לסל המיחזור</button></div>
+    <div id="history-selection" hidden><span id="history-selected-count"></span><button id="history-select-clear">ביטול בחירה</button><button id="history-mail">שליחה במייל</button><button id="history-trash" class="danger">העברה לסל המיחזור</button></div>
     <p class="history-tip">לחיצה מעתיקה ללוח · לחיצה ימנית פותחת את הכרטיס · קונטרול+לחיצה בוחרת כמה · ☐ בוחר הכל · לחיצה כפולה לעריכה · גרירה לתוכנה אחרת</p>
   </section>
   <script src="app-icons.js"></script>
   <script src="selection-utils.js"></script>
+  <script src="sharp-image.js"></script>
   <script src="quickbar.js"></script>
   <script src="shortcut-hints.js"></script>
 </body></html>

@@ -80,6 +80,7 @@
     type: '<path d="M5 7V5h14v2M12 5v14M9 19h6"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     cursor: '<path d="M8 8.5v11l3.1-3.1 2.2 4.6 1.9-.9-2.2-4.5h4.4z"/><path d="M8 2.5v2.5M3.5 4.5l1.8 1.8M2.5 9H5M12.5 4.5l-1.8 1.8"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/>',
     more: '<path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3"/>',
     tag: '<path d="M3 12V4h8l10 10-8 8z"/><path d="M7.5 7.5h.01" stroke-width="3"/>',
     rename: '<path d="M4 20h16"/><path d="M6 16l9-9 3 3-9 9H6z"/>',

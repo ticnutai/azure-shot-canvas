@@ -2,7 +2,7 @@
 // the small settings files of the program plus the choices the settings page keeps in the browser storage.
 // Only known file names and only keys that start with "aurum-" are ever written back, whatever the file says.
 const FORMAT = 'aurum-settings';
-const FILES = ['quickbar-preferences.json', 'workspace-window.json', 'workspace-tools.json', 'features.json'];
+const FILES = ['quickbar-preferences.json', 'workspace-window.json', 'workspace-tools.json', 'features.json', 'mail-settings.json'];
 const MAX_VALUE = 400_000;
 const MAX_KEYS = 200;
 

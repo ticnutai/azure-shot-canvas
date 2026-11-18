@@ -172,7 +172,7 @@
                   <button class="text-button recent-all" type="button" data-page-link="library">כל הספרייה</button>
                 </div>
               </div>
-              <div class="selection-bar" id="recent-selection" hidden><b id="recent-selected-count"></b><button type="button" class="ghost" id="recent-copy">העתקה</button><button type="button" class="ghost danger" id="recent-trash">העברה לסל המיחזור</button><button type="button" class="ghost" id="recent-select-clear">ביטול בחירה</button></div>
+              <div class="selection-bar" id="recent-selection" hidden><b id="recent-selected-count"></b><button type="button" class="ghost" id="recent-copy">העתקה</button><button type="button" class="ghost" id="recent-mail">שליחה במייל</button><button type="button" class="ghost danger" id="recent-trash">העברה לסל המיחזור</button><button type="button" class="ghost" id="recent-select-clear">ביטול בחירה</button></div>
               <div id="recent-library" class="clip-grid recent-view-cards"><div class="loading">טוען את הספרייה…</div></div>
             </section>
 
@@ -192,7 +192,7 @@
               </div>
               <label class="library-size-control" title="גודל התמונות (גם קונטרול + גלגלת על התמונות)"><span>גודל</span><input id="library-size" type="range" min="140" max="560" step="1" value="245"><output id="library-size-output">בינוני</output></label>
             </div>
-            <div class="selection-bar" id="library-selection" hidden><b id="library-selected-count"></b><button type="button" class="ghost" id="library-copy">העתקה</button><button type="button" class="ghost danger" id="library-trash">העברה לסל המיחזור</button><button type="button" class="ghost" id="library-select-clear">ביטול בחירה</button></div>
+            <div class="selection-bar" id="library-selection" hidden><b id="library-selected-count"></b><button type="button" class="ghost" id="library-copy">העתקה</button><button type="button" class="ghost" id="library-mail">שליחה במייל</button><button type="button" class="ghost danger" id="library-trash">העברה לסל המיחזור</button><button type="button" class="ghost" id="library-select-clear">ביטול בחירה</button></div>
             <div id="library-list" class="library-list view-grid size-medium"></div>
           </section>
           <section id="tools-page" class="page panel page-panel tools-page">
@@ -231,6 +231,11 @@
                 <label><span><b>גופן התוכנה</b><small>התפריטים, הכפתורים והחלונות. ברירת המחדל שומרת על הגופנים של העיצוב</small></span><select id="ui-font"><option value="">ברירת המחדל של העיצוב</option></select></label><label><span><b>טקסט מודגש בכל התוכנה</b><small>כל הכיתובים עבים יותר וקלים יותר לקריאה</small></span><input id="ui-bold" type="checkbox"></label><label><span><b>הסתרת התוכנה מהצילומים</b><small>החלון הראשי והסרגל הצף לא יופיעו בצילומים ובהקלטות, גם של תוכנות אחרות. כדי לצלם את התוכנה עצמה — לכבות</small></span><input id="exclude-studio-window" type="checkbox" checked></label>
               </div>
               <h2 class="settings-subheading">שמירה ופורמט</h2><p class="path" id="output-path"></p><button class="gold-button" id="choose-output">בחירת תיקייה אחרת</button><label class="check-line"><input type="checkbox" id="convert-mp4" checked> יצירת MP4 תואם לאחר שמירת מקור WebM</label><label class="check-line"><input type="checkbox" id="autostart-app"> הפעלה עם המחשב, מוסתרת במגש — הקיצורים והסרגל זמינים מיד</label>
+              <h2 class="settings-subheading">שליחה במייל</h2>
+              <div class="capture-default-grid mail-settings">
+                <label><span><b>תוכנת הדואר</b><small id="mail-client-status">בודק…</small></span><select id="mail-client"><option value="sicha">שיחה (מומלץ)</option><option value="custom">תוכנה אחרת…</option></select></label>
+              </div>
+              <button type="button" class="ghost" id="mail-browse" hidden>בחירת תוכנה אחרת…</button>
               <h2 class="settings-subheading">עדכונים</h2>
               <div class="update-row"><span><b id="update-version">גרסה</b><small id="update-status">התוכנה בודקת עדכונים לבד, מורידה אותם ברקע ומתקינה כשהיא נסגרת</small></span><button class="ghost" id="update-check">בדיקת עדכונים עכשיו</button><button class="gold-button" id="update-install" hidden>התקנה והפעלה מחדש</button></div>
               <h2 class="settings-subheading">סרגל מהיר צף</h2>

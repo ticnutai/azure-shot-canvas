@@ -2194,6 +2194,11 @@ function renameInPlace(name, item) {
   input.addEventListener('dblclick', (event) => event.stopPropagation());
   input.addEventListener('blur', () => finish(true));
 }
+// Sending by e-mail opens a new message in the chosen mail program; the main process words the outcome.
+async function mailFiles(paths) {
+  try { showToast((await api.mailFiles(paths)).message, 7000); } catch (error) { showToast(`השליחה במייל לא נפתחה: ${error.message}`, 7000); }
+}
+
 async function runOnChosen(selection, action) {
   const paths = [...selection.place.chosen];
   if (!paths.length) return;
@@ -2201,6 +2206,8 @@ async function runOnChosen(selection, action) {
     if (action === 'copy') {
       await api.copyFiles(paths);
       showToast(paths.length === 1 ? 'הקובץ הועתק — אפשר להדביק' : `הועתקו ${paths.length} קבצים — הדבקה בתיקייה, בצ׳אט או במסמך מדביקה את כולם`);
+    } else if (action === 'mail') {
+      await mailFiles(paths);
     } else if (action === 'trash') {
       const result = await api.trashFiles(paths);
       selection.clear();
@@ -2306,8 +2313,9 @@ function renderLibrary() {
       // The menu's buttons, built and wired the first time it opens.
       const buildMenu = () => {
         if (menu.childElementCount) return;
-        menu.innerHTML = `${menuItem('open', 'open', 'פתיחה')}${kindMenu}${menuItem('tag', 'metadata', 'פרטים ותגיות')}${menuItem('rename', 'rename', 'שינוי שם')}`;
+        menu.innerHTML = `${menuItem('open', 'open', 'פתיחה')}${menuItem('mail', 'mail', 'שליחה במייל')}${kindMenu}${menuItem('tag', 'metadata', 'פרטים ותגיות')}${menuItem('rename', 'rename', 'שינוי שם')}`;
         menu.querySelector('.open').addEventListener('click', () => api.openFile(item.path));
+        menu.querySelector('.mail').addEventListener('click', () => mailFiles([item.path]));
         menu.querySelector('.ocr')?.addEventListener('click', async () => { try { showToast('מזהה טקסט מקומית…'); const result = await api.runOcr(item.path); showToast(`זיהוי הטקסט הושלם: ${result.text.length} תווים`); await loadLibrary(); } catch (error) { showToast(`זיהוי הטקסט נכשל: ${error.message}`); } });
         menu.querySelector('.pin')?.addEventListener('click', async () => { try { await api.pinImage(item.path); showToast('הצילום הוצמד מעל החלונות'); } catch (error) { showToast(`הצמדה נכשלה: ${error.message}`); } });
         menu.querySelector('.analyze')?.addEventListener('click', async () => { try { const result = await api.analyzeMedia(item.path); showToast(`ציון איכות ${result.score}/100 · ${result.fps} FPS · סנכרון ${result.avSyncOffsetMs ?? '—'}ms`, 9000); await loadLibrary(); } catch (error) { showToast(`ניתוח נכשל: ${error.message}`); } });
@@ -2878,6 +2886,21 @@ async function initialize() {
   $('#edit-latest-image').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   $('#quick-edit-latest').addEventListener('click', () => openLatestScreenshotEditor('professional').catch((error) => showToast(`פתיחת העורך נכשלה: ${error.message}`)));
   $('#choose-output').addEventListener('click', async () => { $('#output-path').textContent = await api.chooseOutput(); });
+  // The mail program for "שליחה במייל" everywhere in the studio; the choice is kept by the main process.
+  const renderMailSettings = (mail) => {
+    const select = $('#mail-client');
+    if (!select || !mail) return;
+    select.value = mail.client;
+    select.querySelector('option[value="custom"]').textContent = mail.customName ? `תוכנה אחרת: ${mail.customName}` : 'תוכנה אחרת…';
+    $('#mail-browse').hidden = mail.client !== 'custom';
+    $('#mail-client-status').textContent = mail.client === 'custom'
+      ? 'נפתחת התוכנה שבחרת עם הקבצים'
+      : mail.sichaReady ? 'נפתחת הודעה חדשה ב״שיחה״ עם הקבצים מצורפים' : '״שיחה״ עוד לא מוכנה לשליחה מהאולפן — עד אז הקבצים יסומנו בתיקייה';
+    document.documentElement.dataset.mailClient = mail.client;
+  };
+  api.mailState?.().then(renderMailSettings).catch(() => {});
+  $('#mail-client')?.addEventListener('change', async (event) => renderMailSettings(await api.setMailClient(event.target.value)));
+  $('#mail-browse')?.addEventListener('click', async () => renderMailSettings(await api.setMailClient('custom', true)));
   $('#autostart-app').addEventListener('change', async (event) => { event.target.checked = await api.setAutostart(event.target.checked); });
   const updateQuickbar = async (patch) => showQuickbarSettings(await api.setQuickbarPreferences(patch));
   $('#quickbar-style').addEventListener('change', (event) => updateQuickbar({ style: event.target.value }));
@@ -3076,6 +3099,7 @@ async function initialize() {
     $(`#${name}-select-all`)?.addEventListener('click', () => selection.toggleAll());
     $(`#${name}-select-clear`)?.addEventListener('click', () => selection.clear());
     $(`#${name}-copy`)?.addEventListener('click', () => runOnChosen(selection, 'copy'));
+    $(`#${name}-mail`)?.addEventListener('click', () => runOnChosen(selection, 'mail'));
     $(`#${name}-trash`)?.addEventListener('click', () => runOnChosen(selection, 'trash'));
   }
   // Keys on the chosen files: Control + C copies them all (paste brings all of them); in the library also Control + A

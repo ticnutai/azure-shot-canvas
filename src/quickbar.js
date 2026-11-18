@@ -11,7 +11,7 @@
       setExpanded: async (expanded) => ({ expanded: true || expanded }),
       setPreferences: async (patch) => { preferences = { ...preferences, ...patch }; return preferences; },
       runAction: quiet, setView: quiet, setMenu: quiet, history: async () => [], openCapture: quiet, captureAction: quiet,
-      cardHover: async () => [], startDrag: () => {}, drag: async () => preferences, openWorkspace: quiet, trashMany: async () => ({ trashed: 0 }),
+      cardHover: async () => [], startDrag: () => {}, drag: async () => preferences, openWorkspace: quiet, trashMany: async () => ({ trashed: 0 }), mail: async () => ({ message: '' }),
       onRecordingState: () => {}, onPreferences: () => {}, onCaptures: () => {}, onCardKey: () => {}
     };
   }
@@ -398,6 +398,8 @@
       image.src = item.thumbnail || '';
       image.alt = '';
       image.draggable = true;
+      // A bigger panel shows the original picture, sharp at any size.
+      if (item.kind === 'image' && item.url) window.aurumSharp?.watch(image, item.url);
       const when = document.createElement('time');
       when.textContent = formatWhen(item.modified);
       tile.append(image, when);
@@ -496,6 +498,9 @@
     renderHistory();
   }));
   document.querySelector('#history-select-clear').addEventListener('click', () => { chosen.clear(); renderSelection(); });
+  document.querySelector('#history-mail').addEventListener('click', async () => {
+    try { document.querySelector('#history-selected-count').textContent = (await api.mail([...chosen])).message; } catch (error) { document.querySelector('#history-selected-count').textContent = error.message; }
+  });
   document.querySelector('#history-select-all').addEventListener('click', () => {
     const next = window.aurumSelection.toggleAll(chosen, historyItems.filter(matchesFilter).map((item) => item.path));
     chosen.clear();
@@ -549,6 +554,12 @@
     const button = document.querySelector(`[data-capture-action="${action}"]`);
     if (button) button.disabled = true;
     try {
+      if (action === 'mail') {
+        // A new message in the chosen mail program; the main process words what happened.
+        document.querySelector('#capture-meta').textContent = (await api.mail([item.path])).message;
+        root.dataset.lastCaptureAction = action;
+        return;
+      }
       await api.captureAction(item.path, action);
       root.dataset.lastCaptureAction = action;
       if (action === 'copy') document.querySelector('#capture-meta').textContent = 'הועתק ללוח ✓';

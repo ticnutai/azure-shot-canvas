@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('quickbarApi', {
   drag: (active) => ipcRenderer.invoke('quickbar:drag', active),
   resize: (bounds, done) => ipcRenderer.invoke('quickbar:resize', bounds, done),
   trashMany: (paths) => ipcRenderer.invoke('captures:trash', paths),
+  mail: (paths) => ipcRenderer.invoke('captures:mail', paths),
   openWorkspace: () => ipcRenderer.invoke('workspace:open'),
   editShortcut: (action) => ipcRenderer.send('shortcuts:edit', action),
   openShortcuts: () => ipcRenderer.send('shortcuts:open-settings')
