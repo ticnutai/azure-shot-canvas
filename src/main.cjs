@@ -2207,7 +2207,13 @@ function registerIpc() {
   ipcMain.handle('workspace:folder', (_event, paths, folder) => setCaptureFolder(Array.isArray(paths) ? paths : [], folder));
   // Several captures at once, from any window.
   ipcMain.handle('captures:copy', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return copyCapturesToClipboard(paths); });
-  ipcMain.handle('captures:mail', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return mailCaptures(paths); });
+  ipcMain.handle('captures:mail', async (event, paths) => {
+    if (!isTrustedSender(event)) throw new Error('לא מורשה');
+    const result = await mailCaptures(paths);
+    // The new message opened in the mail program: the side panel (always above the others) folds out of its way.
+    if (result.opened) for (const panel of workspacePanels()) if (panel.dock.enabled && panel.dock.expanded && !panel.dock.pinned) panel.setExpanded(false);
+    return result;
+  });
   ipcMain.handle('mail:state', (event) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return mailState(); });
   ipcMain.handle('mail:set-client', (event, client, browse) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return setMailClient(String(client), Boolean(browse)); });
   ipcMain.handle('captures:trash', (event, paths) => { if (!isTrustedSender(event)) throw new Error('לא מורשה'); return trashCaptures(paths); });
