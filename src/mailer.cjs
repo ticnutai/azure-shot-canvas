@@ -69,12 +69,21 @@ function readSichaCompose({ env = process.env } = {}) {
   });
 }
 
+// How a mail program is started. "Sicha" registers a small script run by PowerShell, which cannot start at all when
+// fully detached from a console (it quits at once, doing nothing): it gets a hidden console instead. Another mail
+// program (a window of its own) keeps starting fully detached and shown — hiding it would hide its window too.
+function launchOptions(command) {
+  return command.client === 'sicha'
+    ? { detached: false, stdio: 'ignore', windowsHide: true }
+    : { detached: true, stdio: 'ignore', windowsHide: false };
+}
+
 function launch(command) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command.file, command.args, { detached: true, stdio: 'ignore', windowsHide: false });
+    const child = spawn(command.file, command.args, launchOptions(command));
     child.once('error', reject);
     child.once('spawn', () => { child.unref(); resolve(); });
   });
 }
 
-module.exports = { MAIL_CLIENTS, SICHA_KEY, composeCommand, launch, mailSubject, normalizeMailSettings, readSichaCompose, splitArgs };
+module.exports = { MAIL_CLIENTS, SICHA_KEY, composeCommand, launch, launchOptions, mailSubject, normalizeMailSettings, readSichaCompose, splitArgs };

@@ -36,3 +36,9 @@ test('test runs can stand in for the registry, and only test runs', async () => 
   assert.deepEqual(await readSichaCompose({ env: { SCREEN_STUDIO_QA: '1', SCREEN_STUDIO_SICHA_COMPOSE_EXE: 'C:\\stub.exe', SCREEN_STUDIO_SICHA_COMPOSE_ARGS: '--x' } }), { ComposeExe: 'C:\\stub.exe', ComposeArgs: '--x' });
   assert.deepEqual(await readSichaCompose({ env: { SCREEN_STUDIO_QA: '1', SCREEN_STUDIO_SICHA_COMPOSE_EXE: '' } }), {});
 });
+
+test('Sicha (a PowerShell script) starts with a hidden console; another mail program fully detached and shown', () => {
+  const { launchOptions } = require('../src/mailer.cjs');
+  assert.deepEqual(launchOptions({ client: 'sicha' }), { detached: false, stdio: 'ignore', windowsHide: true });
+  assert.deepEqual(launchOptions({ client: 'custom' }), { detached: true, stdio: 'ignore', windowsHide: false });
+});
