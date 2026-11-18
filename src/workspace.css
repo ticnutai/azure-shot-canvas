@@ -369,3 +369,12 @@ html[data-theme^="lines"] .select-all{border-radius:3px}
   .round-action .ring svg{width:24px;height:24px}
   .round-action .label{font-size:12px}
 }
+
+/* A card is never wider than the list: a narrow side panel shows whole cards, with no sideways scrolling. */
+#grid{grid-template-columns:repeat(auto-fill,minmax(min(var(--thumb),100%),1fr));overflow-x:hidden}
+html[data-view="grid"] #grid{grid-template-columns:repeat(auto-fill,minmax(min(calc(var(--thumb) * .62),100%),1fr))}
+.item{min-width:0}
+.item .text{max-width:100%;overflow-wrap:anywhere}
+/* Side panel: the five newest, then a button for all of them. */
+.show-all-captures{grid-column:1/-1;justify-self:center;margin:4px 0 8px;padding:8px 16px;border:1px solid var(--line,#555);border-radius:8px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.show-all-captures:hover{border-color:var(--accent,#1f6fe5);color:var(--accent,#1f6fe5)}

@@ -54,6 +54,11 @@
   // The search finds the name, and — with the text search extra on — the words written inside the picture (item.text).
   const matches = (item) => { const word = filter.toLowerCase(); return item.name.toLowerCase().includes(word) || (item.text || '').toLowerCase().includes(word); };
   const visible = () => items.filter((item) => (folderFilter === '*' || (item.folder || '') === folderFilter) && (!filter || matches(item)));
+  // Docked as a side panel it always shows the five newest captures (the list is newest first); searching, a folder
+  // or "show all" bring back the whole list.
+  const DOCKED_RECENT = 5;
+  let showAllDocked = false;
+  const dockedRecent = () => root.dataset.docked === 'open' && !showAllDocked && !filter && folderFilter === '*';
   const folderNames = () => [...new Set(items.map((item) => item.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'he'));
   function renderFolderFilter() {
     const select = $('#folder-filter');
@@ -124,8 +129,10 @@
   const cell = (text, className = 'cell') => Object.assign(document.createElement('span'), { className, textContent: text });
 
   function render() {
-    const list = visible();
+    const all = visible();
+    const list = dockedRecent() ? all.slice(0, DOCKED_RECENT) : all;
     $('#count').textContent = items.length ? (filter ? `${list.length} מתוך ${items.length}` : `${items.length} צילומים`) : '';
+    root.dataset.dockedRecent = String(list.length < all.length);
     root.dataset.count = String(list.length);
     if (!list.length) {
       grid.replaceChildren(Object.assign(document.createElement('div'), { className: 'empty', textContent: items.length ? 'אין צילומים שמתאימים לחיפוש' : 'עדיין אין צילומים — לחצו על "צילום אזור" או על מקש צילום המסך' }));
@@ -170,7 +177,13 @@
       image.addEventListener('dragstart', (event) => { event.preventDefault(); api.startDrag(item.path); });
       return tile;
     });
-    grid.replaceChildren(...(root.dataset.view === 'table' ? [head, ...tiles] : tiles));
+    const extra = [];
+    if (list.length < all.length) {
+      extra.push(Object.assign(document.createElement('button'), { type: 'button', className: 'show-all-captures', textContent: `הצגת כל הצילומים (${all.length})`, onclick: () => { showAllDocked = true; render(); } }));
+    } else if (showAllDocked && root.dataset.docked === 'open' && all.length > DOCKED_RECENT) {
+      extra.push(Object.assign(document.createElement('button'), { type: 'button', className: 'show-all-captures', textContent: `רק ${DOCKED_RECENT} האחרונים`, onclick: () => { showAllDocked = false; render(); grid.scrollTop = 0; } }));
+    }
+    grid.replaceChildren(...(root.dataset.view === 'table' ? [head, ...tiles] : tiles), ...extra);
     syncSelection();
   }
   function choose(item, event) {
@@ -471,8 +484,12 @@
   });
   function applyDock(state) {
     dockState = { ...dockState, ...state };
+    const wasDocked = root.dataset.docked;
     root.dataset.docked = dockState.enabled ? (dockState.expanded ? 'open' : 'folded') : 'off';
     root.dataset.dockEdge = dockState.edge;
+    // Opening the side panel again starts from the five newest.
+    if (root.dataset.docked === 'open' && wasDocked !== 'open') { showAllDocked = false; render(); }
+    else if (root.dataset.docked === 'off' && wasDocked === 'open') render();
     $('#dock').setAttribute('aria-pressed', String(dockState.enabled));
     $('#dock').title = dockState.enabled ? 'החזרה לחלון רגיל' : 'הסתרה בקצה המסך — נפתח כשמתקרבים עם העכבר';
     syncPin();
