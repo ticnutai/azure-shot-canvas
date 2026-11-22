@@ -1,9 +1,14 @@
-// Quick marks drawn right on the frozen screen (arrow, box, pen, text, blur, numbered step). Shapes are kept in
+// Quick marks drawn right on the frozen screen (arrow, double arrow, line, box, ellipse, highlighter, pen, text, blur,
+// numbered step). Shapes are kept in
 // screen points of this screen; the same drawing code paints the live preview and the saved image, so what you
 // see is exactly what is saved.
 (() => {
   const COLORS = Object.freeze(['#f13c50', '#ffc929', '#2f80ed', '#27ae60', '#111111']);
   const LINE = 4;
+  // Marks that are one straight line between two points (their handles are the two ends).
+  const LINE_TYPES = new Set(['arrow', 'darrow', 'line']);
+  // Marks whose line thickness can be chosen.
+  const STROKED = new Set(['arrow', 'darrow', 'line', 'rect', 'ellipse', 'pen']);
   const BLUR_BLOCK = 10; // pixels per blur block in the saved image
 
   const boundsOf = (shape) => {
@@ -141,27 +146,36 @@
     context.restore();
   }
 
-  function drawArrow(context, from, to, color) {
+  // The line thickness of a mark; marks drawn before thickness could be chosen are of the usual one.
+  const widthOf = (shape) => (Number(shape.width) > 0 ? Number(shape.width) : LINE);
+
+  // A straight line with a head at its end (heads: 1), at both ends (2) or none (0).
+  function drawArrow(context, from, to, color, width = LINE, heads = 1) {
     const angle = Math.atan2(to.y - from.y, to.x - from.x);
     const length = Math.hypot(to.x - from.x, to.y - from.y);
-    const head = Math.min(18, Math.max(10, length * 0.35));
+    const head = Math.min(18, Math.max(10, length * (heads === 2 ? 0.25 : 0.35))) * Math.max(1, width / LINE) ** 0.6;
+    const back = heads ? head * 0.6 : 0;
     context.save();
     context.strokeStyle = color;
     context.fillStyle = color;
-    context.lineWidth = LINE;
+    context.lineWidth = width;
     context.lineCap = 'round';
     context.shadowColor = '#0006';
     context.shadowBlur = 3;
     context.beginPath();
-    context.moveTo(from.x, from.y);
-    context.lineTo(to.x - Math.cos(angle) * head * 0.6, to.y - Math.sin(angle) * head * 0.6);
+    context.moveTo(from.x + (heads === 2 ? Math.cos(angle) * back : 0), from.y + (heads === 2 ? Math.sin(angle) * back : 0));
+    context.lineTo(to.x - Math.cos(angle) * back, to.y - Math.sin(angle) * back);
     context.stroke();
-    context.beginPath();
-    context.moveTo(to.x, to.y);
-    context.lineTo(to.x - head * Math.cos(angle - Math.PI / 7), to.y - head * Math.sin(angle - Math.PI / 7));
-    context.lineTo(to.x - head * Math.cos(angle + Math.PI / 7), to.y - head * Math.sin(angle + Math.PI / 7));
-    context.closePath();
-    context.fill();
+    const tip = (point, toward) => {
+      context.beginPath();
+      context.moveTo(point.x, point.y);
+      context.lineTo(point.x - head * Math.cos(toward - Math.PI / 7), point.y - head * Math.sin(toward - Math.PI / 7));
+      context.lineTo(point.x - head * Math.cos(toward + Math.PI / 7), point.y - head * Math.sin(toward + Math.PI / 7));
+      context.closePath();
+      context.fill();
+    };
+    if (heads >= 1) tip(to, angle);
+    if (heads === 2) tip(from, angle + Math.PI);
     context.restore();
   }
 
@@ -174,18 +188,35 @@
     if (shape.type === 'blur') return drawBlur(context, shape, frozen, scale);
     if (shape.type === 'erase') return drawErase(context, shape, frozen, scale, live);
     context.save();
-    if (shape.type === 'arrow') drawArrow(context, shape.from, shape.to, shape.color);
-    else if (shape.type === 'rect') {
+    if (shape.type === 'arrow') drawArrow(context, shape.from, shape.to, shape.color, widthOf(shape), 1);
+    else if (shape.type === 'darrow') drawArrow(context, shape.from, shape.to, shape.color, widthOf(shape), 2);
+    else if (shape.type === 'line') drawArrow(context, shape.from, shape.to, shape.color, widthOf(shape), 0);
+    else if (shape.type === 'ellipse') {
       const rect = boundsOf(shape);
       context.strokeStyle = shape.color;
-      context.lineWidth = LINE;
+      context.lineWidth = widthOf(shape);
+      context.shadowColor = '#0005';
+      context.shadowBlur = 3;
+      context.beginPath();
+      context.ellipse(rect.x + rect.width / 2, rect.y + rect.height / 2, rect.width / 2, rect.height / 2, 0, 0, Math.PI * 2);
+      context.stroke();
+    } else if (shape.type === 'highlight') {
+      // A see-through band of colour: what is under it stays readable.
+      const rect = boundsOf(shape);
+      context.globalAlpha = 0.38;
+      context.fillStyle = shape.color;
+      context.fillRect(rect.x, rect.y, rect.width, rect.height);
+    } else if (shape.type === 'rect') {
+      const rect = boundsOf(shape);
+      context.strokeStyle = shape.color;
+      context.lineWidth = widthOf(shape);
       context.lineJoin = 'round';
       context.shadowColor = '#0005';
       context.shadowBlur = 3;
       context.strokeRect(rect.x, rect.y, rect.width, rect.height);
     } else if (shape.type === 'pen') {
       context.strokeStyle = shape.color;
-      context.lineWidth = LINE;
+      context.lineWidth = widthOf(shape);
       context.lineCap = 'round';
       context.lineJoin = 'round';
       context.beginPath();
@@ -235,7 +266,7 @@
     if (shape.type === 'number') return true;
     if (shape.type === 'pen') return shape.points.length > 1;
     const rect = boundsOf(shape);
-    return shape.type === 'arrow' ? Math.hypot(rect.width, rect.height) >= 8 : rect.width >= 4 && rect.height >= 4;
+    return LINE_TYPES.has(shape.type) ? Math.hypot(rect.width, rect.height) >= 8 : rect.width >= 4 && rect.height >= 4;
   }
 
   // The finished picture: the selected pixels of the frozen screen plus every mark, as PNG bytes.
@@ -256,5 +287,5 @@
     return new Uint8Array(await blob.arrayBuffer());
   }
 
-  window.AurumMarkup = { COLORS, boundsOf, drawShape, inOrder, isMeaningful, renderSelection, settled, textSize };
+  window.AurumMarkup = { COLORS, LINE_TYPES, STROKED, boundsOf, drawShape, inOrder, isMeaningful, renderSelection, settled, textSize };
 })();

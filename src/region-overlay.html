@@ -10,22 +10,33 @@
     <div class="tools">
       <button data-tool="move" title="בחירה, הזזה ושינוי גודל (V)">⤧</button>
       <button data-tool="arrow" title="חץ (A)">➚</button>
+      <button data-tool="darrow" title="חץ לשני הכיוונים (D)" hidden>⟷</button>
+      <button data-tool="line" title="קו ישר (L)" hidden>╱</button>
       <button data-tool="rect" title="מלבן (R)">▭</button>
+      <button data-tool="ellipse" title="עיגול או אליפסה (O)" hidden>◯</button>
       <button data-tool="pen" title="עט (P)">✎</button>
+      <button data-tool="highlight" title="מדגש (H)" hidden>🖍</button>
       <button data-tool="text" title="טקסט (T)">א</button>
       <button data-tool="blur" title="טשטוש מידע (B)">▦</button>
       <button data-tool="number" title="מספור שלבים (N)">①</button>
       <button data-tool="erase" title="מחיקה חכמה (E) — מה שבמלבן נעלם, והמקום מתמלא ברקע שמסביב">⌦</button>
       <button data-command="undo" title="ביטול הסימון האחרון (Ctrl+Z)">↶</button>
-      <button data-command="tool-keys" aria-expanded="false" title="מקשי הכלים — צפייה ושינוי">⌨</button>
+      <button data-command="tool-keys" class="more" aria-expanded="false" title="הוספת כלים לסרגל, מקשים ועובי קו">＋</button>
       <button data-command="save-area" title="שמירת האזור לשימוש חוזר (מקשי 1–9 בפעם הבאה)">⊕</button>
     </div>
     <div class="colors" aria-label="צבע"></div>
-    <div id="keys-panel" role="group" aria-label="מקשי הכלים" hidden>
-      <div class="keys-head"><b>מקשי הכלים</b><button data-command="keys-close" aria-label="סגירה" title="סגירה (אסקייפ)">✕</button></div>
+    <div id="keys-panel" role="group" aria-label="כלים, מקשים והגדרות" hidden>
+      <div class="keys-head"><b>כלים, מקשים והגדרות</b><button data-command="keys-close" aria-label="סגירה" title="סגירה (אסקייפ)">✕</button></div>
+      <div class="keys-cols" aria-hidden="true"><span>בסרגל</span><span>כלי</span><span>מקש</span></div>
       <div id="keys-rows"></div>
+      <div class="width-row" role="group" aria-label="עובי הקו">
+        <span>עובי הקו</span>
+        <button data-width="thin" title="דק"><i style="--w:2px"></i></button>
+        <button data-width="medium" title="בינוני"><i style="--w:4px"></i></button>
+        <button data-width="thick" title="עבה"><i style="--w:7px"></i></button>
+      </div>
       <p id="keys-note" role="status"></p>
-      <button data-command="keys-reset">חזרה לברירת המחדל</button>
+      <button data-command="keys-reset">חזרה למקשים הרגילים</button>
     </div>
     <div class="text-style" aria-label="סגנון הטקסט" hidden>
       <button id="font-button" aria-haspopup="menu" aria-expanded="false" title="גופן"></button>

@@ -75,7 +75,7 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
 
   test('the keyboard icon lists every tool; a row changes it, Delete leaves a tool without a key', async () => {
     await overlay.locator('[data-command="tool-keys"]').evaluate((button) => button.click());
-    await expect(overlay.locator('[data-key-tool]')).toHaveCount(8);
+    await expect(overlay.locator('[data-key-tool]')).toHaveCount(12);
     await overlay.locator('[data-key-tool="arrow"]').evaluate((row) => row.click());
     await press('Delete', { key: 'Delete' });
     await expect(rowKey('arrow')).toHaveText('אין');
@@ -120,6 +120,47 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
     await realKey('Space');
     expect(await pressed('text')).toBe('true');
     await expect(overlay.locator('#toolbar')).toBeVisible();
+    await escape();
+  });
+
+  test('the "+" panel adds a tool to the toolbar; the new marks draw, with the chosen thickness', async () => {
+    const drag = (x1, y1, x2, y2) => overlay.evaluate(([a, b, c, d]) => {
+      const fire = (type, x, y, buttons) => window.dispatchEvent(new PointerEvent(type, { clientX: x, clientY: y, button: 0, buttons, bubbles: true, pointerId: 1 }));
+      fire('pointerdown', a, b, 1); fire('pointermove', (a + c) / 2, (b + d) / 2, 1); fire('pointermove', c, d, 1); fire('pointerup', c, d, 0);
+    }, [x1, y1, x2, y2]);
+    const active = () => overlay.evaluate(() => [document.documentElement.dataset.activeShape, document.documentElement.dataset.activeWidth]);
+    await open();
+    await expect(overlay.locator('button[data-tool="ellipse"]')).toBeHidden();
+    await overlay.locator('[data-command="tool-keys"]').evaluate((button) => button.click());
+    await overlay.locator('[data-show-tool="ellipse"]').evaluate((button) => button.click());
+    await expect(overlay.locator('button[data-tool="ellipse"]')).toBeVisible();
+    await expect(overlay.locator('[data-show-tool="move"]')).toBeDisabled();
+    await overlay.locator('[data-width="thick"]').evaluate((button) => button.click());
+    await overlay.locator('[data-command="keys-close"]').evaluate((button) => button.click());
+    await overlay.locator('button[data-tool="ellipse"]').evaluate((button) => button.click());
+    await drag(300, 250, 420, 330);
+    expect(await active()).toEqual(['ellipse', '7']);
+    // A tool not on the toolbar still works by its key.
+    await press('KeyL');
+    expect(await pressed('line')).toBe('true');
+    await drag(300, 400, 600, 420);
+    expect(await active()).toEqual(['line', '7']);
+    await press('KeyD');
+    await drag(320, 450, 620, 450);
+    expect((await active())[0]).toBe('darrow');
+    await press('KeyH');
+    await drag(330, 260, 520, 290);
+    expect((await active())[0]).toBe('highlight');
+    await escape();
+    await escape();
+    // Kept for the next capture.
+    await open();
+    await expect(overlay.locator('button[data-tool="ellipse"]')).toBeVisible();
+    await overlay.locator('[data-command="tool-keys"]').evaluate((button) => button.click());
+    await overlay.locator('[data-show-tool="ellipse"]').evaluate((button) => button.click());
+    await overlay.locator('[data-width="medium"]').evaluate((button) => button.click());
+    await expect(overlay.locator('button[data-tool="ellipse"]')).toBeHidden();
+    await escape();
     await escape();
   });
 

@@ -4,6 +4,8 @@
   const REACH = 9; // how near the pointer must be to a handle or a line, in screen points
   const MIN_SIZE = 6;
   const NUMBER_RADIUS = 15;
+  // Marks that are one straight line between two points: their handles are the two ends.
+  const isLine = (shape) => shape.type === 'arrow' || shape.type === 'darrow' || shape.type === 'line';
 
   function boundsOf(shape) {
     if (shape.type === 'pen') {
@@ -20,7 +22,7 @@
   }
 
   function handlesOf(shape) {
-    if (shape.type === 'arrow') return [{ name: 'from', x: shape.from.x, y: shape.from.y }, { name: 'to', x: shape.to.x, y: shape.to.y }];
+    if (isLine(shape)) return [{ name: 'from', x: shape.from.x, y: shape.from.y }, { name: 'to', x: shape.to.x, y: shape.to.y }];
     if (shape.type === 'text' || shape.type === 'number') return [];
     const { x, y, width, height } = boundsOf(shape);
     const midX = x + width / 2;
@@ -41,7 +43,7 @@
     return Math.hypot(point.x - (a.x + along * dx), point.y - (a.y + along * dy));
   }
   function isOn(shape, point) {
-    if (shape.type === 'arrow') return distanceToLine(point, shape.from, shape.to) <= REACH;
+    if (isLine(shape)) return distanceToLine(point, shape.from, shape.to) <= REACH;
     if (shape.type === 'pen') return shape.points.some((spot, index) => distanceToLine(point, shape.points[Math.max(0, index - 1)], spot) <= REACH);
     const { x, y, width, height } = boundsOf(shape);
     return point.x >= x - REACH && point.y >= y - REACH && point.x <= x + width + REACH && point.y <= y + height + REACH;
@@ -76,7 +78,7 @@
   // The fields of a mark with one handle dragged to a point. A side changes one direction (narrower or wider), a corner
   // both. The mark does not turn over: a side stops a little before the opposite one.
   function resizeShape(base, handle, point) {
-    if (base.type === 'arrow') return { [handle]: { x: point.x, y: point.y } };
+    if (isLine(base)) return { [handle]: { x: point.x, y: point.y } };
     const box = boundsOf(base);
     let left = box.x;
     let top = box.y;
@@ -94,7 +96,7 @@
     return { from: { x: left, y: top }, to: { x: right, y: bottom } };
   }
 
-  const api = { boundsOf, clone, handleAt, handlesOf, moveShape, resizeShape, shapeAt };
+  const api = { boundsOf, clone, handleAt, handlesOf, isLine, moveShape, resizeShape, shapeAt };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AurumShapeEdit = api;
 })(typeof window !== 'undefined' ? window : globalThis);

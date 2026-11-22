@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { check, defaults, keyLabel, normalize, toolForKey } = require('../src/region-tool-keys.js');
+const { WIDTHS, check, defaults, keyLabel, normalize, normalizeShown, normalizeWidth, toolForKey } = require('../src/region-tool-keys.js');
 
 test('nothing saved: the usual keys', () => {
   assert.deepEqual(normalize(null), defaults());
@@ -47,4 +47,35 @@ test('a saved key of the new kinds stays, and works', () => {
   const keys = normalize({ rect: 'Minus', pen: 'NumpadAdd' });
   assert.equal(toolForKey(keys, 'Minus'), 'rect');
   assert.equal(toolForKey(keys, 'NumpadAdd'), 'pen');
+});
+
+test('the added marks have keys of their own, and an old saved choice that took one of them wins', () => {
+  const keys = defaults();
+  assert.equal(keys.line, 'KeyL');
+  assert.equal(keys.darrow, 'KeyD');
+  assert.equal(keys.ellipse, 'KeyO');
+  assert.equal(keys.highlight, 'KeyH');
+  assert.equal(new Set(Object.values(keys)).size, Object.keys(keys).length);
+  const old = normalize({ pen: 'KeyL' });
+  assert.equal(old.pen, 'KeyL');
+  assert.equal(old.line, '');
+});
+
+test('which tools are on the toolbar: the usual ones at first, the move tool always', () => {
+  const first = normalizeShown(null);
+  assert.equal(first.arrow, true);
+  assert.equal(first.line, false);
+  assert.equal(first.highlight, false);
+  const chosen = normalizeShown({ line: true, blur: false, move: false, ellipse: 'yes' });
+  assert.equal(chosen.line, true);
+  assert.equal(chosen.blur, false);
+  assert.equal(chosen.move, true);
+  assert.equal(chosen.ellipse, false);
+});
+
+test('line thickness: three choices, the middle one when nothing sound is saved', () => {
+  assert.deepEqual(Object.keys(WIDTHS), ['thin', 'medium', 'thick']);
+  assert.equal(normalizeWidth('thick'), 'thick');
+  assert.equal(normalizeWidth('huge'), 'medium');
+  assert.equal(normalizeWidth(null), 'medium');
 });

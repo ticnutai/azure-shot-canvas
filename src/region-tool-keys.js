@@ -9,8 +9,15 @@
     { tool: 'text', label: 'טקסט', title: 'טקסט', key: 'KeyT' },
     { tool: 'blur', label: 'טשטוש', title: 'טשטוש מידע', key: 'KeyB' },
     { tool: 'number', label: 'מספור', title: 'מספור שלבים', key: 'KeyN' },
-    { tool: 'erase', label: 'מחיקה', title: 'מחיקה חכמה', key: 'KeyE' }
+    { tool: 'erase', label: 'מחיקה', title: 'מחיקה חכמה', key: 'KeyE' },
+    // More marks, added to the toolbar from the "+" panel (they work by their key even when not on the toolbar).
+    { tool: 'line', label: 'קו', title: 'קו ישר', key: 'KeyL', extra: true },
+    { tool: 'darrow', label: 'חץ כפול', title: 'חץ לשני הכיוונים', key: 'KeyD', extra: true },
+    { tool: 'ellipse', label: 'עיגול', title: 'עיגול או אליפסה', key: 'KeyO', extra: true },
+    { tool: 'highlight', label: 'מדגש', title: 'מדגש: צבע שקוף מעל טקסט', key: 'KeyH', extra: true }
   ]);
+  // Line thickness of the marks.
+  const WIDTHS = Object.freeze({ thin: 2, medium: 4, thick: 7 });
   // Every key that makes sense alone. Kept out: Escape, Enter, Delete and Backspace have their own work on this screen,
   // the Shift-like keys only change other keys, and Print Screen reaches the page only when it is let go.
   const USABLE = /^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-9]|2[0-4])|Numpad(?:[0-9]|Add|Subtract|Multiply|Divide|Decimal)|Minus|Equal|BracketLeft|BracketRight|Semicolon|Quote|Comma|Period|Slash|Backslash|IntlBackslash|Backquote|Space|Tab|Arrow(?:Up|Down|Left|Right)|Home|End|PageUp|PageDown|Insert)$/;
@@ -43,7 +50,14 @@
     return { ok: true, message: '' };
   }
 
-  const api = { TOOLS, check, defaults, keyLabel, labelOf, normalize, toolForKey };
+  // Which tools are on the toolbar. "move" always is; the others as saved, or the usual ones.
+  function normalizeShown(saved) {
+    const given = saved && typeof saved === 'object' ? saved : {};
+    return Object.fromEntries(TOOLS.map(({ tool, extra }) => [tool, tool === 'move' ? true : typeof given[tool] === 'boolean' ? given[tool] : !extra]));
+  }
+  const normalizeWidth = (value) => (Object.hasOwn(WIDTHS, value) ? value : 'medium');
+
+  const api = { TOOLS, WIDTHS, check, defaults, keyLabel, labelOf, normalize, normalizeShown, normalizeWidth, toolForKey };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AurumToolKeys = api;
 })(typeof window !== 'undefined' ? window : globalThis);

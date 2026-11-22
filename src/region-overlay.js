@@ -156,7 +156,7 @@
     context.save();
     context.strokeStyle = '#2f80ed';
     context.lineWidth = 1;
-    if (activeShape.type !== 'arrow') {
+    if (!shapeEdit.isLine(activeShape)) {
       context.setLineDash([5, 3]);
       context.strokeRect(box.x - 0.5, box.y - 0.5, box.width + 1, box.height + 1);
       context.setLineDash([]);
@@ -225,6 +225,7 @@
     if (top + height > session.height - 6) top = selected.y - height - 8;
     if (top < 6) top = selected.y + selected.height - height - 8;
     toolbar.style.transform = `translate(${left}px, ${Math.max(6, top)}px)`;
+    placePanel();
   }
 
   const schedule = () => { if (!frame) frame = requestAnimationFrame(drawMarks); };
@@ -308,6 +309,7 @@
     activeShape = shape || null;
     if (!activeShape) delete root.dataset.activeBounds;
     root.dataset.activeShape = activeShape?.type || '';
+    root.dataset.activeWidth = String(activeShape?.width || '');
     schedule();
   }
   function startShapeChange(kind, point) {
@@ -417,14 +419,23 @@
     fontMenu.append(item);
   }
 
-  // ---- The tools' keys: a list in this window (right-click on a tool, or the keyboard icon) ---------------
-  // Drawn here and not in a separate window: this screen stays above every other window.
+  // ---- Tools, keys and settings: a panel in this window (the "+" icon, or a right-click on a tool) -----------
+  // Drawn here and not in a separate window: this screen stays above every other window. Each row: whether the tool
+  // is on the toolbar, and its key. Under them, the thickness of lines.
   const toolKeys = window.AurumToolKeys;
   const TOOL_KEYS_SAVED = 'aurum-region-tool-keys';
   const readToolKeys = () => {
     try { return toolKeys.normalize(JSON.parse(localStorage.getItem(TOOL_KEYS_SAVED) || 'null')); } catch { return toolKeys.defaults(); }
   };
   let keyMap = readToolKeys();
+  const TOOLS_SHOWN_SAVED = 'aurum-region-tools-shown';
+  const LINE_WIDTH_SAVED = 'aurum-region-line-width';
+  const readSaved = (name) => { try { return JSON.parse(localStorage.getItem(name) || 'null'); } catch { return null; } };
+  const writeSaved = (name, value) => { try { localStorage.setItem(name, JSON.stringify(value)); } catch {} };
+  let shown = toolKeys.normalizeShown(readSaved(TOOLS_SHOWN_SAVED));
+  let lineWidth = toolKeys.normalizeWidth(readSaved(LINE_WIDTH_SAVED));
+  const strokeWidth = () => toolKeys.WIDTHS[lineWidth];
+  const iconOf = (name) => toolbar.querySelector(`[data-tool="${name}"]`)?.textContent || '';
   let listeningTool = null;
   const keysPanel = $('#keys-panel');
   const keysNote = $('#keys-note');
@@ -434,15 +445,62 @@
   function renderToolKeys() {
     for (const { tool, title } of toolKeys.TOOLS) {
       const key = toolKeys.keyLabel(keyMap[tool]);
-      toolbar.querySelector(`[data-tool="${tool}"]`).title = `${title}${key ? ` (${key})` : ''} · לחיצה ימנית לשינוי המקש`;
+      const button = toolbar.querySelector(`[data-tool="${tool}"]`);
+      button.title = `${title}${key ? ` (${key})` : ''} · לחיצה ימנית לשינוי המקש`;
+      button.hidden = !shown[tool];
     }
+    root.dataset.toolsShown = toolKeys.TOOLS.filter(({ tool }) => shown[tool]).map(({ tool }) => tool).join(',');
     $('#keys-rows').replaceChildren(...toolKeys.TOOLS.map(({ tool, label }) => {
+      const line = document.createElement('div');
+      line.className = 'tool-row';
+      const show = document.createElement('button');
+      show.className = 'show';
+      show.dataset.showTool = tool;
+      show.textContent = '✓';
+      show.setAttribute('aria-pressed', String(shown[tool]));
+      show.setAttribute('aria-label', `${label} בסרגל`);
+      show.title = tool === 'move' ? 'כלי ההזזה תמיד בסרגל' : shown[tool] ? 'הסרה מהסרגל' : 'הוספה לסרגל';
+      show.disabled = tool === 'move';
       const row = document.createElement('button');
       row.dataset.keyTool = tool;
       row.dataset.listening = String(listeningTool === tool);
-      row.append(Object.assign(document.createElement('span'), { textContent: label }), Object.assign(document.createElement('kbd'), { textContent: listeningTool === tool ? '…' : toolKeys.keyLabel(keyMap[tool]) || 'אין' }));
-      return row;
+      row.title = 'לחיצה ואז מקש: שינוי המקש של הכלי';
+      const name = document.createElement('span');
+      name.append(Object.assign(document.createElement('i'), { textContent: iconOf(tool) }), label);
+      row.append(name, Object.assign(document.createElement('kbd'), { textContent: listeningTool === tool ? '…' : toolKeys.keyLabel(keyMap[tool]) || 'אין' }));
+      line.append(show, row);
+      return line;
     }));
+    keysPanel.querySelectorAll('[data-width]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.width === lineWidth)));
+  }
+  function toggleShown(name) {
+    if (name === 'move') return;
+    shown = toolKeys.normalizeShown({ ...shown, [name]: !shown[name] });
+    writeSaved(TOOLS_SHOWN_SAVED, shown);
+    noteKeys(shown[name] ? `"${toolKeys.labelOf(name)}" נוסף לסרגל` : `"${toolKeys.labelOf(name)}" הוסר מהסרגל · המקש שלו עדיין עובד`);
+    renderToolKeys();
+    placePanel();
+    schedule();
+  }
+  function chooseWidth(name) {
+    lineWidth = toolKeys.normalizeWidth(name);
+    writeSaved(LINE_WIDTH_SAVED, lineWidth);
+    // The chosen mark takes the thickness too.
+    if (activeShape && markup.STROKED.has(activeShape.type) && activeShape.width !== strokeWidth()) { history.push(snapshot()); activeShape.width = strokeWidth(); syncToolbar(); }
+    noteKeys('עובי הקו נשמר לסימונים הבאים');
+    renderToolKeys();
+    schedule();
+  }
+  // Over the toolbar or under it, where there is more room; scrolls inside when the screen is short.
+  function placePanel() {
+    if (keysPanel.hidden) return;
+    const box = toolbar.getBoundingClientRect();
+    const above = box.top - 8;
+    const below = window.innerHeight - box.bottom - 8;
+    const goBelow = below > above;
+    keysPanel.style.top = goBelow ? '100%' : '';
+    keysPanel.style.bottom = goBelow ? '' : '100%';
+    keysPanel.style.maxHeight = `${Math.max(160, goBelow ? below : above)}px`;
   }
   function saveToolKeys(next) {
     keyMap = toolKeys.normalize(next);
@@ -457,12 +515,9 @@
     fontMenu.hidden = true;
     keysPanel.hidden = false;
     keysIcon.setAttribute('aria-expanded', 'true');
-    // Over the toolbar, or under it when there is no room above.
-    const below = toolbar.getBoundingClientRect().top < 340;
-    keysPanel.style.top = below ? '100%' : '';
-    keysPanel.style.bottom = below ? '' : '100%';
+    placePanel();
     listeningTool = null;
-    noteKeys('לחיצה על שורה משנה את המקש');
+    noteKeys('סימון ✓ מוסיף כלי לסרגל · לחיצה על כלי משנה את המקש');
     if (tool) listenForKey(tool);
     else renderToolKeys();
     syncTextStyle();
@@ -522,6 +577,8 @@
     if (!button || !selected) return;
     if (button === keysIcon) return keysPanel.hidden ? openToolKeys() : closeToolKeys();
     if (button.dataset.keyTool) return listenForKey(button.dataset.keyTool);
+    if (button.dataset.showTool) return toggleShown(button.dataset.showTool);
+    if (button.dataset.width) return chooseWidth(button.dataset.width);
     if (button.dataset.command === 'keys-close') return closeToolKeys();
     if (button.dataset.command === 'keys-reset') { saveToolKeys(toolKeys.defaults()); listeningTool = null; noteKeys('חזרו המקשים הרגילים'); return renderToolKeys(); }
     if (button === fontButton) return toggleFontMenu();
@@ -698,6 +755,7 @@
         // A press that starts outside the area draws too, from the nearest edge of the area.
         chooseShape(null);
         drawing = tool === 'pen' ? { type: 'pen', color, points: [point] } : { type: tool, color, from: point, to: point };
+        if (markup.STROKED.has(tool)) drawing.width = strokeWidth();
         pressBegan('ציור סימון');
         return schedule();
       }
