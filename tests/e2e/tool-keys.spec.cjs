@@ -178,6 +178,8 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
     await stroke(circle);
     await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.lastSmartShape)).toBe('ellipse');
     expect(await overlay.evaluate(() => document.documentElement.dataset.activeShape)).toBe('ellipse');
+    // מסגרת הסימון שנבחר נכתבת בציור הבא של המסך – מחכים לה
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.activeBounds || '')).not.toBe('');
     const before = await overlay.evaluate(() => document.documentElement.dataset.activeBounds.split(',').map(Number));
     // החיצים: שלוש לחיצות עם שיפט (30 נקודות ימינה) ושתיים למטה
     for (let i = 0; i < 3; i += 1) await press('ArrowRight', { key: 'ArrowRight', shiftKey: true });
@@ -190,6 +192,17 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
     // קו ישר ביד הופך לקו
     await stroke(Array.from({ length: 30 }, (_, i) => [300 + i * 10, 420 + Math.sin(i) * 2]));
     await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.lastSmartShape)).toBe('line');
+    // קו עם ראש חץ שצויר ביד הופך לחץ
+    // (בתוך האזור שנבחר: מ-200,200 עד 800,500 – מחוצה לו הנקודות נעצרות בקצה)
+    const shaft = Array.from({ length: 26 }, (_, i) => [220 + i * 12, 250 + Math.sin(i) * 2]);
+    const head = [[515, 236], [500, 224], [515, 236], [520, 250], [504, 266]];
+    await stroke([...shaft, ...head]);
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.lastSmartShape)).toBe('arrow');
+    expect(await overlay.evaluate(() => document.documentElement.dataset.activeShape)).toBe('arrow');
+    // וי (✓) הופך לסימן וי נקי
+    const tick = [...Array.from({ length: 8 }, (_, i) => [620 + i * 5, 330 + i * 6]), ...Array.from({ length: 16 }, (_, i) => [660 + i * 7, 372 - i * 8])];
+    await stroke(tick);
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.lastSmartShape)).toBe('check');
     await escape();
     await escape();
   });

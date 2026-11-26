@@ -26,6 +26,61 @@
     return { from, to };
   }
 
+  // Points near the straight segment a-b (every one within the allowance).
+  const straight = (pts, a, b, allow) => pts.every((p) => distToSegment(p, a, b) <= allow);
+
+  /**
+   * A line with an arrowhead drawn at its end in the same stroke: a straight shaft to the tip, then a short
+   * stroke back from the tip (one barb, or both barbs). Returns the shaft, or null.
+   */
+  function arrowOf(points) {
+    const first = points[0];
+    // The tip: the point farthest from the start.
+    let tipIndex = 0;
+    points.forEach((p, i) => { if (dist(first, p) > dist(first, points[tipIndex])) tipIndex = i; });
+    const tip = points[tipIndex];
+    const shaft = dist(first, tip);
+    if (shaft < 40 || tipIndex < 2 || tipIndex > points.length - 3) return null;
+    if (!straight(points.slice(0, tipIndex + 1), first, tip, Math.max(7, shaft * 0.08))) return null;
+    const tail = points.slice(tipIndex);
+    const tailLength = pathLength(tail);
+    const reach = Math.max(...tail.map((p) => dist(p, tip)));
+    if (tailLength < Math.max(12, shaft * 0.1) || reach > shaft * 0.5) return null;
+    // The head points back toward the start, and spreads to the side of the shaft.
+    const ux = (tip.x - first.x) / shaft;
+    const uy = (tip.y - first.y) / shaft;
+    const along = tail.map((p) => (p.x - tip.x) * ux + (p.y - tip.y) * uy);
+    const back = along.reduce((s, v) => s + v, 0) / along.length;
+    const farthestBack = Math.min(...along);
+    const side = Math.max(...tail.map((p) => Math.abs((p.x - tip.x) * -uy + (p.y - tip.y) * ux)));
+    if (back >= 0 || farthestBack > -reach * 0.45 || side < Math.max(6, shaft * 0.04)) return null;
+    return { type: 'arrow', ...snapLine(first, tip) };
+  }
+
+  /**
+   * A check mark ✓: two straight arms meeting at the lowest point, the first arm shorter than the second.
+   * Returns a clean three-point stroke, or null.
+   */
+  function checkOf(points) {
+    const first = points[0];
+    const last = points[points.length - 1];
+    let cornerIndex = 0;
+    points.forEach((p, i) => { if (p.y > points[cornerIndex].y) cornerIndex = i; });
+    if (cornerIndex < 1 || cornerIndex > points.length - 2) return null;
+    const corner = points[cornerIndex];
+    const a = dist(first, corner);
+    const b = dist(corner, last);
+    const long = Math.max(a, b);
+    const short = Math.min(a, b);
+    if (long < 30 || short < long * 0.15 || short > long * 0.85) return null;
+    // Both ends above the corner, and one on each side of it.
+    if (first.y > corner.y - short * 0.4 || last.y > corner.y - short * 0.4) return null;
+    if ((first.x - corner.x) * (last.x - corner.x) >= 0) return null;
+    if (!straight(points.slice(0, cornerIndex + 1), first, corner, Math.max(6, a * 0.18))) return null;
+    if (!straight(points.slice(cornerIndex), corner, last, Math.max(6, b * 0.12))) return null;
+    return { type: 'check', points: [{ ...first }, { ...corner }, { ...last }] };
+  }
+
   /** The shape the stroke stands for, or null to keep it as drawn. */
   function recognize(points) {
     if (!Array.isArray(points) || points.length < 4) return null;
@@ -35,6 +90,12 @@
     const size = Math.max(box.width, box.height);
     if (size < 14) return null;
     const length = pathLength(points);
+
+    // An arrow first (its shaft alone would also pass as a line), then a check mark.
+    const arrow = arrowOf(points);
+    if (arrow) return arrow;
+    const check = checkOf(points);
+    if (check) return check;
 
     // A straight line: every point near the segment between the two ends, and not a closed loop.
     const span = dist(first, last);

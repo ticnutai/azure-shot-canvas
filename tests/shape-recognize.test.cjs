@@ -35,10 +35,36 @@ test('a box drawn by hand becomes a rectangle', () => {
   assert.ok(Math.abs(box.from.x - 50) < 8 && Math.abs(box.to.y - 200) < 8);
 });
 
-test('a scribble, a tick or a tiny dot stays as drawn', () => {
+test('a scribble, a V with equal arms or a tiny dot stays as drawn', () => {
   const scribble = Array.from({ length: 40 }, (_, i) => ({ x: i * 8, y: (i % 2) * 60 }));
   assert.equal(recognize(scribble), null);
-  const tick = [...line({ x: 0, y: 50 }, { x: 40, y: 100 }, 10), ...line({ x: 40, y: 100 }, { x: 140, y: 0 }, 20).slice(1)];
-  assert.equal(recognize(tick), null);
+  const vee = [...line({ x: 0, y: 0 }, { x: 60, y: 100 }, 15), ...line({ x: 60, y: 100 }, { x: 120, y: 0 }, 15).slice(1)];
+  assert.equal(recognize(vee), null);
   assert.equal(recognize([{ x: 1, y: 1 }, { x: 3, y: 2 }, { x: 4, y: 4 }, { x: 5, y: 5 }]), null);
+});
+
+test('a check mark becomes a clean three-point check, drawn either way', () => {
+  const tick = [...line({ x: 0, y: 50 }, { x: 40, y: 100 }, 10), ...line({ x: 40, y: 100 }, { x: 140, y: 0 }, 20).slice(1)];
+  const shape = recognize(tick);
+  assert.equal(shape.type, 'check');
+  assert.equal(shape.points.length, 3);
+  assert.ok(Math.abs(shape.points[1].y - 100) < 6);
+  const backwards = [...line({ x: 140, y: 50 }, { x: 100, y: 100 }, 10), ...line({ x: 100, y: 100 }, { x: 0, y: 0 }, 20).slice(1)];
+  assert.equal(recognize(backwards).type, 'check');
+});
+
+test('a line with a hand-drawn arrowhead becomes an arrow to the tip', () => {
+  // shaft, then one barb back from the tip
+  const oneBarb = [...line({ x: 20, y: 200 }, { x: 300, y: 60 }, 30), ...line({ x: 300, y: 60 }, { x: 255, y: 58 }, 6).slice(1)];
+  const a = recognize(oneBarb);
+  assert.equal(a.type, 'arrow');
+  assert.ok(Math.abs(a.to.x - 300) < 8 && Math.abs(a.to.y - 60) < 8);
+  // shaft, barb, back to the tip, other barb
+  const head = [...line({ x: 20, y: 100 }, { x: 320, y: 104 }, 30), ...line({ x: 320, y: 104 }, { x: 290, y: 80 }, 5).slice(1),
+    ...line({ x: 290, y: 80 }, { x: 320, y: 104 }, 5).slice(1), ...line({ x: 320, y: 104 }, { x: 290, y: 128 }, 5).slice(1)];
+  const b = recognize(head);
+  assert.equal(b.type, 'arrow');
+  assert.equal(b.from.y, b.to.y); // almost level → level
+  // a plain line with a tiny wobble at the end stays a line
+  assert.equal(recognize(line({ x: 10, y: 10 }, { x: 300, y: 160 })).type, 'line');
 });

@@ -791,7 +791,9 @@
       // העט החכם: קו, עיגול או מלבן כשהציור קרוב לאחד מהם; אחרת נשאר כמו שצויר
       if (done.smart) {
         const shape = window.AurumShapeRecognize?.recognize(done.points);
-        done = shape ? { ...shape, color: done.color, width: done.width } : { type: 'pen', color: done.color, width: done.width, points: done.points };
+        // סימן וי נשמר כקו ביד עם שלוש נקודות ישרות (אותו ציור כמו העט, רק נקי)
+        if (shape?.type === 'check') done = { type: 'pen', color: done.color, width: done.width, points: shape.points };
+        else done = shape ? { ...shape, color: done.color, width: done.width } : { type: 'pen', color: done.color, width: done.width, points: done.points };
         root.dataset.lastSmartShape = shape ? shape.type : 'pen';
       }
       if (markup.isMeaningful(done)) { addShape(done); chooseShape(done); }
