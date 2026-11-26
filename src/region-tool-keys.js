@@ -6,6 +6,7 @@
     { tool: 'arrow', label: 'חץ', title: 'חץ', key: 'KeyA' },
     { tool: 'rect', label: 'מלבן', title: 'מלבן', key: 'KeyR' },
     { tool: 'pen', label: 'עט', title: 'עט', key: 'KeyP' },
+    { tool: 'smartpen', label: 'עט חכם', title: 'עט חכם – מצייר ביד ומיישר לקו, עיגול או מלבן', key: 'KeyS' },
     { tool: 'text', label: 'טקסט', title: 'טקסט', key: 'KeyT' },
     { tool: 'blur', label: 'טשטוש', title: 'טשטוש מידע', key: 'KeyB' },
     { tool: 'number', label: 'מספור', title: 'מספור שלבים', key: 'KeyN' },

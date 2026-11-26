@@ -98,8 +98,37 @@
     document.querySelector('[data-capture-action="pin"]').disabled = item.kind !== 'image';
     root.dataset.captureKind = item.kind;
   };
+  // פס הצילומים נגלל: גלגלת העכבר (גם למעלה ולמטה) מזיזה לצדדים, וגרירה בעכבר גוללת. לחיצה רגילה עדיין בוחרת צילום.
+  const recentStrip = document.querySelector('#recent-strip');
+  recentStrip.addEventListener('wheel', (event) => {
+    if (recentStrip.scrollWidth <= recentStrip.clientWidth) return;
+    event.preventDefault();
+    // מימין לשמאל: הצילומים הבאים נמצאים משמאל, והגלילה נספרת לאחור
+    const rtl = getComputedStyle(recentStrip).direction === 'rtl' ? -1 : 1;
+    const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY * rtl : event.deltaX;
+    recentStrip.scrollBy({ left: delta, behavior: 'auto' });
+  }, { passive: false });
+  let stripDrag = null;
+  recentStrip.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || recentStrip.scrollWidth <= recentStrip.clientWidth) return;
+    stripDrag = { x: event.clientX, left: recentStrip.scrollLeft, moved: false, id: event.pointerId };
+  });
+  recentStrip.addEventListener('pointermove', (event) => {
+    if (!stripDrag || !(event.buttons & 1)) return;
+    const dx = event.clientX - stripDrag.x;
+    if (!stripDrag.moved && Math.abs(dx) < 6) return;
+    if (!stripDrag.moved) { stripDrag.moved = true; recentStrip.classList.add('dragging'); try { recentStrip.setPointerCapture(stripDrag.id); } catch {} }
+    recentStrip.scrollLeft = stripDrag.left - dx;
+  });
+  const endStripDrag = () => {
+    if (stripDrag?.moved) setTimeout(() => recentStrip.classList.remove('dragging'), 0);
+    stripDrag = null;
+  };
+  recentStrip.addEventListener('pointerup', endStripDrag);
+  recentStrip.addEventListener('pointercancel', endStripDrag);
+
   const renderStrip = () => {
-    const strip = document.querySelector('#recent-strip');
+    const strip = recentStrip;
     strip.replaceChildren(...captures.map((item, index) => {
       const button = document.createElement('button');
       button.className = 'recent-item';

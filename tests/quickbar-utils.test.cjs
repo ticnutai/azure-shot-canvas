@@ -65,11 +65,11 @@ test('capture card and recent strip get taller bounds that still fit the work ar
 
 test('recent captures are newest first, unique per file and capped', () => {
   let list = [];
-  for (let index = 0; index < 8; index += 1) list = addRecentCapture(list, { path: `C:\\a\\${index}.png` });
-  assert.equal(list.length, 6);
-  assert.equal(list[0].path, 'C:\\a\\7.png');
+  for (let index = 0; index < 35; index += 1) list = addRecentCapture(list, { path: `C:\\a\\${index}.png` });
+  assert.equal(list.length, 30);
+  assert.equal(list[0].path, 'C:\\a\\34.png');
   list = addRecentCapture(list, { path: 'c:\\A\\5.PNG', name: 'again' });
-  assert.equal(list.length, 6);
+  assert.equal(list.length, 30);
   assert.equal(list[0].name, 'again');
   assert.equal(list.filter((entry) => entry.path.toLowerCase() === 'c:\\a\\5.png').length, 1);
 });

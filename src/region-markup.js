@@ -8,7 +8,7 @@
   // Marks that are one straight line between two points (their handles are the two ends).
   const LINE_TYPES = new Set(['arrow', 'darrow', 'line']);
   // Marks whose line thickness can be chosen.
-  const STROKED = new Set(['arrow', 'darrow', 'line', 'rect', 'ellipse', 'pen']);
+  const STROKED = new Set(['arrow', 'darrow', 'line', 'rect', 'ellipse', 'pen', 'smartpen']);
   const BLUR_BLOCK = 10; // pixels per blur block in the saved image
 
   const boundsOf = (shape) => {

@@ -323,6 +323,18 @@
     syncToolbar();
     schedule();
   }
+  // חיצי המקלדת: הסימון שנבחר זז בנקודה אחת (עם שיפט: עשר). רצף לחיצות נחשב לשינוי אחד בביטול.
+  let lastNudge = 0;
+  function nudgeActiveShape(dx, dy) {
+    const now = performance.now();
+    if (now - lastNudge > 700) history.push(snapshot());
+    lastNudge = now;
+    Object.assign(activeShape, shapeEdit.moveShape(shapeEdit.clone(activeShape), dx, dy, selected));
+    root.dataset.activeBounds = (() => { const b = shapeEdit.boundsOf(activeShape); return [b.x, b.y, b.width, b.height].map(Math.round).join(','); })();
+    syncToolbar();
+    schedule();
+  }
+
   function deleteActiveShape() {
     history.push(snapshot());
     shapes = shapes.filter((shape) => shape !== activeShape);
@@ -726,6 +738,8 @@
       commitText();
       const shapeHandle = activeShape && shapeEdit.handleAt(activeShape, pointer);
       if (shapeHandle) return startShapeChange(shapeHandle, pointer);
+      // הסימון שנבחר (למשל זה שצויר הרגע) נגרר מכל כלי, ולא רק בכלי ההזזה
+      if (activeShape && tool !== 'move' && shapeEdit.shapeAt([activeShape], pointer)) return startShapeChange('move', pointer);
       const handle = handleAt(pointer);
       if (handle) { adjusting = { kind: handle, start: pointer, rect: { ...selected } }; pressBegan('ידית של האזור'); return; }
       if (tool === 'move') {
@@ -754,7 +768,8 @@
         }
         // A press that starts outside the area draws too, from the nearest edge of the area.
         chooseShape(null);
-        drawing = tool === 'pen' ? { type: 'pen', color, points: [point] } : { type: tool, color, from: point, to: point };
+        drawing = tool === 'pen' || tool === 'smartpen' ? { type: 'pen', color, points: [point] } : { type: tool, color, from: point, to: point };
+        if (tool === 'smartpen') drawing.smart = true;
         if (markup.STROKED.has(tool)) drawing.width = strokeWidth();
         pressBegan('ציור סימון');
         return schedule();
@@ -771,8 +786,14 @@
     pressEnded(how);
     if (changingShape) return endShapeChange();
     if (drawing) {
-      const done = drawing;
+      let done = drawing;
       drawing = null;
+      // העט החכם: קו, עיגול או מלבן כשהציור קרוב לאחד מהם; אחרת נשאר כמו שצויר
+      if (done.smart) {
+        const shape = window.AurumShapeRecognize?.recognize(done.points);
+        done = shape ? { ...shape, color: done.color, width: done.width } : { type: 'pen', color: done.color, width: done.width, points: done.points };
+        root.dataset.lastSmartShape = shape ? shape.type : 'pen';
+      }
       if (markup.isMeaningful(done)) { addShape(done); chooseShape(done); }
       // A click and not a drawing: it chooses the mark under it.
       else chooseShape(shapeEdit.shapeAt(shapes, point));
@@ -830,6 +851,8 @@
     if (selected) {
       if (event.key === 'Enter') { event.preventDefault(); return finish(selected, 'save'); }
       if (activeShape && (event.key === 'Delete' || event.key === 'Backspace')) { event.preventDefault(); return deleteActiveShape(); }
+      const nudge = activeShape && !event.ctrlKey && { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+      if (nudge) { event.preventDefault(); return nudgeActiveShape(nudge[0] * (event.shiftKey ? 10 : 1), nudge[1] * (event.shiftKey ? 10 : 1)); }
       if (event.ctrlKey && event.code === 'KeyC') { event.preventDefault(); return finish(selected, 'copy'); }
       if (event.ctrlKey && event.code === 'KeyZ') { event.preventDefault(); return undo(); }
       if (event.ctrlKey && event.code === 'KeyE') { event.preventDefault(); return finish(selected, 'edit'); }

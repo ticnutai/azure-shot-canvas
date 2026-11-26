@@ -17,7 +17,9 @@ html[data-view="capture"] #capture-card{display:grid;gap:8px}
 .capture-actions button.danger:hover{border-color:#f13c50;background:#3a1820}
 .capture-actions i{font-style:normal;font-size:17px}
 .capture-actions span{font-size:10px}
-.recent-strip{display:none;grid-auto-flow:column;grid-auto-columns:52px;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid #2d4055;overflow:hidden}
+.recent-strip{display:none;grid-auto-flow:column;grid-auto-columns:52px;gap:6px;margin-top:8px;padding-top:8px;padding-bottom:6px;border-top:1px solid #2d4055;overflow-x:auto;overflow-y:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#5d7896 transparent}
+.recent-strip::-webkit-scrollbar{height:6px}.recent-strip::-webkit-scrollbar-thumb{background:#5d7896;border-radius:3px}.recent-strip::-webkit-scrollbar-track{background:transparent}
+.recent-strip.dragging{cursor:grabbing;scroll-behavior:auto}.recent-strip.dragging .recent-item{pointer-events:none}
 body[data-has-recent="true"] .recent-strip{display:grid}
 .recent-item{position:relative;height:40px;padding:0;border:1px solid #2e435c;border-radius:8px;background:#0b1420;overflow:hidden;cursor:pointer}
 .recent-item img{width:100%;height:100%;object-fit:cover;display:block}

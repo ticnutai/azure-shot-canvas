@@ -45,7 +45,7 @@ const MAX_HIDE_DELAY = 60;
 // A free number of seconds kept between min and max and rounded to a step; a word or an empty box gives null.
 const seconds = (value, min, max, step) => (value === null || value === '' || !Number.isFinite(Number(value)) ? null : Math.round(Math.min(max, Math.max(min, Number(value))) / step) * step);
 const CAPTURE_DELAYS = [0, 3, 5, 10];
-const MAX_RECENT_CAPTURES = 6;
+const MAX_RECENT_CAPTURES = 30;
 
 // The size the user gave the panel, for each view; a missing view keeps its usual size.
 const PANEL_VIEWS = ['actions', 'history', 'capture'];

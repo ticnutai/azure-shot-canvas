@@ -75,7 +75,7 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
 
   test('the keyboard icon lists every tool; a row changes it, Delete leaves a tool without a key', async () => {
     await overlay.locator('[data-command="tool-keys"]').evaluate((button) => button.click());
-    await expect(overlay.locator('[data-key-tool]')).toHaveCount(12);
+    await expect(overlay.locator('[data-key-tool]')).toHaveCount(13);
     await overlay.locator('[data-key-tool="arrow"]').evaluate((row) => row.click());
     await press('Delete', { key: 'Delete' });
     await expect(rowKey('arrow')).toHaveText('אין');
@@ -160,6 +160,36 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
     await overlay.locator('[data-show-tool="ellipse"]').evaluate((button) => button.click());
     await overlay.locator('[data-width="medium"]').evaluate((button) => button.click());
     await expect(overlay.locator('button[data-tool="ellipse"]')).toBeHidden();
+    await escape();
+    await escape();
+  });
+
+  test('the smart pen straightens a hand-drawn circle and line; the arrows move the chosen mark', async () => {
+    const stroke = (points) => overlay.evaluate((pts) => {
+      const fire = (type, p, buttons) => window.dispatchEvent(new PointerEvent(type, { clientX: p[0], clientY: p[1], button: 0, buttons, bubbles: true, pointerId: 1 }));
+      fire('pointerdown', pts[0], 1);
+      for (const p of pts.slice(1)) fire('pointermove', p, 1);
+      fire('pointerup', pts[pts.length - 1], 0);
+    }, points);
+    const circle = Array.from({ length: 50 }, (_, i) => { const t = i / 48 * Math.PI * 2; return [450 + 80 * Math.cos(t) + Math.sin(i) * 2, 330 + 78 * Math.sin(t)]; });
+    await open();
+    await expect(overlay.locator('button[data-tool="smartpen"]')).toBeVisible();
+    await overlay.locator('button[data-tool="smartpen"]').evaluate((b) => b.click());
+    await stroke(circle);
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.lastSmartShape)).toBe('ellipse');
+    expect(await overlay.evaluate(() => document.documentElement.dataset.activeShape)).toBe('ellipse');
+    const before = await overlay.evaluate(() => document.documentElement.dataset.activeBounds.split(',').map(Number));
+    // החיצים: שלוש לחיצות עם שיפט (30 נקודות ימינה) ושתיים למטה
+    for (let i = 0; i < 3; i += 1) await press('ArrowRight', { key: 'ArrowRight', shiftKey: true });
+    for (let i = 0; i < 2; i += 1) await press('ArrowDown', { key: 'ArrowDown' });
+    const after = await overlay.evaluate(() => document.documentElement.dataset.activeBounds.split(',').map(Number));
+    expect(after[0] - before[0]).toBe(30);
+    expect(after[1] - before[1]).toBe(2);
+    // ביטול אחד מחזיר את כל ההזזה
+    await press('KeyZ', { key: 'z', ctrlKey: true });
+    // קו ישר ביד הופך לקו
+    await stroke(Array.from({ length: 30 }, (_, i) => [300 + i * 10, 420 + Math.sin(i) * 2]));
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.lastSmartShape)).toBe('line');
     await escape();
     await escape();
   });
