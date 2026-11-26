@@ -45,7 +45,10 @@ const PATTERNS = [
   { kind: 'id', label: 'תעודת זהות', regex: /\b\d{9}\b/g, check: israeliIdValid },
   { kind: 'ip', label: 'כתובת רשת', regex: /\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g },
   // OCR often adds noise between digit groups ("052-/7654321"), so up to two separator characters are tolerated.
-  { kind: 'phone', label: 'טלפון', regex: /(?:\+972[ \-\/.|]{0,2}|\b0)(?:[2-9]\d?)[ \-\/.|]{0,2}\d{3}[ \-\/.|]{0,2}\d{3,4}\b/g }
+  { kind: 'phone', label: 'טלפון', regex: /(?:\+972[ \-\/.|]{0,2}|\b0)(?:[2-9]\d?)[ \-\/.|]{0,2}\d{3}[ \-\/.|]{0,2}\d{3,4}\b/g },
+  // Bank accounts: an Israeli IBAN, or bank-branch-account (12-345-678901) – after the phones, which can look alike.
+  { kind: 'account', label: 'חשבון בנק', regex: /\bIL\d{2}(?: ?\d){19}\b/g },
+  { kind: 'account', label: 'חשבון בנק', regex: /\b\d{2,3}[ \-\/]\d{3}[ \-\/]\d{4,9}\b/g }
 ];
 
 function findSensitiveRegions(words, { padding = 4, kinds = null } = {}) {

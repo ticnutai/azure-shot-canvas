@@ -64,3 +64,11 @@ test('OCR noise between digit groups does not hide a phone or card number', () =
   assert.deepEqual(findSensitiveRegions(line('Card: 4111 /1111 1111 |1111')).map((item) => item.kind), ['card']);
   assert.deepEqual(findSensitiveRegions(line('Order 2026/10/05 total 120.50')), []);
 });
+
+test('bank accounts are found: bank-branch-account and an Israeli IBAN, and phones stay phones', () => {
+  const kinds = (text) => findSensitiveRegions(line(text)).map((region) => region.kind);
+  assert.deepEqual(kinds('חשבון 12-345-678901'), ['account']);
+  assert.deepEqual(kinds('IBAN IL620108000000099999999'), ['account']);
+  assert.deepEqual(kinds('טלפון 052-123-4567'), ['phone']);
+  assert.deepEqual(kinds('תאריך 26.11.2026 שעה 18:40'), []);
+});
