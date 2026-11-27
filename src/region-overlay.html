@@ -36,7 +36,12 @@
         <button data-width="medium" title="בינוני"><i style="--w:4px"></i></button>
         <button data-width="thick" title="עבה"><i style="--w:7px"></i></button>
       </div>
-      <p id="keys-note" role="status"></p>
+      <div class="cursor-row" role="group" aria-label="צורת הסמן">
+<span>צורת הסמן</span>
+<div class="cursor-styles"></div>
+<div class="cursor-colors" aria-label="צבע ההילה"></div>
+</div>
+<p id="keys-note" role="status"></p>
       <button data-command="keys-reset">חזרה למקשים הרגילים</button>
     </div>
     <div class="text-style" aria-label="סגנון הטקסט" hidden>
@@ -61,6 +66,7 @@
   <script src="region-utils.cjs"></script>
   <script src="smart-erase.js"></script>
   <script src="ai-erase.js"></script>
+  <script src="region-cursor.js"></script>
   <script src="shape-recognize.js"></script>
   <script src="region-markup.js"></script>
   <script src="region-shape-edit.js"></script>

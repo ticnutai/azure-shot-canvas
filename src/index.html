@@ -363,7 +363,7 @@
     <header class="editor-topbar">
       <div class="editor-title"><button class="editor-icon" id="editor-close" title="סגירה" aria-label="סגירה">✕</button><div><b id="editor-file-name">עורך צילום מסך</b><small id="editor-save-state">עריכה לא־הרסנית</small></div></div>
       <div class="editor-history"><button class="editor-icon" id="editor-undo" title="ביטול Ctrl+Z">↶</button><button class="editor-icon" id="editor-redo" title="ביצוע מחדש Ctrl+Y">↷</button><button class="editor-icon" id="editor-fit" title="התאמה למסך Ctrl+0">⛶</button><button class="editor-icon" id="editor-zoom-out" title="הקטנה Ctrl+-">−</button><input id="editor-zoom-range" type="range" min="5" max="400" step="5" value="100" title="זום העורך"><output id="editor-zoom">100%</output><button class="editor-icon" id="editor-zoom-in" title="הגדלה Ctrl++">＋</button></div>
-      <div class="editor-save-actions"><button class="ghost" id="editor-copy">⧉ העתקה</button><select id="editor-beautify-style" class="editor-beautify-style" title="רקע לייצוא המעוצב" aria-label="רקע לייצוא המעוצב"><option value="ocean">רקע ים</option><option value="sunset">רקע שקיעה</option><option value="slate">רקע אפור</option></select><button class="ghost" id="editor-beautify" title="יוצר תמונה חדשה לשיתוף: ריפוד, פינות מעוגלות, צל ורקע — המקור לא משתנה">✦ ייצוא מעוצב</button><button class="ghost" id="editor-save-copy">שמירת עותק</button><button class="gold-button" id="editor-save">שמירה</button></div>
+      <div class="editor-save-actions"><div class="compare-menu-wrap"><button class="ghost" id="editor-compare" title="השוואה בין התמונה לתמונה אחרת">◫ השוואה</button><div class="compare-menu" id="editor-compare-menu" hidden><button data-compare-layout="row">◫ זה לצד זה</button><button data-compare-layout="column">⬒ זה מתחת לזה</button></div></div><button class="ghost" id="editor-copy">⧉ העתקה</button><select id="editor-beautify-style" class="editor-beautify-style" title="רקע לייצוא המעוצב" aria-label="רקע לייצוא המעוצב"><option value="ocean">רקע ים</option><option value="sunset">רקע שקיעה</option><option value="slate">רקע אפור</option></select><button class="ghost" id="editor-beautify" title="יוצר תמונה חדשה לשיתוף: ריפוד, פינות מעוגלות, צל ורקע — המקור לא משתנה">✦ ייצוא מעוצב</button><button class="ghost" id="editor-save-copy">שמירת עותק</button><button class="gold-button" id="editor-save">שמירה</button></div>
     </header>
     <div class="editor-modebar"><button data-editor-mode="quick" class="active">עריכה מהירה</button><button data-editor-mode="professional">עריכה מקצועית</button><span></span><label><input type="checkbox" id="editor-snap"> הצמדה לרשת</label><button type="button" id="editor-focus" class="editor-mode-tool" aria-pressed="false" title="מיקוד בתמונה — מסתיר את הסרגל ואת לוח העיצוב (F)">⤢ מיקוד בתמונה</button><button type="button" id="editor-view-settings" class="editor-mode-tool" aria-expanded="false" aria-controls="editor-view-panel" title="מיקום הסרגל, הכלים והסדר שלהם, סמלים וצבעים">⊟ תצוגת כלים</button></div>
     <div class="editor-layout">
@@ -409,6 +409,7 @@
   <script src="watermark.js"></script>
   <script src="text-fonts.js"></script>
   <script src="image-editor.js"></script>
+  <script src="editor-compare.js"></script>
   <script src="app-icons.js"></script>
   <script src="icon-picker.js"></script>
   <script src="editor-toolbar-utils.js"></script>

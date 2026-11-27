@@ -199,6 +199,9 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
     await stroke([...shaft, ...head]);
     await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.lastSmartShape)).toBe('arrow');
     expect(await overlay.evaluate(() => document.documentElement.dataset.activeShape)).toBe('arrow');
+    // סוף הקו: חץ לשינוי האורך לאורך הקו – לא יד
+    await overlay.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { clientX: 520, clientY: 250, buttons: 0, bubbles: true, pointerId: 1 })));
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.pointerCursor)).toBe('ew-resize');
     // וי (✓) הופך לסימן וי נקי
     const tick = [...Array.from({ length: 8 }, (_, i) => [620 + i * 5, 330 + i * 6]), ...Array.from({ length: 16 }, (_, i) => [660 + i * 7, 372 - i * 8])];
     await stroke(tick);
@@ -222,5 +225,30 @@ test.describe.serial('the tools\' keys on the frozen screen', () => {
     expect(await pressed('arrow')).toBe('true');
     await escape();
     expect(runtimeErrors).toEqual([]);
+  });
+  test('the pointer look: chosen in the panel, drawn as a picture, and the colour of its glow', async () => {
+    await open();
+    await rightClick('rect');
+    await expect(overlay.locator('#keys-panel')).toBeVisible();
+    await expect(overlay.locator('.cursor-styles button')).toHaveCount(6);
+    await expect.poll(() => overlay.evaluate(() => [...document.querySelectorAll('.cursor-styles img')].every((img) => img.naturalWidth > 0))).toBe(true);
+    await overlay.locator('[data-cursor="glow-arrow"]').evaluate((b) => b.click());
+    await overlay.locator('[data-cursor-color="#22C7D6"]').evaluate((b) => b.click());
+    expect(await overlay.evaluate(() => document.documentElement.dataset.cursorStyle)).toBe('glow-arrow');
+    await expect(overlay.locator('[data-cursor="glow-arrow"]')).toHaveAttribute('aria-pressed', 'true');
+    if (process.env.COMPARE_SHOTS) { await overlay.locator('.cursor-row').scrollIntoViewIfNeeded(); await overlay.locator('.cursor-row').screenshot({ path: require('node:path').join(process.env.COMPARE_SHOTS, 'cursor-panel.png') }); }
+    await overlay.locator('[data-command="keys-close"]').evaluate((button) => button.click());
+    await press('KeyR'); // כלי ציור (בכלי ההזזה מעל אזור נבחר הסמן הוא סמן הזזה)
+    await overlay.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { clientX: 700, clientY: 450, buttons: 0, bubbles: true, pointerId: 1 })));
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.pointerCursor)).toBe('picture');
+    expect(await overlay.evaluate(() => document.body.style.cursor)).toContain('%2322C7D6');
+    // חזרה לצלב הרגיל
+    await rightClick('rect');
+    await overlay.locator('[data-cursor="cross"]').evaluate((b) => b.click());
+    await overlay.locator('[data-command="keys-close"]').evaluate((button) => button.click());
+    await overlay.evaluate(() => window.dispatchEvent(new PointerEvent('pointermove', { clientX: 701, clientY: 451, buttons: 0, bubbles: true, pointerId: 1 })));
+    await expect.poll(() => overlay.evaluate(() => document.documentElement.dataset.pointerCursor)).toBe('crosshair');
+    await escape();
+    await escape();
   });
 });

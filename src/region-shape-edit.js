@@ -1,7 +1,7 @@
 // Changing a mark after it was drawn: finding the mark under the pointer, its handles, moving and resizing it. Marks are
 // plain objects in screen points (see region-markup.js); nothing here draws, so all of it can be checked on its own.
 (function (root) {
-  const REACH = 9; // how near the pointer must be to a handle or a line, in screen points
+  const REACH = 12; // how near the pointer must be to a handle or a line, in screen points
   const MIN_SIZE = 6;
   const NUMBER_RADIUS = 15;
   // Marks that are one straight line between two points: their handles are the two ends.

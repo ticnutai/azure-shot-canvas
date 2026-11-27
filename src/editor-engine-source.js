@@ -190,7 +190,8 @@ class AurumImageEditorEngine {
   fitToViewport() {
     if (!this.viewportSize || !this.canvas.width || !this.canvas.height) return;
     // The page passes the exact free space (its own margins already taken off); no second margin here.
-    const zoom = Math.min(this.viewportSize.width / this.canvas.width, this.viewportSize.height / this.canvas.height, 1);
+    // Always fills the free space on its limiting side – a small picture is enlarged too (up to 3 times).
+    const zoom = Math.min(this.viewportSize.width / this.canvas.width, this.viewportSize.height / this.canvas.height);
     this.setZoom(clamp(zoom, 0.05, 3));
   }
 

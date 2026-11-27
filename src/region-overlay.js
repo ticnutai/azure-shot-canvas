@@ -446,6 +446,47 @@
   const writeSaved = (name, value) => { try { localStorage.setItem(name, JSON.stringify(value)); } catch {} };
   let shown = toolKeys.normalizeShown(readSaved(TOOLS_SHOWN_SAVED));
   let lineWidth = toolKeys.normalizeWidth(readSaved(LINE_WIDTH_SAVED));
+  // How the pointer looks (see region-cursor.js): a style and the colour of its glow.
+  const CURSOR_SAVED = 'aurum-region-cursor';
+  const cursorLook = window.AurumRegionCursor;
+  let cursorChoice = (() => {
+    const saved = readSaved(CURSOR_SAVED) || {};
+    return { style: cursorLook.STYLES.some((s) => s.id === saved.style) ? saved.style : 'cross', color: cursorLook.COLORS.includes(saved.color) ? saved.color : cursorLook.COLORS[0] };
+  })();
+  const baseCursor = () => cursorLook.css(cursorChoice.style, cursorChoice.color);
+  root.dataset.cursorStyle = cursorChoice.style;
+  function chooseCursor(patch) {
+    cursorChoice = { ...cursorChoice, ...patch };
+    writeSaved(CURSOR_SAVED, cursorChoice);
+    root.dataset.cursorStyle = cursorChoice.style;
+    document.body.style.cursor = baseCursor();
+    renderCursorRow();
+    noteKeys(`צורת הסמן: ${cursorLook.STYLES.find((s) => s.id === cursorChoice.style)?.label || ''}`);
+  }
+  function renderCursorRow() {
+    const row = keysPanel.querySelector('.cursor-row');
+    if (!row) return;
+    const styles = row.querySelector('.cursor-styles');
+    styles.replaceChildren(...cursorLook.STYLES.map(({ id, label }) => {
+      const button = Object.assign(document.createElement('button'), { title: label, type: 'button' });
+      button.dataset.cursor = id;
+      button.setAttribute('aria-pressed', String(id === cursorChoice.style));
+      const src = cursorLook.preview(id, cursorChoice.color);
+      if (src) button.append(Object.assign(document.createElement('img'), { src, alt: '' }));
+      button.append(Object.assign(document.createElement('span'), { textContent: label }));
+      button.addEventListener('click', () => chooseCursor({ style: id }));
+      return button;
+    }));
+    const colors = row.querySelector('.cursor-colors');
+    colors.replaceChildren(...cursorLook.COLORS.map((color) => {
+      const dot = Object.assign(document.createElement('button'), { type: 'button', title: 'צבע ההילה' });
+      dot.dataset.cursorColor = color;
+      dot.style.setProperty('--c', color);
+      dot.setAttribute('aria-pressed', String(color === cursorChoice.color));
+      dot.addEventListener('click', () => chooseCursor({ color }));
+      return dot;
+    }));
+  }
   const strokeWidth = () => toolKeys.WIDTHS[lineWidth];
   const iconOf = (name) => toolbar.querySelector(`[data-tool="${name}"]`)?.textContent || '';
   let listeningTool = null;
@@ -484,6 +525,7 @@
       return line;
     }));
     keysPanel.querySelectorAll('[data-width]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.width === lineWidth)));
+    renderCursorRow();
   }
   function toggleShown(name) {
     if (name === 'move') return;
@@ -712,10 +754,13 @@
     if (selected && !adjusting && !drawing && !changingShape) {
       const shapeHandle = activeShape && shapeEdit.handleAt(activeShape, pointer);
       const handle = handleAt(pointer);
-      document.body.style.cursor = shapeHandle ? CURSORS[shapeHandle] || 'grab'
+      // The end of a line: an arrow along the line (it is pulled longer or shorter there), never a hand.
+      document.body.style.cursor = shapeHandle ? CURSORS[shapeHandle] || (shapeEdit.isLine(activeShape) ? cursorLook.lineEnd(activeShape.from, activeShape.to) : 'move')
         : handle ? CURSORS[handle]
-          : tool === 'move' && inside(pointer, selected) ? (shapes.length && !shapeEdit.shapeAt(shapes, pointer) ? 'default' : 'move')
-            : tool === 'text' ? 'text' : 'crosshair';
+          : activeShape && tool !== 'move' && shapeEdit.shapeAt([activeShape], pointer) ? 'move'
+            : tool === 'move' && inside(pointer, selected) ? (shapes.length && !shapeEdit.shapeAt(shapes, pointer) ? 'default' : 'move')
+              : tool === 'text' ? 'text' : baseCursor();
+      root.dataset.pointerCursor = document.body.style.cursor.startsWith('url(') ? 'picture' : document.body.style.cursor;
     }
     const hintBox = hint.getBoundingClientRect();
     document.body.dataset.nearHint = String(pointer.y < hintBox.bottom + 30 && pointer.x > hintBox.left - 30 && pointer.x < hintBox.right + 30);
@@ -923,7 +968,7 @@
     document.body.dataset.dragging = 'false';
     document.body.dataset.editing = 'false';
     document.body.dataset.hint = String(data.hint !== false);
-    document.body.style.cursor = '';
+    document.body.style.cursor = baseCursor();
     root.dataset.regionEditing = 'false';
     delete root.dataset.regionAfter;
     renderHint(session.purpose, session.saved.length);

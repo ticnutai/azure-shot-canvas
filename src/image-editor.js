@@ -172,7 +172,19 @@
     selectTool('select');
     setDirty(false);
     updateStats();
+    fitAfterLayout();
     shell.dataset.editorReady = 'true';
+  }
+
+  // Every picture opens filling the whole work area: a zoom set by hand on an earlier picture is forgotten, and the
+  // space is measured again once the panels have settled (they appear a moment after the editor opens).
+  function fitAfterLayout() {
+    const workspace = $('#editor-workspace');
+    workspace.dataset.manualZoom = 'false';
+    const fit = () => { if (engine && workspace.dataset.manualZoom !== 'true') engine.setViewportSize(...fitSpace()); };
+    fit();
+    requestAnimationFrame(() => requestAnimationFrame(fit));
+    setTimeout(fit, 250);
   }
 
   async function save(modeToSave = 'overwrite') {
@@ -210,7 +222,34 @@
     if (loading) loading.catch(() => {}).finally(() => closing?.dispose()); else closing?.dispose();
   }
 
-  window.aurumEditor = { open: openEditor, close: closeEditor, isOpen: () => !shell.classList.contains('hidden'), stats: () => engine?.stats(), objects: () => engine?.annotationsJson() || [], exportDataUrl: () => engine?.exportDataUrl(),
+  // Moving a zoomed picture: drag with the middle mouse button, or hold the space bar and drag.
+  {
+    const workspace = $('#editor-workspace');
+    let spaceHeld = false;
+    let pan = null;
+    document.addEventListener('keydown', (event) => {
+      if (event.code !== 'Space' || shell.classList.contains('hidden') || /input|textarea|select/i.test(event.target.tagName) || engine?.isEditingText()) return;
+      spaceHeld = true; workspace.style.cursor = 'grab'; event.preventDefault();
+    });
+    document.addEventListener('keyup', (event) => { if (event.code === 'Space') { spaceHeld = false; if (!pan) workspace.style.cursor = ''; } });
+    workspace.addEventListener('pointerdown', (event) => {
+      if (!(event.button === 1 || (event.button === 0 && spaceHeld))) return;
+      event.preventDefault(); event.stopPropagation();
+      pan = { x: event.clientX, y: event.clientY, left: workspace.scrollLeft, top: workspace.scrollTop, id: event.pointerId };
+      workspace.setPointerCapture(event.pointerId);
+      workspace.style.cursor = 'grabbing';
+    }, true);
+    workspace.addEventListener('pointermove', (event) => {
+      if (!pan) return;
+      workspace.scrollLeft = pan.left - (event.clientX - pan.x);
+      workspace.scrollTop = pan.top - (event.clientY - pan.y);
+    }, true);
+    const endPan = () => { if (!pan) return; pan = null; workspace.style.cursor = spaceHeld ? 'grab' : ''; };
+    workspace.addEventListener('pointerup', endPan, true);
+    workspace.addEventListener('pointercancel', endPan, true);
+  }
+
+  window.aurumEditor = { open: openEditor, close: closeEditor, currentName: () => $('#editor-file-name').textContent, currentPath: () => sourcePath, isOpen: () => !shell.classList.contains('hidden'), stats: () => engine?.stats(), objects: () => engine?.annotationsJson() || [], exportDataUrl: () => engine?.exportDataUrl(),
     // Where a point of the picture is on the page (for checks that press the mouse on the picture).
     sceneToClient: (x, y) => {
       const box = engine.canvas.upperCanvasEl.getBoundingClientRect();

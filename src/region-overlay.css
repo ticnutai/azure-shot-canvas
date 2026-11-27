@@ -69,3 +69,13 @@ body[data-hint="false"] #hint{display:none}
 #toolbar .dims span{font-size:10px;color:#8ea5bf;line-height:1}
 #toolbar .dims input{width:52px;height:22px;padding:0 4px;border:1px solid #2e435c;border-radius:6px;background:#0b1420;color:#e8f0f8;font:inherit;font-size:12px;font-variant-numeric:tabular-nums;text-align:center;direction:ltr}
 #toolbar .dims input:focus{outline:none;border-color:#f5bd46}
+/* צורת הסמן: תצוגות מקדימות וצבעי ההילה */
+#keys-panel .cursor-row{display:grid;gap:6px;padding:8px 0;border-top:1px solid #2d4055}
+#keys-panel .cursor-row>span{color:#9fb3c8;font-size:12px}
+#keys-panel .cursor-styles{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+#keys-panel .cursor-styles button{display:grid;justify-items:center;gap:2px;height:auto;padding:4px 2px;border:1px solid #2d4055;border-radius:8px;background:#16212e;color:#dce8f5;font-size:11px;cursor:pointer}
+#keys-panel .cursor-styles button img{width:26px;height:26px}
+#keys-panel .cursor-styles button[aria-pressed="true"]{border-color:#f5bd46;background:#3a2d12}
+#keys-panel .cursor-colors{display:flex;gap:6px}
+#keys-panel .cursor-colors button{width:20px;height:20px;min-width:20px;padding:0;border-radius:50%;border:2px solid #2d4055;background:var(--c);cursor:pointer}
+#keys-panel .cursor-colors button[aria-pressed="true"]{border-color:#fff;box-shadow:0 0 0 2px var(--c)}
