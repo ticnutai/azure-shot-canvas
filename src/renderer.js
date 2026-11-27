@@ -2543,8 +2543,52 @@ function renderRecentLibrary(items = state.libraryItems) {
     return;
   }
   recent.innerHTML = '';
-  const limits = { cards: 4, compact: 8, list: 6 };
-  for (const item of visibleItems.slice(0, limits[state.recentView])) {
+  recentPending = visibleItems;
+  recentRendered = 0;
+  renderMoreRecent();
+  fitRecentToWindow();
+  syncSelections();
+}
+
+// The recent media fills the page down to the window's bottom and scrolls inside itself; cards are added 60 at a time
+// as the list is scrolled, so even a library of thousands opens at once.
+let recentPending = [];
+let recentRendered = 0;
+const RECENT_PAGE = 60;
+function renderMoreRecent() {
+  const recent = $('#recent-library');
+  if (!recent || recentRendered >= recentPending.length) return;
+  for (const item of recentPending.slice(recentRendered, recentRendered + RECENT_PAGE)) recent.append(recentCard(item));
+  recentRendered = Math.min(recentPending.length, recentRendered + RECENT_PAGE);
+  recent.dataset.rendered = String(recentRendered);
+  syncSelections();
+  // Still room below (a tall window): fill it straight away.
+  if (recent.scrollHeight <= recent.clientHeight + 40) requestAnimationFrame(renderMoreRecent);
+}
+
+function fitRecentToWindow() {
+  const strip = document.querySelector('#capture-page .library-strip');
+  const recent = $('#recent-library');
+  if (!strip || !recent) return;
+  const collapsed = document.documentElement.dataset.collapsedRecent === 'true' || !strip.offsetParent;
+  strip.classList.toggle('fills', !collapsed);
+  if (collapsed) { strip.style.height = ''; return; }
+  const top = strip.getBoundingClientRect().top;
+  const bottomGap = 18;
+  strip.style.height = `${Math.max(340, Math.floor(window.innerHeight - top - bottomGap))}px`;
+}
+
+window.addEventListener('resize', () => fitRecentToWindow());
+new MutationObserver(() => requestAnimationFrame(fitRecentToWindow)).observe(document.documentElement, { attributes: true, attributeFilter: ['data-collapsed-recent', 'data-collapsed-preview', 'data-collapsed-sources', 'data-collapsed-transport', 'data-capture-layout', 'data-active-page', 'data-layout', 'data-kit'] });
+document.addEventListener('DOMContentLoaded', () => {
+  const recent = $('#recent-library');
+  recent?.addEventListener('scroll', () => { if (recent.scrollTop + recent.clientHeight > recent.scrollHeight - 300) renderMoreRecent(); });
+  const page = document.querySelector('#capture-page');
+  if (page && window.ResizeObserver) new ResizeObserver(() => fitRecentToWindow()).observe(page);
+});
+
+function recentCard(item) {
+  {
     const card = document.createElement('article');
     card.className = 'clip-card';
     card.dataset.searchText = item.name.toLowerCase();
@@ -2554,9 +2598,8 @@ function renderRecentLibrary(items = state.libraryItems) {
     card.innerHTML = `<div class="clip-thumb">${thumbnailMarkup(item, true)}<small>${isImage ? 'צילום' : 'וידאו'}</small></div><div class="clip-details"><b class="file-name">${escapeHtml(item.name)}</b><small>${new Date(item.modified).toLocaleString('he-IL')} · ${formatBytes(item.size)}</small></div>`;
     card.addEventListener('keydown', (event) => { if (event.key === 'Enter') openInStudio(item); });
     makeChoosable(card, item, recentSelection);
-    recent.append(card);
+    return card;
   }
-  syncSelections();
 }
 
 async function openLatestScreenshotEditor(mode = 'professional') {

@@ -114,3 +114,7 @@
   .settings-rail { min-height: auto; }
   #recent-library.recent-view-compact { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 }
+
+/* המדיה האחרונה ממלאת את העמוד עד תחתית החלון, ונגללת בתוכה */
+#capture-page .library-strip.fills { display: flex; flex-direction: column; overflow: hidden; }
+#capture-page .library-strip.fills > #recent-library { flex: 1; min-height: 0; overflow-y: auto; align-content: start; padding-inline-end: 4px; scrollbar-width: thin; }
